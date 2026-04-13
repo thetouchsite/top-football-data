@@ -249,7 +249,6 @@ function getSportradarClient() {
   }
 
   sportradarSoccer.auth(apiKey);
-  sportradarSoccer.config({ timeout: 20_000 });
 
   return sportradarSoccer;
 }
