@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { upsertBillingState } from "@/lib/billing-store";
 import { retrieveCheckoutSession } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -28,20 +29,25 @@ export async function GET(request) {
       typeof subscription.current_period_end === "number"
         ? new Date(subscription.current_period_end * 1000).toISOString()
         : null;
+    const billingState = await upsertBillingState({
+      customerId:
+        typeof customer === "object" ? customer.id : session.customer || null,
+      subscriptionId:
+        typeof subscription === "object" ? subscription.id : session.subscription || null,
+      email:
+        typeof customer === "object"
+          ? customer.email
+          : session.customer_details?.email || session.customer_email || null,
+      plan: "premium",
+      isPremium: isActiveSubscription(subscriptionStatus),
+      subscriptionStatus,
+      currentPeriodEnd,
+      source: "stripe_checkout_session",
+      updatedAt: new Date(),
+    });
 
     return NextResponse.json({
-      billing: {
-        customerId:
-          typeof customer === "object" ? customer.id : session.customer || null,
-        email:
-          typeof customer === "object"
-            ? customer.email
-            : session.customer_details?.email || session.customer_email || null,
-        plan: "premium",
-        isPremium: isActiveSubscription(subscriptionStatus),
-        subscriptionStatus,
-        currentPeriodEnd,
-      },
+      billing: billingState,
     });
   } catch (error) {
     console.error("Failed to retrieve Stripe session:", error);

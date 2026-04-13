@@ -95,6 +95,12 @@ export default function MatchCard({ match, compact = false }) {
             </div>
           </div>
 
+          {match.odds_provider === "not_available_with_current_feed" && (
+            <div className="mb-3 text-xs text-muted-foreground">
+              Quote contestuali bookmaker non ancora disponibili con il feed corrente. Mostro quote derivate dal modello.
+            </div>
+          )}
+
           {/* Top scores */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <span className="text-xs text-muted-foreground">Risultati:</span>

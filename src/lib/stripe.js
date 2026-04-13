@@ -25,6 +25,12 @@ export function getStripe() {
   return stripeClient;
 }
 
+export function getStripeMode() {
+  return process.env.STRIPE_SECRET_KEY?.startsWith("sk_live")
+    ? "live"
+    : "test";
+}
+
 export function getPremiumPlan() {
   const priceId = process.env.STRIPE_PREMIUM_PRICE_ID;
 
@@ -36,6 +42,16 @@ export function getPremiumPlan() {
     ...PREMIUM_PLAN,
     priceId,
   };
+}
+
+export function getStripeWebhookSecret() {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    throw new Error("Missing STRIPE_WEBHOOK_SECRET environment variable.");
+  }
+
+  return webhookSecret;
 }
 
 export function getBaseUrl() {
@@ -96,6 +112,16 @@ export async function retrieveCheckoutSession(sessionId) {
   return stripe.checkout.sessions.retrieve(sessionId, {
     expand: ["customer", "subscription"],
   });
+}
+
+export function constructStripeEvent(payload, signature) {
+  const stripe = getStripe();
+
+  return stripe.webhooks.constructEvent(
+    payload,
+    signature,
+    getStripeWebhookSecret()
+  );
 }
 
 export async function createBillingPortalSession(customerId) {

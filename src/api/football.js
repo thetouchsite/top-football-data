@@ -9,7 +9,7 @@ async function requestJson(url, init) {
   return payload;
 }
 
-export function getScheduleWindow(days = 4) {
+export function getScheduleWindow(days = 14) {
   return requestJson(`/api/football/schedules/window?days=${encodeURIComponent(days)}`);
 }
 

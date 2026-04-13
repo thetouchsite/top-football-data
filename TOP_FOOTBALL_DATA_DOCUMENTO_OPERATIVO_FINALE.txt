@@ -1,715 +1,340 @@
 TOP FOOTBALL DATA
 DOCUMENTO OPERATIVO FINALE PER DEV
 
-Data documento: 2026-04-13
-Base di analisi: brief fornito dal committente + stato reale del repository corrente
+Data aggiornamento: 2026-04-14
+Base del documento: stato reale del repository dopo il pass
+"Sportmonks-first core migration"
 
 ====================================================================
-DECISIONE ESECUTIVA
+VERDETTO ESECUTIVO
 ====================================================================
 
-Il repository attuale NON copre ancora in modo completo e rigoroso tutto il
-brief operativo allegato.
+Il progetto oggi non e piu impostato come "Sportradar-first MVP".
 
-Il repository attuale copre bene:
-- landing page in stile data platform
-- schermata modelli predittivi
-- schermata analisi statistica
-- schermata dati live
-- dettaglio match
-- base premium con Stripe Checkout e Billing Portal
-- persistenza lead su MongoDB
-- integrazione reale con Sportradar per schedule, live, fixture e futures odds
-- normalizzazione dati e fallback locali
+Il progetto oggi e:
+- un MVP serio, buildabile e navigabile
+- Sportmonks-first per i percorsi core calcio
+- con IDs canonici Sportmonks
+- con copy e payload molto piu coerenti con il brief cliente
+- con Sportradar degradato a backup tecnico e modulo futures separato
 
-Il repository attuale NON copre ancora in modo completo:
-- integrazione reale Sportmonks
-- integrazione reale OddsMatrix contestuale dentro tutte le sezioni
-- engine reale di Smart Multi-Bet basato su migliaia di mercati
-- copertura palinsesti governata da whitelist prodotto rigida
-- notifiche live reali e persistenti
-- access control premium server-side completo
-- webhook Stripe per stato abbonamento persistente
-- ufficializzazione lineups a T-60 con stato provider-driven
-- heatmaps player reali
-- quote match-by-match multi-bookmaker reali in tutte le viste
-
-Conclusione netta:
-Il progetto e' una base solida da portare in produzione solo come MVP
-data-driven centrato su Sportradar. Per aderire chirurgicamente al brief
-fornito, servono ulteriori implementazioni obbligatorie descritte in questo
-documento.
+Il progetto oggi NON e ancora:
+- una piattaforma con comparatore quote bookmaker reale
+- una value bet reale basata su quote bookmaker
+- un multi-bet engine finale su mercati odds veri
+- un sistema di alert persistito e distribuito
+- un ambiente premium completamente chiuso lato persistence Mongo
 
 ====================================================================
-CORREZIONI TECNICHE GIA' APPLICATE NEL REPO
+STATO ATTUALE REALE DEL REPO
 ====================================================================
 
-Le seguenti correzioni risultano gia' applicate al codice:
+1. Frontend principale presente
+- Landing
+- Dashboard
+- Modelli Predittivi
+- Dati Live
+- Analisi Statistica
+- Match Detail
+- Multi-Bet
+- Premium / Account / Watchlist
 
-- Fix risoluzione SDK Sportradar per Next.js/Vercel:
-  `src/lib/sportradar.js` importa ora il client generato dalla cartella `.api`
-  invece del package alias che causava build error.
+2. Backend/API presente
+- `/api/football/schedules/window`
+- `/api/football/livescores/inplay`
+- `/api/football/fixtures/[fixtureId]`
+- `/api/football/odds/futures`
+- `/api/health`
+- `/api/leads`
+- `/api/billing/checkout`
+- `/api/billing/session`
+- `/api/billing/portal`
+- `/api/billing/status`
+- `/api/billing/webhook`
 
-- Fix config Next.js:
-  `next.config.mjs` non esternalizza piu `@api/sportradar-soccer`, evitando
-  il module resolution failure in build.
-
-- Fix runtime Vercel AbortSignal:
-  rimosso il timeout custom del client SDK Sportradar in
-  `src/lib/sportradar.js`, che produceva errore `Expected signal to be an instance of AbortSignal`.
-
-- Fix hydration error HTML:
-  corretto annidamento `button` dentro `button` in
-  `src/screens/AnalisiStatistica.jsx`.
-
-Queste correzioni rendono il progetto buildabile e deployabile come base.
-
-====================================================================
-STATO REALE DEL CODICE
-====================================================================
-
-1. Frontend principale
-
-- Landing page:
-  `src/screens/Landing.jsx`
-
-- Modelli predittivi:
-  `src/screens/ModelliPredittivi.jsx`
-
-- Analisi statistica:
-  `src/screens/AnalisiStatistica.jsx`
-
-- Dati live:
-  `src/screens/DatiLive.jsx`
-
-- Match detail:
-  `src/screens/MatchDetail.jsx`
-
-- Smart Multi-Bet:
-  `src/screens/MultiBet.jsx`
-
-- Premium / billing:
-  `src/screens/Premium.jsx`
-  `src/screens/Account.jsx`
-
-2. API e servizi server
-
-- Schedule window:
-  `src/app/api/football/schedules/window/route.js`
-
-- Live scores:
-  `src/app/api/football/livescores/inplay/route.js`
-
-- Fixture detail:
-  `src/app/api/football/fixtures/[fixtureId]/route.js`
-
-- Futures odds:
-  `src/app/api/football/odds/futures/route.js`
-
-- Leads:
-  `src/app/api/leads/route.js`
-
-- Health:
-  `src/app/api/health/route.js`
-
-- Billing checkout/session/portal:
-  `src/app/api/billing/*`
-
-3. Servizi dominio dati
-
-- Orchestrazione dati calcio:
+3. Architettura dati impostata
+- catalogo competizioni:
+  `src/lib/competitions/catalog.js`
+- domain layer:
+  `src/lib/domain/*`
+- provider layer:
+  `src/lib/providers/*`
+- orchestration layer:
   `src/server/football/service.js`
-
-- Normalizzazione Sportradar:
-  `src/lib/sportradar.js`
-
-- MongoDB:
-  `src/lib/mongodb.js`
-
-- Stripe:
-  `src/lib/stripe.js`
-
-- Provider config attuale:
-  `src/lib/provider-config.js`
-
-4. Stato provider nel codice
-
-- Sportradar: PRESENTE e reale
-- MongoDB: PRESENTE e reale
-- Stripe: PRESENTE e reale
-- Sportmonks: ASSENTE nel codice
-- OddsMatrix: ASSENTE come integrazione reale nel codice
-- Widget live terzo provider ready-to-use: ASSENTE
-
-====================================================================
-PALINSESTI TOP PER INIZIARE
-====================================================================
-
-Brief richiesto:
-- Top 5 Europee: Serie A, Premier League, La Liga, Bundesliga, Ligue 1
-- Elite Step 2: Championship e Primeira Liga
-- Italia Pro: Serie B
-- Coppe UEFA: Champions League, Europa League, Conference League
-- Sud America: Brasileirao e Liga Profesional Argentina
-- National Teams: Mondiali, Europei e Nations League
-
-Stato attuale repo:
-- PARTIAL
-- esiste filtro competizione lato UI
-- esiste logica di preferenza competizioni in `src/server/football/service.js`
-- NON esiste una whitelist prodotto rigida e condivisa da tutto il sistema
-- NON esiste una policy che escluda in modo sistematico campionati fuori scope
-
-Implementazione obbligatoria:
-- creare un catalogo unico competizioni supportate
-- usare il catalogo in:
-  frontend filtri
-  API schedule
-  API live
-  match detail
-  multi-bet engine
-  job di refresh
-- associare a ogni competizione:
-  `id interno`
-  `provider ids`
-  `tier`
-  `coverage type`
-  `bookmaker priority`
-  `is_live_enabled`
-  `is_predictions_enabled`
-
-Output richiesto ai dev:
-- un modulo tipo `src/lib/competitions/catalog.js`
-- mapping provider per Sportradar, Sportmonks e OddsMatrix
-
-====================================================================
-SEZIONE 1 - MODELLI PREDITTIVI
-====================================================================
-
-Target da brief:
-- probabilita 1X2, O/U 1.5 2.5 3.5, Goal/No Goal
-- xG pre-match
-- 3 risultati esatti probabili
-- Value Bet Alert con confronto modello vs bookmaker
-- accesso Free/Premium differenziato
-
-Stato attuale repo:
-- PARTIAL
-- UI presente in `src/screens/ModelliPredittivi.jsx`
-- match card ricca presente in `src/components/match/MatchCard.jsx`
-- schedule pre-match reale da Sportradar presente
-- probabilita, xG, risultati probabili e value bet vengono costruiti da logica
-  interna/fallback in `src/lib/sportradar.js`
-- filtro value bet presente
-- ranking e sorting presenti
-
-Gap rispetto al brief:
-- il brief cita Sportmonks come sorgente predittiva principale
-- nel repo non esiste integrazione Sportmonks
-- il value bet non usa ancora OddsMatrix reale
-- le quote 1X2/OU/GG non sono ancora derivate da comparatore odds reale
-- i palinsesti non sono ancora limitati rigidamente al perimetro richiesto
-
-Implementazione obbligatoria:
-- integrare Sportmonks per prediction, xG storico, stat DB e contest dati prematch
-- integrare OddsMatrix per odds prematch multi-bookmaker
-- definire formula stabile di value bet:
-  `fair_odds = 1 / model_probability`
-  `edge_percent = ((bookmaker_odds / fair_odds) - 1) * 100`
-- salvare provenance per ogni match:
-  `prediction_provider`
-  `odds_provider`
-  `generated_at`
-  `confidence_model_version`
-
-Regole UX obbligatorie:
-- mantenere look premium glass/dark gia' presente
-- verde = valore
-- rosso = quota negativa
-- CTA sempre su card
-- loading numerico progressivo stile terminal/data desk
-
-====================================================================
-SEZIONE 1B - SMART MULTI-BET ENGINE
-====================================================================
-
-Target da brief:
-- Algorithmic Combo Generator
-- Safe Data Selection
-- Value Combo Advisor
-- Gold Accuracy Tracker
-- comparatore bookmaker con moltiplicatore totale migliore
-
-Stato attuale repo:
-- PARTIAL / DEMO
-- schermata e premium gating presenti in `src/screens/MultiBet.jsx`
-- combo cards presenti
-- feed futures Sportradar presente
-- molte combinazioni mostrano dati mock
-- NON esiste un motore reale che scansiona mercati match-by-match
-- NON esiste ottimizzazione reale del moltiplicatore bookmaker
-
-Implementazione obbligatoria:
-- costruire pipeline server-side per generare combo da mercati reali
-- input minimo:
-  predictions model
-  odds prematch
-  bookmaker matrix
-  confidence threshold
-  allowed markets
-- output minimo per combo:
-  `combo_id`
-  `strategy_type`
-  `legs`
-  `total_odds_best_bookmaker`
-  `expected_value`
-  `risk_score`
-  `confidence_score`
-  `generated_at`
-- strategia minima da implementare:
-  `safe`
-  `value`
-  `gold_accuracy`
-
-Vincolo prodotto:
-- il panel futures Sportradar NON sostituisce il multi-bet engine richiesto
-- il futures panel puo restare come modulo secondario, non come motore principale
-
-====================================================================
-SEZIONE 2 - ANALISI STATISTICA
-====================================================================
-
-Target da brief:
-- probabili formazioni dinamiche
-- status ufficiale 60 minuti prima
-- impact player analysis
-- player performance per props
-- heatmaps
-- dati disciplinari
-- team momentum con xPts, tempi gol, pressione difensiva
-
-Stato attuale repo:
-- PARTIAL
-- tabs presenti in `src/screens/AnalisiStatistica.jsx`
-- campo/formazione presenti in `src/components/stats/FormationPitch.jsx`
-- player card presente
-- momentum panel presente
-- match detail contiene lineups, assenze, coaches, timeline, venue
-- parte dei dati e' ancora mock o fallback locale
-
-Gap rispetto al brief:
-- NON esiste feed ufficiale Sportmonks nel codice
-- NON esiste workflow T-60 per aggiornare lineups ufficiali
-- NON esistono heatmaps reali
-- NON esiste player props data provider reale end-to-end
-- NON esiste motore assenze collegato a provider infortuni dedicato
-- xPts e pressione difensiva sono presentati ma non sono standardizzati con un
-  provider unico richiesto dal brief
-
-Implementazione obbligatoria:
-- usare Sportmonks come provider principale per:
-  lineups
-  players
-  injuries/suspensions
-  historical team stats
-  player stats
-  pre-match context
-- salvare stato lineup:
-  `expected`
-  `probable`
-  `official`
-- aggiornare automaticamente a T-60 e T-15
-- rendere cliccabile ogni player con:
-  xG
-  shots
-  disciplinary stats
-  scorer odds
-  eventuale heatmap
-
-Nota:
-- lo scheletro UX e' gia' presente
-- la parte mancante e' soprattutto data plumbing reale
-
-====================================================================
-SEZIONE 3 - DATI LIVE
-====================================================================
-
-Target da brief:
-- widget live match center
-- campo dinamico
-- pressure chart
-- live odds matrix
-- stats realtime ogni 2 secondi
-- Indice di Pericolosita Pro
-- notifiche live / follow / gol
-
-Stato attuale repo:
-- PARTIAL
-- schermata live presente in `src/screens/DatiLive.jsx`
-- danger index presente in `src/components/live/DangerIndex.jsx`
-- live stats, odds matrix, timeline presenti
-- feed live Sportradar presente
-- fallback snapshot locale presente
-- caching server-side presente
-
-Gap rispetto al brief:
-- NON esiste polling a 2 secondi realmente orchestrato lato client/server
-- NON esiste websocket, SSE o scheduler dedicato
-- live odds matrix non e' ancora collegata a OddsMatrix reale
-- il campo dinamico e' una visualizzazione custom semplice, non un widget ready-to-use
-- gli alert live non sono persistiti ne inviati all'utente
-- non c'e' subscription/follow state server-side per match
-
-Implementazione obbligatoria:
-- scegliere uno standard live:
-  opzione A: widget ready-to-use provider
-  opzione B: rendering custom con dati raw provider
-- se resta rendering custom:
-  refresh live stats ogni 5-10 secondi server-side
-  refresh UI ogni 2 secondi solo per animazione e interpolazione locale
-- integrare real live odds multi-bookmaker
-- persistere alert live in DB
-- aggiungere canale delivery:
-  email
-  push
-  telegram
-  in-app notification
-
-Indice di Pericolosita Pro:
-- il componente esiste gia'
-- per aderire al brief deve usare formula stabile e documentata
-- proposta minima:
-  `danger_score = weighted(dangerous_attacks, xg_live, shots_on_target, possession_in_final_third, odds_drop_velocity)`
-- soglie:
-  0-40 neutro
-  41-70 attenzione
-  71-100 alert rosso
-
-====================================================================
-INTEGRAZIONE CONTESTUALE DEL COMPARATORE ODDS
-====================================================================
-
-Target da brief:
-- quote integrate dentro formazioni, statistiche, momentum e forma
-- esempi:
-  marcatore miglior quota
-  over corner contestuale
-  quota vittoria con badge value
-
-Stato attuale repo:
-- MISSING come integrazione reale provider
-- esistono UI di odds e comparazione
-- NON esiste motore contestuale OddsMatrix dentro tutti i blocchi richiesti
-
-Implementazione obbligatoria:
-- introdurre service layer OddsMatrix dedicato
-- mappare mercati per contesto:
-  scorer odds
-  over corners
-  cards
-  next goal
-  1X2
-  OU
-  GG/NG
-- esporre un oggetto contestuale standard:
-  `bestOdds`
-  `bestBookmaker`
-  `marketName`
-  `isValue`
-  `movement`
-  `updatedAt`
-
-====================================================================
-LANDING PAGE E POSIZIONAMENTO "DATA COMPANY"
-====================================================================
-
-Target da brief:
-- percezione Bloomberg del betting
-- non tipster
-- data company
-- landing coerente con piattaforma analitica
-
-Stato attuale repo:
-- PARTIAL / BUONO
-- landing presente e coerente
-- tono data-first gia' presente
-- metrics box presenti
-- preview live presente
-- lead form MongoDB presente
-
-Gap:
-- manca proof layer forte:
-  provider provenance
-  copertura competizioni ufficiale
-  statement commerciale chiaro
-  roadmap prodotto
-- manca CTA reale per canale Telegram
-- manca interconnessione forte tra landing e funzioni premium reali
-
-====================================================================
-SINTESI TECNICA OBBLIGATORIA PER LO SVILUPPO
-====================================================================
-
-Architettura finale da seguire, se si vuole aderire al brief:
-
-Predittiva:
-- provider principale: Sportmonks
-- ruolo: prediction, xG storico, contesto statistico, DB calcio
-
-Statistica:
-- provider principale: Sportmonks
-- ruolo: lineups, player stats, injuries, standings, team/player database
-
-Live:
-- provider principale: Sportradar o widget provider scelto
-- ruolo: live timelines, summaries, live stats, lineups live
-
-Comparatore:
-- provider principale: OddsMatrix
-- ruolo: prematch odds, live odds, bookmaker comparison, movement
-
-Persistenza:
-- provider: MongoDB
-- ruolo: leads, alerts, user preferences, generated combos, audit dati
-
-Billing:
-- provider: Stripe
-- ruolo: subscription, billing portal, webhook stato premium
-
-Frontend:
-- Next.js App Router
-- design system attuale da mantenere come base
-
-====================================================================
-REQUISITI TECNICI OBBLIGATORI ANCORA DA IMPLEMENTARE
-====================================================================
-
-1. Access control premium reale
-
-Obbligatorio:
-- spostare lo stato premium dal solo localStorage a storage server-side
-- aggiungere webhook Stripe
-- salvare customer, subscription, status e expiry in DB
-- usare middleware/server checks per proteggere API premium
-
-2. Normalization layer multi-provider
-
-Obbligatorio:
-- creare layer provider separati:
+- Sportmonks client e normalizzazione:
+  `src/lib/providers/sportmonks/index.js`
+- Sportradar resta disponibile come backup:
   `src/lib/providers/sportradar/*`
-  `src/lib/providers/sportmonks/*`
-  `src/lib/providers/oddsmatrix/*`
-- creare layer domain unico:
-  `src/lib/domain/matches/*`
-  `src/lib/domain/odds/*`
-  `src/lib/domain/live/*`
 
-3. Cache e rate limiting
-
-Obbligatorio:
-- cache per live
-- cache per schedule
-- cache per odds
-- fallback graceful se provider va in rate limit
-
-Attuale:
-- esiste cache base in memoria per schedule/live Sportradar
-
-Mancante:
-- store esterno condiviso in produzione
-
-4. Scheduler / cron
-
-Obbligatorio:
-- refresh pre-match schedule
-- refresh odds
-- refresh lineups T-60
-- alert generation live
-
-Scelta consigliata:
-- Vercel Cron per job semplici
-- se i volumi salgono, spostare job su worker dedicato
-
-5. Alerting reale
-
-Obbligatorio:
-- persistere alert in DB
-- inviare alert a utenti che seguono il match
-- supportare almeno un canale reale
-
-6. Osservabilita
-
-Obbligatorio:
-- logging errori provider
-- logging rate limit
-- tracing base API
-- health checks provider
+4. Stato build
+- `npm run build` OK
+- `npm run lint` OK
 
 ====================================================================
-CHIAVI ENV ATTUALI DEL REPO
+PROVIDER STRATEGY ATTUALE
 ====================================================================
 
-Chiavi gia' usate dal codice corrente:
+Provider primario core calcio:
+- Sportmonks
 
-- `MONGODB_URI`
-- `MONGODB_DB`
-- `SPORTRADAR_API_KEY`
-- `SPORTRADAR_ACCESS_LEVEL`
-- `SPORTRADAR_LANGUAGE_CODE`
-- `SPORTRADAR_FORMAT`
-- `SPORTRADAR_SCHEDULE_DAYS`
-- `SPORTRADAR_ODDS_API_KEY`
-- `SPORTRADAR_PROBABILITIES_API_KEY`
-- `SPORTRADAR_SOCCER_SPORT_ID`
-- `SPORTRADAR_FUTURES_COMPETITION_ID`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_PREMIUM_PRICE_ID`
-- `NEXT_PUBLIC_APP_URL`
+Copertura primaria attuale Sportmonks:
+- schedule
+- fixture detail
+- statistics
+- lineups
+- standings stagione
+- coaches, referees, formations
+- team squads correnti
+- pre-match odds bookmaker
+- predictions/xG quando disponibili nel piano
+- live
 
-Chiavi davvero obbligatorie per far partire il repo attuale con funzionalita'
-principali:
+Provider secondari / residuali:
+- Sportradar:
+  fallback tecnico emergenziale
+  futures odds separati
+- OddsMatrix:
+  NON ancora integrato
 
-- `MONGODB_URI`
-- `MONGODB_DB`
-- `SPORTRADAR_API_KEY`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_PREMIUM_PRICE_ID`
-- `NEXT_PUBLIC_APP_URL`
-
-Chiavi opzionali ma consigliate nel repo attuale:
-
-- `SPORTRADAR_ODDS_API_KEY`
-- `SPORTRADAR_PROBABILITIES_API_KEY`
-- `SPORTRADAR_FUTURES_COMPETITION_ID`
+Conclusione operativa:
+- lato prodotto il feed visibile e Sportmonks-first
+- lato engineering esiste ancora una rete di sicurezza Sportradar
 
 ====================================================================
-CHIAVI ENV DA AGGIUNGERE PER ADERIRE AL BRIEF FINALE
+POLICY FEED ATTUALE
 ====================================================================
 
-Le seguenti chiavi NON sono oggi nel codice, ma sono il contratto consigliato
-da introdurre per chiudere il progetto come richiesto.
+REAL FEED FIRST
 
-Sportmonks:
-- `SPORTMONKS_API_TOKEN`
-- `SPORTMONKS_BASE_URL`
+Significa che:
+- mostriamo dati reali del provider attivo
+- non usiamo mock nascosti nei percorsi core
+- se una capability non esiste davvero, la dichiariamo
+- il catalogo competizioni resta metadata prodotto, non blocco UX duro
 
-OddsMatrix:
-- `ODDSMATRIX_BASE_URL`
-- `ODDSMATRIX_API_KEY`
-- oppure `ODDSMATRIX_USERNAME`
-- oppure `ODDSMATRIX_PASSWORD`
-
-Nota importante:
-OddsMatrix puo usare modelli credenziali diversi in base al contratto
-commerciale. Se il fornitore non usa una singola API key, mantenere comunque
-questo namespace env e adattare i nomi ai credential fields reali.
-
-Stripe produzione completa:
-- `STRIPE_WEBHOOK_SECRET`
-
-Alert delivery, se richiesto dal prodotto:
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID` oppure mapping utenti/canali
-- oppure chiavi di provider push/email se si sceglie un canale diverso
-
-Scheduler protetti:
-- `CRON_SECRET`
-
-Osservabilita, se introdotta:
-- `SENTRY_DSN` oppure equivalente
+Stati ammessi lato UI:
+- `sportmonks_api`
+- `sportmonks_live_latest`
+- `sportmonks_cache`
+- `emergency_fallback_sportradar`
+- `provider_unavailable`
 
 ====================================================================
-ACCESSI OPERATIVI NECESSARI
+COSA E IMPLEMENTATO DAVVERO ORA
 ====================================================================
 
-Per mettere in produzione la piattaforma completa servono i seguenti accessi:
+1. Sportmonks provider reale
+- client HTTP reale con token auth
+- supporto base url custom
+- include fallback progressivo per degradare se un add-on non e attivo
+- normalizzazione stabile di:
+  prematch match
+  fixture detail
+  live match
 
-- accesso admin Vercel al progetto
-- accesso write GitHub al repository
-- accesso MongoDB Atlas con utente `readWrite` sul DB produzione
-- accesso dashboard Sportradar con entitlement ai feed realmente usati
-- accesso commerciale Sportmonks ai moduli richiesti dal brief
-- accesso commerciale OddsMatrix con credenziali e documentazione mercati
-- accesso Stripe live mode
-- accesso DNS del dominio pubblico
+2. IDs canonici Sportmonks
+- i match card linkano a fixture ids Sportmonks
+- match detail accetta i nuovi ids senza guard Sportradar-only
+- entity normalizzate espongono `provider_ids`
 
-Accessi non ancora indispensabili per il repo attuale ma necessari per il
-target finale:
+3. Live feed migliorato
+- cold start da `livescores/inplay`
+- polling incrementale da `livescores/latest`
+- merge in cache delle fixture aggiornate
+- live odds sempre dichiarate come derivate se non bookmaker reali
 
-- accesso webhook Stripe
-- accesso provider alerting
-- accesso scheduler/cron
+4. Search e watchlist riallineate
+- navbar search usa schedule reale
+- watchlist partita usa schedule reale
+- favorites storage aggiornato a `top-football-favorites-v2`
 
-====================================================================
-IMPLEMENTAZIONI OBBLIGATORIE PER IL TEAM DEV
-====================================================================
-
-FASE 1 - HARDENING MVP ATTUALE
-
-- rendere stabile produzione Vercel
-- separare env local e production
-- attivare Stripe live solo in prod
-- verificare MongoDB produzione separato
-- introdurre webhook Stripe
-- spostare premium state da localStorage a DB
-
-FASE 2 - CHIUSURA GAP BRIEF
-
-- integrare Sportmonks
-- integrare OddsMatrix reale
-- definire whitelist competizioni
-- sostituire mock rimasti con provider reali
-- introdurre scheduler per live, lineups e odds
-- introdurre alert reali
-
-FASE 3 - QUALITA' PRODOTTO
-
-- provenienza dati in UI
-- badge provider e freshness
-- analytics uso funzioni premium
-- logging e monitoring
-- QA per competizioni top e mercati principali
+5. Provenance e freshness
+- provider
+- source
+- isFallback
+- freshness
+- competition
+- prediction_provider
+- odds_provider
+- lineup_status
 
 ====================================================================
-DEFINITION OF DONE REALE
+SEZIONI PRODOTTO: STATO ATTUALE
 ====================================================================
 
-Il progetto potra essere dichiarato coerente con il brief solo quando tutte le
-condizioni seguenti saranno vere:
+1. Dashboard
+Stato: BUONO COME MVP
+- feed principale Sportmonks
+- top matches coerenti con il feed reale
+- finestra feed allargata a 14 giorni
+- pre-match odds Sportmonks nei match card quando disponibili
+- summary cards e alerti feed presenti
+Gap:
+- live dipendente dal fatto che il feed/piano restituisca davvero match in-play
 
-- palinsesti limitati alle competizioni definite
-- modelli predittivi alimentati da provider reale coerente col brief
-- quote bookmaker reali integrate in modo contestuale
-- smart multi-bet generato da dati reali e non da mock
-- lineups e player data reali
-- live odds e live stats reali
-- indice di pericolosita basato su formula documentata
-- premium access governato server-side
-- billing con webhook e stato persistente
-- alert reali e follow match
-- env produzione completa e segregata
+2. Modelli Predittivi
+Stato: BUONO COME BASE
+- fixture list reale Sportmonks
+- pre-match odds Sportmonks nei match card
+- probabilities/xG provider quando disponibili
+- fallback modello derivato quando il feed non espone predictions/xG
+Gap:
+- niente live odds bookmaker
+- value bet ancora non bookmaker-driven
+
+3. Match Detail
+Stato: BUONO COME BASE
+- fixture detail Sportmonks
+- events, scores, venue, metadata, lineups, player profiles
+- standings stagione integrate
+- coaches, referees, formations e squads integrati
+- comparatore quote popolato con pre-match odds Sportmonks
+- ids canonici allineati
+Gap:
+- predictions/xG provider e live odds dipendono ancora dal piano
+- alcuni player insight restano descrittivi/derivati
+
+4. Analisi Statistica
+Stato: BUONO COME BASE
+- lineups, squads, player card, standings, officials, metadata e coverage su Sportmonks
+- schedule source riallineata ai nuovi fixture ids
+Gap:
+- dipende dalla profondita effettiva degli include disponibili
+- niente heatmaps / player props reali
+
+5. Dati Live
+Stato: BUONO COME BASE LIVE
+- Sportmonks live primario
+- sync incrementale
+- danger index presente
+- timeline eventi presente se il feed li espone
+Gap:
+- niente odds live bookmaker reali
+- se il feed restituisce `No result(s)` il vuoto e corretto lato provider, non piu un bug UI
+- niente follow/alert persistiti
+
+6. Multi-Bet
+Stato: DEMO EVOLUTA / NON FINALE
+- UX premium e preview presenti
+- futures separati ancora disponibili
+Gap:
+- nessun engine reale su odds provider dedicato
+- nessuna comparazione bookmaker evento per evento
+
+7. Premium
+Stato: PARZIALMENTE PRONTO
+- checkout/session/portal/webhook presenti
+- billing status backend presente
+Gap:
+- Mongo reale da stabilizzare
+- entitlement persistence da chiudere definitivamente
 
 ====================================================================
-VERDETTO FINALE
+CRONOLOGIA DELLE GRANDI MODIFICHE
 ====================================================================
 
-Risposta diretta alla domanda "ha tutto quello che serve?":
+FASE A. Hardening iniziale
+- health endpoint
+- billing webhook
+- stato premium backend-aware
+- provider/domain layer
+- provenance/freshness in UI
 
-No. Il progetto ha gia' una base seria, deployabile e molto utile come MVP
-data-driven, ma non aderisce ancora integralmente al brief che richiede
-Sportmonks + OddsMatrix + Sportradar in un'unica architettura coerente.
+FASE B. Real-feed-first
+- niente piu schermate vuote per colpa della whitelist
+- dati veri mostrati prima dei mock
 
-Risposta diretta alla richiesta "cosa devono seguire i dev?":
+FASE C. Fix di preview
+- fix competizione annidata
+- fix top match dashboard
+- fix lista lunga modelli
+- fix selezione fixture analisi statistica
+- fix rate limit con cache e deduplica
 
-I dev devono seguire questo documento come fonte operativa unica e non devono
-marcare come "implementato" nessun punto che oggi nel repo e' ancora mock,
-fallback, demo o solo UI.
+FASE D. Migrazione Sportmonks-first
+- nuovo provider Sportmonks reale
+- schedule/live/fixture spostati su Sportmonks
+- live incremental
+- routing ids Sportmonks
+- search/watchlist riallineate
+- copy Sportradar-first rimossa dai percorsi core
 
-Priorita' assolute:
-- premium server-side
-- Sportmonks reale
-- OddsMatrix reale
-- whitelist competizioni
-- multi-bet engine reale
-- alerting reale
+FASE E. Pass di copertura Sportmonks reale
+- include consentiti verificati contro il piano locale
+- standings stagione integrate
+- coaches, referees, formations e squad integrate
+- pre-match odds Sportmonks integrate in schedule e fixture
+- lineup status corretto con metadata provider-driven
+- finestra schedule UI portata a 14 giorni
 
+====================================================================
+GAP PRINCIPALI RISPETTO AL BRIEF FINALE
+====================================================================
+
+1. OddsMatrix reale mancante
+- bookmaker comparison finale cross-provider
+- best odds per market piu robusti
+- movement storico
+- quote contestuali live e multi-bookmaker complete
+
+2. Value bet reale mancante
+- oggi il valore e ancora un signal derivato
+- non e ancora confronto modello vs quota bookmaker reale
+
+3. Multi-bet reale mancante
+- niente pipeline completa su mercati veri
+- niente combinazioni finali safe/value/algorithmic su odds provider
+
+4. Alerting reale mancante
+- niente follow match persistito
+- niente delivery telegram/email/in-app
+
+5. Premium persistence finale mancante
+- Mongo locale oggi in health segnala TLS/SSL error
+- da chiudere DB reale + webhook validato
+
+====================================================================
+INPUT NECESSARI DAL TEAM
+====================================================================
+
+- conferma esatta del piano Sportmonks attivo
+- conferma se sono attivi:
+  `predictions.type`
+  `xGFixture`
+  `lineups.xGLineup`
+  `statistics.type`
+  `events.type`
+- conferma se `inplayOdds` e presente nel piano
+- fix MongoDB reale
+- webhook secret Stripe finale
+- credenziali/docs OddsMatrix
+- conferma perimetro Free vs Premium
+
+====================================================================
+ORDINE DI SVILUPPO CONSIGLIATO DA OGGI
+====================================================================
+
+1. Validare predictions/xG/live odds contro il piano Sportmonks reale
+2. Sistemare MongoDB reale
+3. Integrare OddsMatrix
+4. Chiudere gating premium server-side definitivo
+5. Aggiungere follow match e alert persistence
+6. Costruire multi-bet reale
+
+====================================================================
+CHECK GENERALE DELLA SITUAZIONE ATTUALE
+====================================================================
+
+Giudizio tecnico sintetico:
+
+- L'app oggi e molto piu allineata al documento cliente rispetto a ieri.
+- Il cuore prodotto non parla piu "Sportradar-first".
+- La preview locale verificata ora porta:
+  schedule reale a 14 giorni
+  odds pre-match Sportmonks
+  standings/coaches/squads nella fixture detail
+- L'architettura e pronta per il passo successivo piu importante:
+  OddsMatrix.
+- Il rischio principale non e piu architetturale, ma di copertura piano/provider:
+  il piano locale non espone `predictions.type`, `xGFixture` e `inplayOdds`.
+- Il blocco tecnico piu concreto fuori dal feed calcio resta MongoDB TLS/SSL.

@@ -83,7 +83,7 @@ export default function Landing() {
     const loadLandingMetrics = async () => {
       try {
         const [schedulePayload, livePayload] = await Promise.all([
-          getScheduleWindow(4),
+          getScheduleWindow(14),
           getLivescoresInplay(),
         ]);
 
@@ -284,7 +284,7 @@ export default function Landing() {
                       </div>
                     )}
                     <div className="text-xs text-muted-foreground mt-2">
-                      Preview live dal feed Sportradar
+                      Preview live dal feed Sportmonks
                     </div>
                   </div>
                 ) : (

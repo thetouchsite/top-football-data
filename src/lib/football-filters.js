@@ -7,6 +7,16 @@ const LEAGUE_BUCKETS = [
 ];
 
 const STATUS_BUCKETS = new Set(["today", "tomorrow", "weekend", "upcoming"]);
+const COMPETITION_TIER_RANK = {
+  top: 0,
+  uefa: 1,
+  nationalteams: 2,
+  "national-teams": 2,
+  step2: 3,
+  "italia-pro": 4,
+  sudamerica: 5,
+  unsupported: 9,
+};
 
 function normalizeText(value) {
   return String(value || "")
@@ -79,6 +89,31 @@ function getTimeRank(timeValue) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
+function getStatePriority(match) {
+  const shortName = String(match?.state?.shortName || match?.state || "")
+    .trim()
+    .toUpperCase();
+
+  if (shortName === "LIVE") return 0;
+  if (shortName === "HT") return 1;
+  if (shortName === "ET" || shortName === "PEN") return 2;
+  if (getMatchStatusBucket(match) === "today") return 3;
+  if (shortName === "PRE") return 4;
+  if (getMatchStatusBucket(match) === "tomorrow") return 5;
+  if (getMatchStatusBucket(match) === "weekend") return 6;
+  if (shortName === "FT") return 8;
+  return 7;
+}
+
+function getCompetitionTierPriority(match) {
+  const tier = normalizeText(match?.competition?.tier);
+  return COMPETITION_TIER_RANK[tier] ?? 7;
+}
+
+function getCoveragePriority(match) {
+  return Number(match?.coverage?.coverageScore || 0);
+}
+
 export function sortMatchesByCriterion(matches, criterion) {
   const safeMatches = Array.isArray(matches) ? [...matches] : [];
 
@@ -102,6 +137,39 @@ export function sortMatchesByCriterion(matches, criterion) {
 
     if (statusDifference !== 0) {
       return statusDifference;
+    }
+
+    return getTimeRank(left.time) - getTimeRank(right.time);
+  });
+}
+
+export function sortMatchesByFeaturedPriority(matches) {
+  const safeMatches = Array.isArray(matches) ? [...matches] : [];
+
+  return safeMatches.sort((left, right) => {
+    const stateDifference = getStatePriority(left) - getStatePriority(right);
+
+    if (stateDifference !== 0) {
+      return stateDifference;
+    }
+
+    const competitionDifference =
+      getCompetitionTierPriority(left) - getCompetitionTierPriority(right);
+
+    if (competitionDifference !== 0) {
+      return competitionDifference;
+    }
+
+    const coverageDifference = getCoveragePriority(right) - getCoveragePriority(left);
+
+    if (coverageDifference !== 0) {
+      return coverageDifference;
+    }
+
+    const confidenceDifference = (right.confidence || 0) - (left.confidence || 0);
+
+    if (confidenceDifference !== 0) {
+      return confidenceDifference;
     }
 
     return getTimeRank(left.time) - getTimeRank(right.time);

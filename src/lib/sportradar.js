@@ -581,11 +581,28 @@ function getStateInfo(status = {}) {
   return { name: "In corso", shortName: "LIVE" };
 }
 
+function getSportEventContext(entry = {}) {
+  return entry?.sport_event_context || entry?.sport_event?.sport_event_context || {};
+}
+
+function getSportEventConditions(entry = {}) {
+  return entry?.sport_event_conditions || entry?.sport_event?.sport_event_conditions || {};
+}
+
+function getSportEventCoverageProperties(entry = {}) {
+  return (
+    entry?.coverage?.sport_event_properties ||
+    entry?.sport_event?.coverage?.sport_event_properties ||
+    {}
+  );
+}
+
 function getCompetitionInfo(entry) {
-  const context = entry?.sport_event_context || {};
+  const context = getSportEventContext(entry);
+  const firstGroup = asArray(context?.groups)[0] || null;
 
   return {
-    league: context?.competition?.name || "Sportradar",
+    league: context?.competition?.name || firstGroup?.name || "Sportradar",
     country: context?.category?.name || null,
     round:
       context?.round?.name ||
@@ -977,6 +994,61 @@ function buildLineups(lineupsResponse) {
   };
 }
 
+function buildCoverageSummary(entry = {}) {
+  const coverage = getSportEventCoverageProperties(entry);
+  const hasExtendedPlayByPlay = Boolean(
+    coverage?.deeper_play_by_play || coverage?.extended_play_by_play
+  );
+  const hasDeeperTeamStats = Boolean(
+    coverage?.deeper_team_stats || coverage?.extended_team_stats
+  );
+  const hasDeeperPlayerStats = Boolean(
+    coverage?.deeper_player_stats || coverage?.extended_player_stats
+  );
+
+  return {
+    hasLineups: Boolean(coverage?.lineups),
+    hasFormations: Boolean(coverage?.formations),
+    hasVenue: Boolean(coverage?.venue),
+    hasBasicTeamStats: Boolean(coverage?.basic_team_stats),
+    hasBasicPlayerStats: Boolean(coverage?.basic_player_stats),
+    hasDeeperTeamStats,
+    hasDeeperPlayerStats,
+    hasExtendedPlayByPlay,
+    lineupsAvailability: coverage?.lineups_availability || null,
+    scoresMode: coverage?.scores || null,
+    coverageScore: [
+      coverage?.lineups,
+      coverage?.formations,
+      coverage?.basic_team_stats,
+      coverage?.basic_player_stats,
+      hasDeeperTeamStats,
+      hasDeeperPlayerStats,
+      hasExtendedPlayByPlay,
+      coverage?.venue,
+    ].filter(Boolean).length,
+  };
+}
+
+function getLineupConfirmationFromConditions(source = {}) {
+  const confirmed = getSportEventConditions(source)?.lineups?.confirmed;
+  return typeof confirmed === "boolean" ? confirmed : null;
+}
+
+function getProviderLineupStatus(source = {}, hasPlayers = false) {
+  const lineupConfirmed = getLineupConfirmationFromConditions(source);
+
+  if (lineupConfirmed === true) {
+    return "official";
+  }
+
+  if (lineupConfirmed === false || hasPlayers) {
+    return "probable";
+  }
+
+  return "unknown";
+}
+
 function buildCoaches(lineupsResponse) {
   const competitors = getCompetitorsByQualifier(asArray(lineupsResponse?.lineups?.competitors));
 
@@ -1101,9 +1173,12 @@ function buildImpactPlayers(playerProfiles = []) {
 
 function buildMetadata(bundle) {
   const timeline = bundle?.timeline || {};
-  const context = timeline?.sport_event_context || {};
+  const context = getSportEventContext(timeline);
   const status = timeline?.sport_event_status || {};
-  const coverage = timeline?.sport_event?.coverage?.sport_event_properties || {};
+  const coverage = getSportEventCoverageProperties(timeline);
+  const hasExtendedCoverage = Boolean(
+    coverage?.deeper_play_by_play || coverage?.extended_play_by_play
+  );
 
   return [
     {
@@ -1122,7 +1197,7 @@ function buildMetadata(bundle) {
       id: "coverage",
       code: "coverage",
       label: "Coverage",
-      value: coverage?.deeper_play_by_play ? "Extended live" : "Basic live",
+      value: hasExtendedCoverage ? "Extended live" : "Basic live",
     },
     {
       id: "status",
@@ -1490,7 +1565,7 @@ export function normalizeSportradarLiveMatch(summary, timelineFeed, fallbackLive
   }
 
   const fallbackMatch = findFallbackMatch(homeTeam?.name, awayTeam?.name, fallbackLiveMatches);
-  const info = getCompetitionInfo(summary);
+  const info = getCompetitionInfo(sportEvent);
   const matchState = getStateInfo(summary?.sport_event_status || timelineFeed?.sport_event_status);
   const score = {
     home: safeNumber(summary?.sport_event_status?.home_score, fallbackMatch?.homeScore || 0),
@@ -1513,6 +1588,10 @@ export function normalizeSportradarLiveMatch(summary, timelineFeed, fallbackLive
     minute,
     fallbackMatch
   );
+  const lineupConfirmed =
+    getLineupConfirmationFromConditions(summary) ??
+    getLineupConfirmationFromConditions(timelineFeed);
+  const coverage = buildCoverageSummary(summary || timelineFeed);
 
   return {
     id: sportEvent?.id || timelineFeed?.id,
@@ -1528,12 +1607,18 @@ export function normalizeSportradarLiveMatch(summary, timelineFeed, fallbackLive
     country: info.country || fallbackMatch?.country || null,
     round: info.round || fallbackMatch?.round || null,
     state: matchState.name,
+    coverage,
     stats,
     liveOdds: buildLiveOdds(score, stats, minute, fallbackMatch),
     dangerIndex: danger.dangerIndex,
     dangerMessage: danger.dangerMessage,
     dangerHistory: danger.dangerHistory,
     events: timelineEvents.length > 0 ? timelineEvents : fallbackMatch?.events || [],
+    lineup_status: getProviderLineupStatus(
+      summary || timelineFeed,
+      Boolean(fallbackMatch?.lineup_status && fallbackMatch.lineup_status !== "unknown")
+    ),
+    lineupConfirmed,
     apiLoaded: true,
   };
 }
@@ -1562,10 +1647,12 @@ export function normalizeSportradarScheduleMatch(scheduleItem, fallbackMatch = n
   const homeTeam = competitors.home;
   const awayTeam = competitors.away;
   const kickoff = formatKickoff(sportEvent?.start_time);
+  const matchState = getStateInfo(schedule?.sport_event_status);
   const homeForm = buildFormArray(homeTeam?.form, fallbackMatch?.homeForm || DEFAULT_FORM);
   const awayForm = buildFormArray(awayTeam?.form, fallbackMatch?.awayForm || DEFAULT_FORM);
   const model = buildModelBlock(homeForm, awayForm);
-  const info = getCompetitionInfo(schedule);
+  const info = getCompetitionInfo(sportEvent);
+  const coverage = buildCoverageSummary(sportEvent);
 
   return {
     id: sportEvent?.id || fallbackMatch?.id || `${homeTeam?.id || "home"}:${awayTeam?.id || "away"}`,
@@ -1576,9 +1663,13 @@ export function normalizeSportradarScheduleMatch(scheduleItem, fallbackMatch = n
     awayShort: formatShortCode(awayTeam) || fallbackMatch?.awayShort || "AWA",
     league: info.league || fallbackMatch?.league || "Sportradar",
     leagueShort: fallbackMatch?.leagueShort || "SR",
+    country: info.country || null,
+    round: info.round || null,
     date: kickoff.date,
     time: kickoff.time,
     status: getRelativeStatus(sportEvent?.start_time),
+    state: matchState,
+    coverage,
     prob: model.prob,
     odds: model.odds,
     ou: model.ou,
@@ -1592,7 +1683,7 @@ export function normalizeSportradarScheduleMatch(scheduleItem, fallbackMatch = n
     homeForm,
     awayForm,
     h2h: buildH2h(fallbackMatch),
-    badges: buildBadges(null, "Feed Sportradar", fallbackMatch),
+    badges: buildBadges(matchState, "Feed Sportradar", fallbackMatch),
     injuries: Array.isArray(fallbackMatch?.injuries) ? fallbackMatch.injuries : [],
     venue: getVenueInfo(sportEvent),
     apiLoaded: true,
@@ -1613,7 +1704,7 @@ export function normalizeSportradarFixture(bundle, fallbackMatch = null, fallbac
     home: safeNumber(timelineResponse?.sport_event_status?.home_score),
     away: safeNumber(timelineResponse?.sport_event_status?.away_score),
   };
-  const info = getCompetitionInfo(timelineResponse);
+  const info = getCompetitionInfo(sportEvent);
   const lineups = buildLineups(lineupsResponse);
   const coaches = buildCoaches(lineupsResponse);
   const totals = getCompetitorStatistics(timelineResponse?.statistics);
@@ -1625,6 +1716,12 @@ export function normalizeSportradarFixture(bundle, fallbackMatch = null, fallbac
     .map(normalizeTimelineEvent)
     .filter(Boolean)
     .slice(-12);
+  const lineupConfirmed =
+    getLineupConfirmationFromConditions(timelineResponse) ??
+    getLineupConfirmationFromConditions(lineupsResponse);
+  const hasLineupPlayers =
+    lineups.home.players.length > 0 || lineups.away.players.length > 0;
+  const coverage = buildCoverageSummary(sportEvent);
 
   return {
     id: sportEvent?.id || fallbackMatch?.id || "sportradar-match",
@@ -1634,9 +1731,12 @@ export function normalizeSportradarFixture(bundle, fallbackMatch = null, fallbac
     away: awayTeam?.name || fallbackMatch?.away || "Away",
     awayShort: formatShortCode(awayTeam) || fallbackMatch?.awayShort || "AWA",
     league: info.league || fallbackMatch?.league || "Sportradar",
+    country: info.country || null,
+    round: info.round || null,
     date: kickoff.date,
     time: kickoff.time,
     state: matchState,
+    coverage,
     currentScore: liveScoreAvailable ? score : null,
     prob: fallbackMatch?.prob || model.prob,
     odds: fallbackMatch?.odds || model.odds,
@@ -1664,8 +1764,8 @@ export function normalizeSportradarFixture(bundle, fallbackMatch = null, fallbac
     venue: getVenueInfo(sportEvent),
     coaches,
     metadata: buildMetadata(bundle),
-    lineupConfirmed:
-      lineups.home.players.length > 0 || lineups.away.players.length > 0 ? true : null,
+    lineup_status: getProviderLineupStatus(timelineResponse, hasLineupPlayers),
+    lineupConfirmed,
     apiLoaded: true,
   };
 }

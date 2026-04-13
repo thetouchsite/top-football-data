@@ -1,15 +1,15 @@
 export const DATA_PROVIDERS = {
-  predictions: "sportradar_probabilities",
-  expectedGoals: "sportradar_soccer",
-  lineups: "sportradar_soccer",
-  statistics: "sportradar_soccer",
-  footballDatabase: "sportradar_soccer",
-  bookmakerOdds: "sportradar_odds",
-  oddsComparison: "sportradar_odds",
-  valueBetContext: "internal_model",
-  live: "sportradar_soccer",
+  predictions: "sportmonks_predictions",
+  expectedGoals: "sportmonks_expected",
+  lineups: "sportmonks_football",
+  statistics: "sportmonks_football",
+  footballDatabase: "sportmonks_football",
+  bookmakerOdds: "sportmonks_pre_match_odds",
+  oddsComparison: "sportmonks_pre_match_odds",
+  valueBetContext: "derived_internal_model",
+  live: "sportmonks_football",
 };
 
 export function getLiveProviderLabel() {
-  return "Sportradar";
+  return "Sportmonks";
 }
