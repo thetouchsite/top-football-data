@@ -57,6 +57,10 @@ export default function DangerIndex({ value, message, history = [] }) {
         <p className={`text-xs leading-relaxed ${lvl.color}`}>{message}</p>
       </div>
 
+      <p className="text-[11px] text-muted-foreground mb-3">
+        Formula v1: dangerous attacks, tiri in porta, xG live stimato, possesso e contesto punteggio.
+      </p>
+
       <Button onClick={() => setAlertActive(!alertActive)}
         className={`w-full text-xs h-9 font-semibold ${alertActive ? "bg-destructive/20 text-destructive border border-destructive/30 hover:bg-destructive/30" : "bg-secondary/60 text-foreground hover:bg-secondary border border-border/50"}`}
         variant="ghost">

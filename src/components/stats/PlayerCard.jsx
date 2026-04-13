@@ -4,7 +4,7 @@ import GlassCard from "../shared/GlassCard";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/AppContext";
 
-export default function PlayerCard({ player, expanded = false }) {
+export default function PlayerCard({ player, expanded = false, oddsAvailable = false }) {
   const { favorites, toggleFavoritePlayer } = useApp();
   if (!player) return null;
   const isFav = favorites.players.includes(player.name);
@@ -89,7 +89,9 @@ export default function PlayerCard({ player, expanded = false }) {
       {/* Scorer odds */}
       <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/10 mb-4">
         <div>
-          <div className="text-xs text-muted-foreground">Quota marcatore</div>
+          <div className="text-xs text-muted-foreground">
+            {oddsAvailable ? "Quota marcatore" : "Stima marcatore"}
+          </div>
           <div className="font-bold text-foreground">{player.scorerOdds}</div>
         </div>
         <div className="text-right">
@@ -99,8 +101,21 @@ export default function PlayerCard({ player, expanded = false }) {
       </div>
 
       <div className="flex gap-2">
-        <Button className="flex-1 bg-primary text-primary-foreground font-bold text-xs glow-green-sm hover:bg-primary/90 h-9">
-          SCOMMETTI ORA <ChevronRight className="w-3 h-3 ml-1" />
+        <Button
+          disabled={!oddsAvailable}
+          className={`flex-1 font-bold text-xs h-9 ${
+            oddsAvailable
+              ? "bg-primary text-primary-foreground glow-green-sm hover:bg-primary/90"
+              : "bg-secondary text-muted-foreground cursor-not-allowed"
+          }`}
+        >
+          {oddsAvailable ? (
+            <>
+              VAI ALLE QUOTE <ChevronRight className="w-3 h-3 ml-1" />
+            </>
+          ) : (
+            "Quote contestuali in arrivo"
+          )}
         </Button>
         <button onClick={() => toggleFavoritePlayer(player.name)}
           className={`px-3 h-9 rounded-lg border text-xs font-semibold transition-all ${isFav ? "bg-accent/10 border-accent/20 text-accent" : "border-border/50 text-muted-foreground hover:text-foreground"}`}>

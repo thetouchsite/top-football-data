@@ -1,15 +1,66 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "@/lib/router-compat";
 import { Star, Trash2, ChevronRight, Users, Target } from "lucide-react";
 import GlassCard from "@/components/shared/GlassCard";
 import { useApp } from "@/lib/AppContext";
-import { MATCHES, PLAYERS } from "@/lib/mockData";
+import { getScheduleWindow } from "@/api/football";
 
 export default function Watchlist() {
   const { favorites, toggleFavoriteMatch, toggleFavoritePlayer } = useApp();
+  const [feedMatches, setFeedMatches] = useState([]);
 
-  const favMatches = MATCHES.filter((m) => favorites.matches.includes(m.id));
-  const favPlayers = PLAYERS.filter((p) => favorites.players.includes(p.name));
+  useEffect(() => {
+    let isActive = true;
+
+    getScheduleWindow(14)
+      .then((payload) => {
+        if (isActive) {
+          setFeedMatches(Array.isArray(payload?.matches) ? payload.matches : []);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setFeedMatches([]);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const favMatches = useMemo(() => {
+    const matchMap = new Map(feedMatches.map((match) => [String(match.id), match]));
+
+    return favorites.matches.map((id) => {
+      const match = matchMap.get(String(id));
+
+      if (match) {
+        return match;
+      }
+
+      return {
+        id: String(id),
+        home: "Fixture salvata",
+        away: "non in finestra corrente",
+        league: "Sportmonks feed",
+        date: "--",
+        time: "--:--",
+      };
+    });
+  }, [favorites.matches, feedMatches]);
+
+  const favPlayers = useMemo(
+    () =>
+      favorites.players.map((playerName, index) => ({
+        id: `${playerName}:${index}`,
+        name: playerName,
+        team: "Provider feed",
+        pos: "N/D",
+        number: "--",
+      })),
+    [favorites.players]
+  );
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-4xl mx-auto">

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, Filter, LayoutGrid, LayoutList, Search } from "lucide-react";
 import {
@@ -10,10 +10,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import SectionHeader from "@/components/shared/SectionHeader";
+import DataStatusChips from "@/components/shared/DataStatusChips";
 import MatchCard from "@/components/match/MatchCard";
 import LiveMiniWidget from "@/components/match/LiveMiniWidget";
-import { MATCHES, LIVE_MATCH } from "@/lib/mockData";
-import { getScheduleWindow } from "@/api/football";
+import { getLivescoresInplay, getScheduleWindow } from "@/api/football";
 import {
   getLeagueBucket,
   getMatchStatusBucket,
@@ -34,10 +34,16 @@ const SORT_OPTIONS = [
   { value: "odds", label: "Quota" },
   { value: "value", label: "Valore" },
 ];
+const MAX_VISIBLE_MATCHES = 24;
+
+function sanitizeMatches(matches) {
+  return Array.isArray(matches) ? matches : [];
+}
 
 export default function ModelliPredittivi() {
-  const [apiMatches, setApiMatches] = useState(null);
-  const [scheduleInfo, setScheduleInfo] = useState(null);
+  const [apiMatches, setApiMatches] = useState([]);
+  const [scheduleMeta, setScheduleMeta] = useState(null);
+  const [liveMatch, setLiveMatch] = useState(null);
   const [scheduleLoading, setScheduleLoading] = useState(true);
   const [scheduleError, setScheduleError] = useState("");
   const [league, setLeague] = useState("all");
@@ -50,20 +56,38 @@ export default function ModelliPredittivi() {
   useEffect(() => {
     let isActive = true;
 
-    const loadScheduleWindow = async () => {
+    const loadFeeds = async () => {
       setScheduleLoading(true);
       setScheduleError("");
 
       try {
-        const payload = await getScheduleWindow(4);
+        const [schedulePayload, livePayload] = await Promise.all([
+          getScheduleWindow(14),
+          getLivescoresInplay().catch(() => null),
+        ]);
 
-        if (isActive) {
-          setApiMatches(Array.isArray(payload.matches) ? payload.matches : []);
-          setScheduleInfo(payload.window || null);
+        if (!isActive) {
+          return;
         }
+
+        setApiMatches(sanitizeMatches(schedulePayload.matches));
+        setScheduleMeta({
+          provider: schedulePayload.provider,
+          source: schedulePayload.source,
+          freshness: schedulePayload.freshness,
+          window: schedulePayload.window || null,
+          notice: schedulePayload.notice || "",
+          competitions: schedulePayload.competitions || [],
+          oddsProvider:
+            schedulePayload.matches?.[0]?.odds_provider || "not_available_with_current_feed",
+          predictionProvider:
+            schedulePayload.matches?.[0]?.prediction_provider || "derived_internal_model",
+        });
+        setLiveMatch(sanitizeMatches(livePayload?.matches)[0] || null);
       } catch (error) {
         if (isActive) {
-          setScheduleError(error.message || "Calendario Sportradar non disponibile.");
+          setApiMatches([]);
+          setScheduleError(error.message || "Calendario provider non disponibile.");
         }
       } finally {
         if (isActive) {
@@ -72,33 +96,50 @@ export default function ModelliPredittivi() {
       }
     };
 
-    loadScheduleWindow();
+    loadFeeds();
 
     return () => {
       isActive = false;
     };
   }, []);
 
-  const sourceMatches = apiMatches ?? MATCHES;
-  const availableLeagues = Array.from(
-    new Set(sourceMatches.map((match) => getLeagueBucket(match.league)).filter(Boolean))
-  ).sort();
+  const availableLeagues = useMemo(
+    () =>
+      Array.from(
+        new Set(apiMatches.map((match) => getLeagueBucket(match.league)).filter(Boolean))
+      ).sort(),
+    [apiMatches]
+  );
 
-  let filtered = sourceMatches.filter((match) => {
-    if (!matchLeagueFilter(match, league)) return false;
-    if (showValueOnly && !match.valueBet) return false;
-    if (statusTab !== "all" && getMatchStatusBucket(match) !== statusTab) return false;
-    if (
-      search &&
-      !match.home.toLowerCase().includes(search.toLowerCase()) &&
-      !match.away.toLowerCase().includes(search.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filteredMatches = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
 
-  filtered = sortMatchesByCriterion(filtered, sort);
+    return sortMatchesByCriterion(
+      apiMatches.filter((match) => {
+        if (!matchLeagueFilter(match, league)) return false;
+        if (showValueOnly && !match.valueBet) return false;
+        if (statusTab !== "all" && getMatchStatusBucket(match) !== statusTab) return false;
+        if (
+          normalizedSearch &&
+          !match.home.toLowerCase().includes(normalizedSearch) &&
+          !match.away.toLowerCase().includes(normalizedSearch)
+        ) {
+          return false;
+        }
+        return true;
+      }),
+      sort
+    );
+  }, [apiMatches, league, search, showValueOnly, sort, statusTab]);
+
+  const visibleMatches = useMemo(
+    () => filteredMatches.slice(0, MAX_VISIBLE_MATCHES),
+    [filteredMatches]
+  );
+  const nextAvailableMatch = useMemo(
+    () => sortMatchesByCriterion([...apiMatches], "time")[0] || null,
+    [apiMatches]
+  );
 
   return (
     <div className="min-h-screen p-4 md:p-8">
@@ -106,9 +147,43 @@ export default function ModelliPredittivi() {
         <SectionHeader
           title="MODELLI PREDITTIVI"
           accentWord="PREDITTIVI"
-          subtitle="Analisi pre-match basata su modelli matematici avanzati"
+          subtitle="Analisi pre-match basata sul feed Sportmonks e su modelli derivati dichiarati."
           icon={TrendingUp}
         />
+
+        <div className="mb-5 space-y-3">
+          <DataStatusChips
+            provider={scheduleMeta?.provider}
+            source={scheduleMeta?.source}
+            freshness={scheduleMeta?.freshness}
+            predictionProvider={scheduleMeta?.predictionProvider}
+            oddsProvider={scheduleMeta?.oddsProvider}
+            notice={scheduleMeta?.notice}
+          />
+          <div className="flex items-center gap-2 flex-wrap">
+            {scheduleMeta?.window?.from && (
+              <span className="text-xs px-2 py-1 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
+                Finestra {scheduleMeta.window.from}
+                {scheduleMeta.window.to ? ` -> ${scheduleMeta.window.to}` : ""}
+              </span>
+            )}
+            {scheduleLoading && (
+              <span className="text-xs px-2 py-1 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
+                Caricamento calendario...
+              </span>
+            )}
+            {scheduleError && (
+              <span className="text-xs px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+                {scheduleError}
+              </span>
+            )}
+            {showValueOnly && (
+              <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                Solo Value Bet derivate
+              </span>
+            )}
+          </div>
+        </div>
 
         <div className="flex items-center gap-1 mb-5 overflow-x-auto pb-1">
           {STATUS_TABS.map((tab) => (
@@ -196,31 +271,20 @@ export default function ModelliPredittivi() {
         </div>
 
         <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-xs text-muted-foreground">{filtered.length} match trovati</span>
-          {apiMatches !== null && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-              Schedule Sportradar
-            </span>
-          )}
-          {scheduleInfo?.from && (
+          <span className="text-xs text-muted-foreground">
+            {filteredMatches.length} match trovati
+            {filteredMatches.length > visibleMatches.length
+              ? ` · mostro i primi ${visibleMatches.length}`
+              : ""}
+          </span>
+          {scheduleMeta?.competitions?.length > 0 && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
-              {scheduleInfo.from}
-              {scheduleInfo.to ? ` · ${scheduleInfo.to}` : ""}
+              {scheduleMeta.competitions.length} competizioni nel feed
             </span>
           )}
-          {scheduleLoading && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
-              Caricamento calendario...
-            </span>
-          )}
-          {scheduleError && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
-              {scheduleError}
-            </span>
-          )}
-          {showValueOnly && (
+          {filteredMatches.length > visibleMatches.length && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-              Solo Value Bet
+              Affina filtri o ricerca per vedere il resto del palinsesto
             </span>
           )}
         </div>
@@ -229,7 +293,7 @@ export default function ModelliPredittivi() {
           <div className="lg:col-span-2">
             {view === "grid" ? (
               <div className="space-y-4">
-                {filtered.map((match, index) => (
+                {visibleMatches.map((match, index) => (
                   <motion.div
                     key={match.id}
                     initial={{ opacity: 0, y: 15 }}
@@ -242,31 +306,55 @@ export default function ModelliPredittivi() {
               </div>
             ) : (
               <div className="glass rounded-xl overflow-hidden">
-                {filtered.map((match) => (
+                {visibleMatches.map((match) => (
                   <MatchCard key={match.id} match={match} compact />
                 ))}
               </div>
             )}
-            {filtered.length === 0 && (
+
+            {filteredMatches.length === 0 && !scheduleLoading && (
               <div className="glass rounded-xl p-16 text-center">
                 <Filter className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-muted-foreground text-sm">Nessun match trovato</p>
+                <p className="text-muted-foreground text-sm">Nessun match disponibile</p>
                 <p className="text-xs text-muted-foreground/60 mt-1">
-                  Modifica i filtri per trovare risultati
+                  {nextAvailableMatch
+                    ? `Il feed non ha match nel filtro selezionato. Prossima fixture disponibile: ${nextAvailableMatch.home} vs ${nextAvailableMatch.away} il ${nextAvailableMatch.date} alle ${nextAvailableMatch.time}.`
+                    : "Il feed corrente non ha restituito partite nel perimetro selezionato."}
                 </p>
               </div>
             )}
           </div>
 
           <div className="space-y-4">
-            <LiveMiniWidget match={LIVE_MATCH} />
+            {liveMatch ? (
+              <div className="space-y-3">
+                <DataStatusChips
+                  provider={liveMatch.provider}
+                  source={liveMatch.source}
+                  freshness={liveMatch.freshness}
+                  competition={liveMatch.competition}
+                  predictionProvider={liveMatch.prediction_provider}
+                  oddsProvider={liveMatch.odds_provider}
+                  lineupStatus={liveMatch.lineup_status}
+                />
+                <LiveMiniWidget match={liveMatch} />
+              </div>
+            ) : (
+              <div className="glass rounded-xl p-4">
+                <h3 className="font-semibold text-sm text-foreground mb-2">Live center</h3>
+                <p className="text-xs text-muted-foreground">
+                  Nessun match live disponibile nel feed corrente.
+                </p>
+              </div>
+            )}
+
             <div className="glass rounded-xl p-4">
               <h3 className="font-semibold text-sm text-foreground mb-3">Prossimi match</h3>
               <div className="space-y-2">
-                {sourceMatches.slice(0, 4).map((match) => (
+                {visibleMatches.slice(0, 4).map((match) => (
                   <div
                     key={match.id}
-                    className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-all cursor-pointer"
+                    className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30"
                   >
                     <span className="text-foreground font-medium">
                       {match.home} vs {match.away}
@@ -274,6 +362,11 @@ export default function ModelliPredittivi() {
                     <span className="text-muted-foreground">{match.time}</span>
                   </div>
                 ))}
+                {apiMatches.length === 0 && !scheduleLoading && (
+                  <p className="text-xs text-muted-foreground">
+                    Nessun pre-match disponibile nel feed corrente.
+                  </p>
+                )}
               </div>
             </div>
           </div>

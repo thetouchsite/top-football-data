@@ -3,7 +3,10 @@ import { Radio, Circle } from "lucide-react";
 
 export default function LiveMiniWidget({ match }) {
   if (!match) return null;
-  
+  const recentEvents = Array.isArray(match.events)
+    ? [...match.events].slice(-3).reverse()
+    : [];
+
   return (
     <div className="glass rounded-xl p-4 border-primary/20">
       {/* Header */}
@@ -51,17 +54,21 @@ export default function LiveMiniWidget({ match }) {
 
       {/* Events */}
       <div className="space-y-1.5">
-        {[
-          { min: "34'", text: "Gol - Lautaro Martinez", icon: "⚽" },
-          { min: "45'", text: "Ammonizione - Bennacer", icon: "🟨" },
-          { min: "58'", text: "Ammonizione - Barella", icon: "🟨" },
-        ].map((e, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground w-8">{e.min}</span>
-            <span>{e.icon}</span>
-            <span className="text-foreground">{e.text}</span>
+        {recentEvents.length > 0 ? (
+          recentEvents.map((event) => (
+            <div key={event.id} className="flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground w-8">{event.minute}'</span>
+              <span className="text-foreground">
+                {event.typeLabel}
+                {event.player ? ` - ${event.player}` : ""}
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="text-xs text-muted-foreground">
+            Nessun evento live disponibile nel feed corrente.
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

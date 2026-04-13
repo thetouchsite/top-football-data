@@ -22,17 +22,17 @@ const PLANS = [
     desc: "Accesso base alla piattaforma",
     features: [
       { label: "Probabilita modello 1X2", yes: true },
-      { label: "Quote bookmaker visibili", yes: true },
+      { label: "Dashboard Sportmonks-first", yes: true },
       { label: "Top 3 partite del giorno", yes: true },
-      { label: "Dashboard base", yes: true },
+      { label: "Freshness e provenance del dato", yes: true },
       { label: "xG pre-match", yes: false },
       { label: "Risultati esatti probabili", yes: false },
       { label: "Value Bet identificazione", yes: false },
       { label: "Analisi statistica completa", yes: false },
-      { label: "Formazioni probabili", yes: false },
+      { label: "Lineup status provider-driven", yes: false },
       { label: "Dati live avanzati", yes: false },
-      { label: "Smart Multi-Bet Engine", yes: false },
-      { label: "Comparatore quote completo", yes: false },
+      { label: "Smart Multi-Bet Engine reale", yes: false },
+      { label: "Comparatore quote match-by-match", yes: false },
       { label: "Alert automatici", yes: false },
       { label: "Canale Telegram privato", yes: false },
     ],
@@ -48,19 +48,20 @@ const PLANS = [
     popular: true,
     features: [
       { label: "Probabilita modello 1X2", yes: true },
-      { label: "Quote bookmaker visibili", yes: true },
+      { label: "Dashboard Sportmonks-first", yes: true },
       { label: "Top 3 partite del giorno", yes: true },
-      { label: "Dashboard base", yes: true },
+      { label: "Freshness e provenance del dato", yes: true },
       { label: "xG pre-match", yes: true },
       { label: "Risultati esatti probabili", yes: true },
-      { label: "Value Bet identificazione", yes: true },
-      { label: "Analisi statistica completa", yes: true },
-      { label: "Formazioni probabili", yes: true },
+      { label: "Value Bet derivata", yes: true },
+      { label: "Analisi statistica fixture", yes: true },
+      { label: "Lineup status provider-driven", yes: true },
       { label: "Dati live avanzati", yes: true },
-      { label: "Smart Multi-Bet Engine", yes: true },
-      { label: "Comparatore quote completo", yes: true },
-      { label: "Alert automatici", yes: true },
-      { label: "Canale Telegram privato", yes: true },
+      { label: "Futures odds (quando disponibili)", yes: true },
+      { label: "Smart Multi-Bet Engine reale", yes: false },
+      { label: "Comparatore quote match-by-match", yes: false },
+      { label: "Alert automatici", yes: false },
+      { label: "Canale Telegram privato", yes: false },
     ],
     cta: "ATTIVA CON STRIPE",
     ctaDisabled: false,
@@ -211,6 +212,9 @@ export default function Premium() {
           <p className="text-muted-foreground max-w-lg mx-auto text-sm md:text-base">
             Nessuna fuffa da tipster. Solo analisi statistica, modelli matematici e dati concreti.
           </p>
+          <div className="mt-4 inline-flex px-3 py-2 rounded-xl border border-border/30 bg-secondary/30 text-muted-foreground text-xs">
+            Alcune feature premium dipendono ancora dal provider odds match-by-match in integrazione.
+          </div>
           {checkoutMessage && (
             <div className="mt-4 inline-flex px-3 py-2 rounded-xl border border-primary/20 bg-primary/10 text-primary text-xs font-semibold">
               {checkoutMessage}

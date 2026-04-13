@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import { Crown, Lock, Star, Cpu, Shield, Lightbulb, ChevronDown, ChevronUp, ChevronRight, TrendingUp, RefreshCw } from "lucide-react";
 import SectionHeader from "@/components/shared/SectionHeader";
 import GlassCard from "@/components/shared/GlassCard";
-import OddsComparison from "@/components/match/OddsComparison";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -156,15 +155,19 @@ function ComboCard({ combo, isPremium }) {
       </div>
 
       {expanded && (
-        <div className="mt-4">
-          <OddsComparison bookmakers={combo.bookmakers.map((b) => ({ ...b, draw: b.odds * 0.3, home: b.odds * 0.4, away: b.odds * 0.3 }))} />
+        <div className="mt-4 p-3 rounded-lg border border-border/30 bg-secondary/20">
+          <div className="text-xs font-semibold text-foreground mb-1">Stato engine</div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Questa combo e una preview locale del motore. Le quote bookmaker match-by-match e
+            la generazione reale verranno attivate con il provider odds dedicato.
+          </p>
         </div>
       )}
 
       <div className="mt-4">
         {isPremium ? (
           <Button className="w-full bg-primary text-primary-foreground font-bold text-xs glow-green-sm h-10">
-            GIOCA ORA <ChevronRight className="w-3.5 h-3.5 ml-1" />
+            APRI PREVIEW <ChevronRight className="w-3.5 h-3.5 ml-1" />
           </Button>
         ) : (
           <Button className="w-full bg-accent/20 text-accent font-bold text-xs h-10 border border-accent/30 glow-gold" variant="ghost">
@@ -218,7 +221,7 @@ export default function MultiBet() {
 
         setFuturesMarkets([]);
         setFuturesNotice(
-          error.message || "Feed futures Sportradar non disponibile."
+          error.message || "Feed futures non disponibile."
         );
         setFuturesLoaded(false);
       } finally {
@@ -242,8 +245,16 @@ export default function MultiBet() {
           <SectionHeader title="SMART MULTI-BET ENGINE" accentWord="MULTI-BET" subtitle="Strumento premium per assemblare multiple ad alto potenziale statistico" icon={Crown} />
           <div className="flex items-center gap-2 -mt-4 mb-6">
             <Lock className="w-3.5 h-3.5 text-accent" />
-            <span className="text-xs text-accent font-semibold">Esclusivo per Abbonati</span>
+            <span className="text-xs text-accent font-semibold">Preview premium · engine reale in integrazione</span>
           </div>
+        </div>
+
+        <div className="glass rounded-xl p-4 mb-6 border border-accent/20 bg-accent/5">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Il feed attuale copre solo futures/outrights separati dal layer principale
+            Sportmonks. Il motore multi-bet reale e la comparazione bookmaker match-by-match
+            restano `not_available_with_current_feed`.
+          </p>
         </div>
 
         {/* Feature boxes */}
@@ -258,9 +269,9 @@ export default function MultiBet() {
                   <h3 className="font-semibold text-sm text-accent">{f.label}</h3>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  {f.key === "algoritmiche" && "Il sistema costruisce combinazioni ottimali basate su dati storici e modelli statistici avanzati."}
-                  {f.key === "safe" && "Selezioni con alta confidenza statistica. Solo mercati con dati solidi e varianza bassa."}
-                  {f.key === "value" && "Mercati con rapporto rendimento/rischio favorevole. Valore statistico superiore alle quote offerte."}
+                  {f.key === "algoritmiche" && "Preview del motore combinatorio: logica e UX sono pronte, ma le selezioni restano locali finche non arriva il feed odds dedicato."}
+                  {f.key === "safe" && "Preview delle selezioni conservative. Le quote finali non sono ancora bookmaker match-by-match reali."}
+                  {f.key === "value" && "Preview della value combo. Il valore reale verra calcolato quando sara attivo il comparatore quote."}
                 </p>
               </GlassCard>
             </motion.div>
@@ -277,8 +288,8 @@ export default function MultiBet() {
                 </h3>
               </div>
               <p className="text-xs text-muted-foreground">
-                Feed Sportradar dedicato a outrights e mercati futures, separato
-                dalle quote match-by-match.
+                Feed dedicato a outrights e mercati futures, separato dalle quote
+                match-by-match.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -343,8 +354,7 @@ export default function MultiBet() {
               </div>
               <p className="text-xs text-muted-foreground">
                 Questo feed copre mercati outright futures. Per quote evento 1X2,
-                O/U e comparazione bookmaker match-by-match serve il prodotto
-                Sportradar odds dedicato al prematch/live.
+                O/U e comparazione bookmaker match-by-match serve ancora OddsMatrix.
               </p>
             </div>
           )}

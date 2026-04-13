@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/AppContext";
-import { MATCHES } from "@/lib/mockData";
+import { getScheduleWindow } from "@/api/football";
 import NotificationsPanel from "./NotificationsPanel";
 
 const NAV_ITEMS = [
@@ -27,6 +27,7 @@ export default function Navbar() {
   const [notifsOpen, setNotifsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [searchMatches, setSearchMatches] = useState([]);
   const { user, isPremium, setUserMode, userMode, unreadCount } = useApp();
   const searchRef = useRef(null);
 
@@ -34,8 +35,32 @@ export default function Navbar() {
     if (searchOpen && searchRef.current) searchRef.current.focus();
   }, [searchOpen]);
 
+  useEffect(() => {
+    if (!searchOpen || searchMatches.length > 0) {
+      return;
+    }
+
+    let isActive = true;
+
+    getScheduleWindow(14)
+      .then((payload) => {
+        if (isActive) {
+          setSearchMatches(Array.isArray(payload?.matches) ? payload.matches : []);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setSearchMatches([]);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [searchMatches.length, searchOpen]);
+
   const searchResults = query.length > 1
-    ? MATCHES.filter((m) =>
+    ? searchMatches.filter((m) =>
         m.home.toLowerCase().includes(query.toLowerCase()) ||
         m.away.toLowerCase().includes(query.toLowerCase()) ||
         m.league.toLowerCase().includes(query.toLowerCase())

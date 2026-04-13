@@ -4,6 +4,18 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 const AppContext = createContext({});
 const BILLING_STORAGE_KEY = "top-football-billing";
+const FAVORITES_STORAGE_KEY = "top-football-favorites-v2";
+const EMPTY_BILLING_STATE = {
+  plan: "free",
+  isPremium: false,
+  customerId: null,
+  subscriptionId: null,
+  email: null,
+  subscriptionStatus: null,
+  currentPeriodEnd: null,
+  source: "local_support_state",
+  updatedAt: null,
+};
 
 export const MOCK_USERS = {
   guest: {
@@ -47,23 +59,81 @@ export function AppProvider({ children }) {
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [favorites, setFavorites] = useState({ matches: [], teams: [], players: [] });
   const [filters, setFilters] = useState({ league: "all", valueOnly: false, sort: "time", view: "grid" });
-  const [billing, setBilling] = useState({
-    plan: "free",
-    isPremium: false,
-    customerId: null,
-    email: null,
-    subscriptionStatus: null,
-    currentPeriodEnd: null,
-    source: "local_demo",
-  });
+  const [billing, setBilling] = useState(EMPTY_BILLING_STATE);
+  const [billingReady, setBillingReady] = useState(false);
 
   const syncBilling = React.useCallback((nextBilling) => {
-    setBilling((current) => ({ ...current, ...nextBilling }));
+    setBilling((current) => ({ ...current, ...EMPTY_BILLING_STATE, ...nextBilling }));
   }, []);
 
   useEffect(() => {
     setUser(MOCK_USERS[userMode]);
   }, [userMode]);
+
+  const refreshBillingState = React.useCallback(async (seedBilling = null) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let initialBilling = seedBilling;
+
+    if (!initialBilling) {
+      try {
+        const storedBilling = window.localStorage.getItem(BILLING_STORAGE_KEY);
+        initialBilling = storedBilling ? JSON.parse(storedBilling) : EMPTY_BILLING_STATE;
+      } catch {
+        initialBilling = EMPTY_BILLING_STATE;
+      }
+    }
+
+    const customerId = String(initialBilling?.customerId || "").trim();
+    const email = String(initialBilling?.email || "").trim();
+
+    if (!customerId && !email) {
+      syncBilling({
+        ...EMPTY_BILLING_STATE,
+        ...initialBilling,
+      });
+      setBillingReady(true);
+      return;
+    }
+
+    try {
+      const searchParams = new URLSearchParams();
+
+      if (customerId) {
+        searchParams.set("customerId", customerId);
+      }
+
+      if (email) {
+        searchParams.set("email", email);
+      }
+
+      const response = await fetch(`/api/billing/status?${searchParams.toString()}`);
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Impossibile sincronizzare lo stato billing.");
+      }
+
+      const nextBilling = {
+        ...EMPTY_BILLING_STATE,
+        ...initialBilling,
+        ...payload.billing,
+      };
+
+      window.localStorage.setItem(BILLING_STORAGE_KEY, JSON.stringify(nextBilling));
+      syncBilling(nextBilling);
+    } catch {
+      syncBilling({
+        ...EMPTY_BILLING_STATE,
+        ...initialBilling,
+        source: initialBilling?.source || "local_support_state",
+      });
+    } finally {
+      setBillingReady(true);
+    }
+  }, [syncBilling]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -71,22 +141,35 @@ export function AppProvider({ children }) {
     }
 
     try {
+      const storedFavorites = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+
+      if (storedFavorites) {
+        const parsedFavorites = JSON.parse(storedFavorites);
+        setFavorites({
+          matches: Array.isArray(parsedFavorites?.matches)
+            ? parsedFavorites.matches.map((id) => String(id))
+            : [],
+          teams: Array.isArray(parsedFavorites?.teams) ? parsedFavorites.teams : [],
+          players: Array.isArray(parsedFavorites?.players) ? parsedFavorites.players : [],
+        });
+      }
+    } catch {}
+
+    try {
       const storedBilling = window.localStorage.getItem(BILLING_STORAGE_KEY);
 
       if (!storedBilling) {
+        setBillingReady(true);
         return;
       }
 
       const parsedBilling = JSON.parse(storedBilling);
-
-      if (parsedBilling?.isPremium) {
-        syncBilling({
-          ...parsedBilling,
-          source: "stripe_checkout",
-        });
-      }
-    } catch {}
-  }, [syncBilling]);
+      syncBilling(parsedBilling);
+      refreshBillingState(parsedBilling);
+    } catch {
+      setBillingReady(true);
+    }
+  }, [refreshBillingState, syncBilling]);
 
   useEffect(() => {
     if (billing.isPremium) {
@@ -103,7 +186,22 @@ export function AppProvider({ children }) {
     setUser(MOCK_USERS[userMode]);
   }, [billing, userMode]);
 
-  const isPremium = billing.isPremium || user.plan === "premium";
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      FAVORITES_STORAGE_KEY,
+      JSON.stringify({
+        matches: favorites.matches.map((id) => String(id)),
+        teams: favorites.teams,
+        players: favorites.players,
+      })
+    );
+  }, [favorites]);
+
+  const isPremium = billing.isPremium;
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -111,9 +209,12 @@ export function AppProvider({ children }) {
   const markRead = (id) => setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
 
   const toggleFavoriteMatch = (id) => {
+    const normalizedId = String(id);
     setFavorites((prev) => ({
       ...prev,
-      matches: prev.matches.includes(id) ? prev.matches.filter((m) => m !== id) : [...prev.matches, id],
+      matches: prev.matches.includes(normalizedId)
+        ? prev.matches.filter((matchId) => matchId !== normalizedId)
+        : [...prev.matches, normalizedId],
     }));
   };
   const toggleFavoriteTeam = (name) => {
@@ -135,34 +236,28 @@ export function AppProvider({ children }) {
     }
 
     const value = {
+      ...EMPTY_BILLING_STATE,
       ...billing,
       ...nextBilling,
     };
 
     window.localStorage.setItem(BILLING_STORAGE_KEY, JSON.stringify(value));
     syncBilling(value);
-  }, [billing, syncBilling]);
+    refreshBillingState(value);
+  }, [billing, refreshBillingState, syncBilling]);
 
   const clearBillingState = React.useCallback(() => {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(BILLING_STORAGE_KEY);
     }
 
-    syncBilling({
-      plan: "free",
-      isPremium: false,
-      customerId: null,
-      email: null,
-      subscriptionStatus: null,
-      currentPeriodEnd: null,
-      source: "local_demo",
-    });
+    syncBilling(EMPTY_BILLING_STATE);
   }, [syncBilling]);
 
   return (
     <AppContext.Provider value={{
       user, userMode, setUserMode, isPremium,
-      billing, saveBillingState, clearBillingState,
+      billing, billingReady, saveBillingState, clearBillingState, refreshBillingState,
       notifications, unreadCount, markAllRead, markRead,
       favorites, toggleFavoriteMatch, toggleFavoriteTeam, toggleFavoritePlayer,
       filters, setFilters,

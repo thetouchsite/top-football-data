@@ -1,0 +1,2514 @@
+import "server-only";
+
+const ROME_TIMEZONE = "Europe/Rome";
+const DEFAULT_FORM = ["-", "-", "-", "-", "-"];
+const SCORE_CANDIDATES = [
+  { score: "0:0", home: 0, away: 0, drawBias: 0.08 },
+  { score: "1:0", home: 1, away: 0, drawBias: -0.02 },
+  { score: "1:1", home: 1, away: 1, drawBias: 0.12 },
+  { score: "2:0", home: 2, away: 0, drawBias: -0.06 },
+  { score: "2:1", home: 2, away: 1, drawBias: -0.03 },
+  { score: "0:1", home: 0, away: 1, drawBias: -0.02 },
+  { score: "1:2", home: 1, away: 2, drawBias: -0.03 },
+  { score: "2:2", home: 2, away: 2, drawBias: 0.04 },
+];
+const EVENT_TYPE_LABELS = {
+  goal: "Gol",
+  yellow: "Ammonizione",
+  red: "Espulsione",
+  substitution: "Sostituzione",
+  dangerous: "Occasione",
+};
+
+const SPORTMONKS_SCHEDULE_INCLUDE_ATTEMPTS = [
+  [
+    "league",
+    "season",
+    "stage",
+    "round",
+    "state",
+    "participants",
+    "venue",
+    "scores",
+    "odds.bookmaker",
+    "statistics.type",
+    "metadata",
+  ],
+  [
+    "league",
+    "season",
+    "stage",
+    "round",
+    "state",
+    "participants",
+    "venue",
+    "scores",
+    "odds.bookmaker",
+    "statistics.type",
+    "metadata",
+  ],
+  ["league", "season", "round", "state", "participants", "venue", "scores"],
+];
+
+const SPORTMONKS_FIXTURE_INCLUDE_ATTEMPTS = [
+  [
+    "league",
+    "season",
+    "stage",
+    "round",
+    "state",
+    "participants",
+    "venue",
+    "scores",
+    "periods",
+    "events.type",
+    "statistics.type",
+    "lineups.details.type",
+    "odds.bookmaker",
+    "referees",
+    "coaches",
+    "formations",
+    "metadata",
+  ],
+  [
+    "league",
+    "season",
+    "stage",
+    "round",
+    "state",
+    "participants",
+    "venue",
+    "scores",
+    "periods",
+    "events.type",
+    "statistics.type",
+    "lineups.details.type",
+    "odds.bookmaker",
+    "referees",
+    "coaches",
+    "formations",
+    "metadata",
+  ],
+  ["league", "season", "round", "state", "participants", "venue", "scores", "events.type"],
+];
+
+const SPORTMONKS_LIVE_INCLUDE_ATTEMPTS = [
+  [
+    "league",
+    "season",
+    "stage",
+    "round",
+    "state",
+    "participants",
+    "venue",
+    "scores",
+    "periods",
+    "events.type",
+    "statistics.type",
+    "lineups.details.type",
+    "referees",
+    "coaches",
+    "formations",
+    "metadata",
+  ],
+  [
+    "league",
+    "season",
+    "round",
+    "state",
+    "participants",
+    "venue",
+    "scores",
+    "periods",
+    "events.type",
+    "statistics.type",
+    "lineups.details.type",
+    "referees",
+    "coaches",
+    "formations",
+    "metadata",
+  ],
+  ["league", "season", "round", "state", "participants", "venue", "scores", "events.type"],
+];
+
+export const SPORTMONKS_PROVIDER_ID = "sportmonks";
+export const SPORTMONKS_DEFAULT_SCHEDULE_DAYS = clampInteger(
+  process.env.SPORTMONKS_SCHEDULE_DAYS,
+  14,
+  1,
+  14
+);
+
+function clampInteger(value, fallback, min, max) {
+  const parsedValue = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsedValue)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsedValue, min), max);
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeLookupKey(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizeName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function safeNumber(value, fallback = 0) {
+  const parsedValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseFloat(value.replace(",", ".").replace("%", ""))
+        : Number.NaN;
+
+  return Number.isFinite(parsedValue) ? parsedValue : fallback;
+}
+
+function roundTo(value, decimals = 2) {
+  return Number(safeNumber(value).toFixed(decimals));
+}
+
+function parseDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+}
+
+function buildDateKey(date) {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: ROME_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function formatDisplayDate(startingAt) {
+  const parsedDate = parseDate(startingAt);
+
+  if (!parsedDate) {
+    return "--";
+  }
+
+  const eventDay = buildDateKey(parsedDate);
+  const today = new Date();
+  const todayKey = buildDateKey(today);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = buildDateKey(tomorrow);
+
+  if (eventDay === todayKey) {
+    return "Oggi";
+  }
+
+  if (eventDay === tomorrowKey) {
+    return "Domani";
+  }
+
+  return parsedDate.toLocaleDateString("it-IT", {
+    timeZone: ROME_TIMEZONE,
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+function formatKickoff(startingAt) {
+  const parsedDate = parseDate(startingAt);
+
+  if (!parsedDate) {
+    return { date: "--", time: "--:--" };
+  }
+
+  return {
+    date: formatDisplayDate(startingAt),
+    time: parsedDate.toLocaleTimeString("it-IT", {
+      timeZone: ROME_TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+  };
+}
+
+function getRelativeStatus(startingAt) {
+  const parsedDate = parseDate(startingAt);
+
+  if (!parsedDate) {
+    return "upcoming";
+  }
+
+  const eventDay = buildDateKey(parsedDate);
+  const today = new Date();
+  const todayKey = buildDateKey(today);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = buildDateKey(tomorrow);
+
+  if (eventDay === todayKey) {
+    return "today";
+  }
+
+  if (eventDay === tomorrowKey) {
+    return "tomorrow";
+  }
+
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: ROME_TIMEZONE,
+    weekday: "short",
+  }).format(parsedDate);
+
+  if (weekday === "Sat" || weekday === "Sun") {
+    return "weekend";
+  }
+
+  return "upcoming";
+}
+
+function formatShortCode(participant) {
+  const name =
+    participant?.short_code ||
+    participant?.shortCode ||
+    participant?.abbreviation ||
+    participant?.short_name ||
+    participant?.name ||
+    "";
+
+  if (!name) {
+    return "---";
+  }
+
+  return name.replace(/\s+/g, "").toUpperCase().slice(0, 3);
+}
+
+function getSportmonksApiToken({ silent = false } = {}) {
+  const apiToken =
+    process.env.SPORTMONKS_API_TOKEN || process.env.SPORTMONKS_API_KEY || "";
+
+  if (!apiToken && !silent) {
+    throw new Error("Missing SPORTMONKS_API_TOKEN environment variable.");
+  }
+
+  return apiToken;
+}
+
+function getSportmonksFootballBaseUrl() {
+  const rawBaseUrl = String(
+    process.env.SPORTMONKS_BASE_URL || "https://api.sportmonks.com/v3"
+  )
+    .trim()
+    .replace(/\/+$/g, "");
+
+  if (rawBaseUrl.endsWith("/football")) {
+    return rawBaseUrl;
+  }
+
+  return `${rawBaseUrl}/football`;
+}
+
+function buildSportmonksUrl(pathname, searchParams) {
+  const url = new URL(
+    `${getSportmonksFootballBaseUrl()}/${String(pathname || "").replace(/^\/+/g, "")}`
+  );
+
+  Object.entries(searchParams || {}).forEach(([key, value]) => {
+    if (value == null || value === "") {
+      return;
+    }
+
+    url.searchParams.set(key, value);
+  });
+
+  return url;
+}
+
+function buildRequestParams({
+  include = [],
+  filters = "",
+  select = "",
+  timezone = ROME_TIMEZONE,
+  page = 1,
+  perPage = 100,
+} = {}) {
+  const includeValue = Array.isArray(include) ? include.filter(Boolean).join(";") : include;
+
+  return {
+    api_token: getSportmonksApiToken(),
+    include: includeValue || undefined,
+    filters: filters || undefined,
+    select: select || undefined,
+    timezone: timezone || undefined,
+    page: page > 1 ? String(page) : undefined,
+    per_page: perPage ? String(perPage) : undefined,
+  };
+}
+
+async function requestSportmonksJson(pathname, options = {}) {
+  const url = buildSportmonksUrl(pathname, buildRequestParams(options));
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  let payload = null;
+
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const providerMessage =
+      payload?.message ||
+      payload?.error ||
+      payload?.errors?.[0]?.message ||
+      `Sportmonks request failed with status ${response.status}.`;
+
+    throw new Error(providerMessage);
+  }
+
+  return payload;
+}
+
+async function requestSportmonksCollection(pathname, options = {}) {
+  const firstPayload = await requestSportmonksJson(pathname, options);
+  const firstData = asArray(firstPayload?.data);
+  const totalPages =
+    safeNumber(
+      firstPayload?.pagination?.total_pages ??
+        firstPayload?.meta?.pagination?.total_pages ??
+        firstPayload?.meta?.pagination?.totalPages,
+      1
+    ) || 1;
+
+  if (totalPages <= 1) {
+    return {
+      ...firstPayload,
+      data: firstData,
+    };
+  }
+
+  const pageLimit = Math.min(totalPages, 10);
+  const remainingPages = [];
+
+  for (let page = 2; page <= pageLimit; page += 1) {
+    remainingPages.push(
+      requestSportmonksJson(pathname, {
+        ...options,
+        page,
+      })
+    );
+  }
+
+  const pagePayloads = await Promise.all(remainingPages);
+  const allData = pagePayloads.reduce(
+    (items, payload) => items.concat(asArray(payload?.data)),
+    [...firstData]
+  );
+
+  return {
+    ...firstPayload,
+    data: allData,
+  };
+}
+
+async function requestSportmonksWithIncludeFallback(pathname, attempts, options = {}) {
+  let lastError = null;
+
+  for (const include of attempts) {
+    try {
+      const requester = options.expectCollection
+        ? requestSportmonksCollection
+        : requestSportmonksJson;
+
+      return await requester(pathname, {
+        ...options,
+        include,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Impossibile recuperare il feed Sportmonks.");
+}
+
+function getParticipantsByLocation(participants = []) {
+  const homeParticipant =
+    participants.find((participant) => {
+      const location = normalizeLookupKey(
+        participant?.location || participant?.meta?.location || participant?.meta?.position
+      );
+      return location === "home";
+    }) || participants[0] || null;
+  const awayParticipant =
+    participants.find((participant) => {
+      const location = normalizeLookupKey(
+        participant?.location || participant?.meta?.location || participant?.meta?.position
+      );
+      return location === "away";
+    }) ||
+    participants.find((participant) => participant?.id !== homeParticipant?.id) ||
+    participants[1] ||
+    null;
+
+  return {
+    home: homeParticipant,
+    away: awayParticipant,
+  };
+}
+
+function resolveParticipantLocation(entry, homeParticipant, awayParticipant) {
+  const directLocation = normalizeLookupKey(
+    entry?.location || entry?.meta?.location || entry?.participant?.meta?.location
+  );
+
+  if (directLocation === "home" || directLocation === "away") {
+    return directLocation;
+  }
+
+  const participantId = String(
+    entry?.participant_id ||
+      entry?.participantId ||
+      entry?.team_id ||
+      entry?.teamId ||
+      entry?.player?.team_id ||
+      ""
+  );
+
+  if (participantId && participantId === String(homeParticipant?.id || "")) {
+    return "home";
+  }
+
+  if (participantId && participantId === String(awayParticipant?.id || "")) {
+    return "away";
+  }
+
+  return null;
+}
+
+function pickValueEntry(entry) {
+  if (entry == null) {
+    return Number.NaN;
+  }
+
+  if (typeof entry === "number" || typeof entry === "string") {
+    return safeNumber(entry, Number.NaN);
+  }
+
+  if (typeof entry === "object") {
+    if (typeof entry.value !== "undefined") {
+      const nestedValue =
+        typeof entry.value === "object"
+          ? entry.value.value ??
+            entry.value.expected ??
+            entry.value.actual ??
+            entry.value.percentage ??
+            entry.value.home ??
+            entry.value.away
+          : entry.value;
+      const parsedValue = safeNumber(nestedValue, Number.NaN);
+
+      if (Number.isFinite(parsedValue)) {
+        return parsedValue;
+      }
+    }
+
+    const directValue = safeNumber(
+      entry.expected ??
+        entry.actual ??
+        entry.percentage ??
+        entry.probability ??
+        entry.home ??
+        entry.away ??
+        entry.draw,
+      Number.NaN
+    );
+
+    if (Number.isFinite(directValue)) {
+      return directValue;
+    }
+  }
+
+  return Number.NaN;
+}
+
+function getFixtureMetadataEntries(fixture) {
+  return asArray(fixture?.metadata);
+}
+
+function getFixtureMetadataBoolean(fixture, typeIds = []) {
+  const match = getFixtureMetadataEntries(fixture).find((entry) =>
+    typeIds.some((typeId) => safeNumber(entry?.type_id, Number.NaN) === safeNumber(typeId, Number.NaN))
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  if (typeof match?.values === "boolean") {
+    return match.values;
+  }
+
+  if (typeof match?.values?.confirmed === "boolean") {
+    return match.values.confirmed;
+  }
+
+  return null;
+}
+
+function buildFormArray(value, fallbackForm = DEFAULT_FORM) {
+  if (Array.isArray(value) && value.length > 0) {
+    return value.slice(-5);
+  }
+
+  if (typeof value !== "string") {
+    return [...fallbackForm];
+  }
+
+  const form = value
+    .toUpperCase()
+    .replace(/[^WDL]/g, "")
+    .slice(-5)
+    .split("")
+    .map((symbol) => {
+      if (symbol === "W") return "V";
+      if (symbol === "D") return "P";
+      if (symbol === "L") return "S";
+      return "-";
+    });
+
+  while (form.length < 5) {
+    form.unshift("-");
+  }
+
+  return form;
+}
+
+function getFormStrength(form = DEFAULT_FORM) {
+  return form.reduce((total, result) => {
+    if (result === "V") return total + 3;
+    if (result === "P") return total + 1;
+    return total;
+  }, 0);
+}
+
+function ensureProbabilitySum(probabilities) {
+  const normalized = {
+    home: Math.max(1, Math.round(safeNumber(probabilities.home))),
+    draw: Math.max(1, Math.round(safeNumber(probabilities.draw))),
+    away: Math.max(1, Math.round(safeNumber(probabilities.away))),
+  };
+  const total = normalized.home + normalized.draw + normalized.away;
+  const diff = 100 - total;
+
+  normalized.draw += diff;
+  return normalized;
+}
+
+function probabilityToOdds(probability) {
+  if (!probability) {
+    return 0;
+  }
+
+  return roundTo(100 / probability, 2);
+}
+
+function buildExpectedGoalsFromProbabilities(probabilities) {
+  return {
+    home: roundTo(0.75 + probabilities.home / 38, 2),
+    away: roundTo(0.7 + probabilities.away / 38, 2),
+  };
+}
+
+function buildGoalMarkets(xg) {
+  const totalXg = xg.home + xg.away;
+  const over25Probability = Math.min(82, Math.max(38, 18 + totalXg * 20));
+  const goalProbability = Math.min(
+    84,
+    Math.max(35, 22 + Math.min(xg.home, xg.away) * 22 + totalXg * 8)
+  );
+
+  return {
+    ou: {
+      over15: probabilityToOdds(Math.min(90, over25Probability + 18)),
+      under15: probabilityToOdds(Math.max(10, 100 - (over25Probability + 18))),
+      over25: probabilityToOdds(over25Probability),
+      under25: probabilityToOdds(100 - over25Probability),
+      over35: probabilityToOdds(Math.max(12, over25Probability - 18)),
+      under35: probabilityToOdds(Math.min(88, 100 - over25Probability + 18)),
+    },
+    gg: {
+      goal: probabilityToOdds(goalProbability),
+      noGoal: probabilityToOdds(100 - goalProbability),
+    },
+  };
+}
+
+function buildLikelyScores(probabilities, xg) {
+  const rankedScores = SCORE_CANDIDATES.map((candidate) => {
+    const bias =
+      candidate.home === candidate.away
+        ? probabilities.draw / 100
+        : candidate.home > candidate.away
+          ? probabilities.home / 100
+          : probabilities.away / 100;
+    const distance = Math.abs(xg.home - candidate.home) + Math.abs(xg.away - candidate.away);
+
+    return {
+      score: candidate.score,
+      weight: bias - distance * 0.18 + candidate.drawBias,
+    };
+  })
+    .sort((left, right) => right.weight - left.weight)
+    .slice(0, 3);
+
+  return rankedScores.map((candidate, index) => ({
+    score: candidate.score,
+    prob: [16, 13, 10][index] || 8,
+  }));
+}
+
+function buildConfidence(probabilities) {
+  return Math.min(88, Math.max(58, 58 + Math.abs(probabilities.home - probabilities.away)));
+}
+
+function normalizeOddsOutcomeLabel(value) {
+  const label = normalizeLookupKey(value);
+
+  if (
+    label === "1" ||
+    label.includes("home") ||
+    label.includes("local") ||
+    label.includes("team_1")
+  ) {
+    return "home";
+  }
+
+  if (label === "x" || label.includes("draw") || label.includes("tie")) {
+    return "draw";
+  }
+
+  if (
+    label === "2" ||
+    label.includes("away") ||
+    label.includes("visitor") ||
+    label.includes("team_2")
+  ) {
+    return "away";
+  }
+
+  if (label.includes("over") || label.includes("yes") || label.includes("goal")) {
+    return "yes";
+  }
+
+  if (label.includes("under") || label.includes("no")) {
+    return "no";
+  }
+
+  return "";
+}
+
+function createEmptyOddsSnapshot() {
+  return {
+    oneXTwo: {
+      home: { value: 0, bookmaker: null },
+      draw: { value: 0, bookmaker: null },
+      away: { value: 0, bookmaker: null },
+    },
+    overUnder25: {
+      over: { value: 0, bookmaker: null },
+      under: { value: 0, bookmaker: null },
+    },
+    btts: {
+      yes: { value: 0, bookmaker: null },
+      no: { value: 0, bookmaker: null },
+    },
+    bookmakerMap: new Map(),
+  };
+}
+
+function upsertBookmakerOdds(bookmakerMap, bookmakerName, outcome, value) {
+  if (!bookmakerName || !outcome || !Number.isFinite(value) || value <= 0) {
+    return;
+  }
+
+  if (!bookmakerMap.has(bookmakerName)) {
+    bookmakerMap.set(bookmakerName, {
+      name: bookmakerName,
+      home: 0,
+      draw: 0,
+      away: 0,
+      best: false,
+    });
+  }
+
+  bookmakerMap.get(bookmakerName)[outcome] = roundTo(value, 2);
+}
+
+function updateBestOdds(slot, value, bookmakerName) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return slot;
+  }
+
+  if (!slot.bookmaker || value > slot.value) {
+    return {
+      value: roundTo(value, 2),
+      bookmaker: bookmakerName || slot.bookmaker || null,
+    };
+  }
+
+  return slot;
+}
+
+function extractOddsBundle(oddsEntries = []) {
+  const snapshot = createEmptyOddsSnapshot();
+
+  asArray(oddsEntries).forEach((entry) => {
+    const marketKey = normalizeLookupKey(
+      entry?.market_description || entry?.market?.name || entry?.market_id
+    );
+    const outcomeKey = normalizeOddsOutcomeLabel(entry?.label || entry?.name);
+    const totalValue = safeNumber(entry?.total, Number.NaN);
+    const decimalValue = roundTo(
+      safeNumber(entry?.dp3 || entry?.value || entry?.decimal, Number.NaN),
+      2
+    );
+    const bookmakerName =
+      entry?.bookmaker?.name ||
+      entry?.bookmaker_name ||
+      (entry?.bookmaker_id ? `Bookmaker ${entry.bookmaker_id}` : null);
+
+    if (!Number.isFinite(decimalValue) || decimalValue <= 0) {
+      return;
+    }
+
+    if (
+      marketKey.includes("match_winner") ||
+      marketKey.includes("fulltime_result") ||
+      marketKey.includes("1x2")
+    ) {
+      if (outcomeKey === "home" || outcomeKey === "draw" || outcomeKey === "away") {
+        snapshot.oneXTwo[outcomeKey] = updateBestOdds(
+          snapshot.oneXTwo[outcomeKey],
+          decimalValue,
+          bookmakerName
+        );
+        upsertBookmakerOdds(snapshot.bookmakerMap, bookmakerName, outcomeKey, decimalValue);
+      }
+      return;
+    }
+
+    if (
+      (marketKey.includes("goals_over_under") || marketKey.includes("over_under")) &&
+      Math.abs(totalValue - 2.5) < 0.01
+    ) {
+      if (outcomeKey === "yes") {
+        snapshot.overUnder25.over = updateBestOdds(
+          snapshot.overUnder25.over,
+          decimalValue,
+          bookmakerName
+        );
+      }
+
+      if (outcomeKey === "no") {
+        snapshot.overUnder25.under = updateBestOdds(
+          snapshot.overUnder25.under,
+          decimalValue,
+          bookmakerName
+        );
+      }
+      return;
+    }
+
+    if (
+      marketKey.includes("both_teams_to_score") ||
+      marketKey.includes("goal_no_goal") ||
+      marketKey.includes("btts")
+    ) {
+      if (outcomeKey === "yes") {
+        snapshot.btts.yes = updateBestOdds(snapshot.btts.yes, decimalValue, bookmakerName);
+      }
+
+      if (outcomeKey === "no") {
+        snapshot.btts.no = updateBestOdds(snapshot.btts.no, decimalValue, bookmakerName);
+      }
+    }
+  });
+
+  const bookmakers = Array.from(snapshot.bookmakerMap.values())
+    .filter((entry) => entry.home > 0 || entry.draw > 0 || entry.away > 0)
+    .map((entry) => ({
+      ...entry,
+      best:
+        entry.home === snapshot.oneXTwo.home.value ||
+        entry.draw === snapshot.oneXTwo.draw.value ||
+        entry.away === snapshot.oneXTwo.away.value,
+    }))
+    .slice(0, 10);
+
+  const bestOneXTwo = Object.values(snapshot.oneXTwo)
+    .filter((entry) => entry.value > 0)
+    .sort((left, right) => right.value - left.value)[0] || null;
+
+  return {
+    available:
+      snapshot.oneXTwo.home.value > 0 ||
+      snapshot.oneXTwo.draw.value > 0 ||
+      snapshot.oneXTwo.away.value > 0,
+    odds: {
+      home: snapshot.oneXTwo.home.value || 0,
+      draw: snapshot.oneXTwo.draw.value || 0,
+      away: snapshot.oneXTwo.away.value || 0,
+    },
+    ou: {
+      over25: snapshot.overUnder25.over.value || 0,
+      under25: snapshot.overUnder25.under.value || 0,
+    },
+    gg: {
+      goal: snapshot.btts.yes.value || 0,
+      noGoal: snapshot.btts.no.value || 0,
+    },
+    bookmakers,
+    bestOdds: bestOneXTwo ? String(bestOneXTwo.value) : null,
+    bestBookmaker: bestOneXTwo?.bookmaker || null,
+    movement: null,
+  };
+}
+
+function getFormationOverrides(formations, homeParticipant, awayParticipant) {
+  const overrides = {
+    home: "--",
+    away: "--",
+  };
+
+  asArray(formations).forEach((entry) => {
+    const location = resolveParticipantLocation(entry, homeParticipant, awayParticipant);
+    const formation = String(entry?.formation || "").trim();
+
+    if (location && formation) {
+      overrides[location] = formation;
+    }
+  });
+
+  return overrides;
+}
+
+function buildLineupStatus(fixture, lineups, formations) {
+  const confirmedLineups = getFixtureMetadataBoolean(fixture, [572]);
+
+  if (confirmedLineups === true) {
+    return "official";
+  }
+
+  if (asArray(lineups).length > 0) {
+    return "probable";
+  }
+
+  if (
+    Object.values(formations || {}).some((formation) => String(formation || "").trim() && formation !== "--")
+  ) {
+    return "expected";
+  }
+
+  return "unknown";
+}
+
+function resolveOfficialLocation(entry, homeParticipant, awayParticipant) {
+  const participantId =
+    entry?.participant_id ||
+    entry?.meta?.participant_id ||
+    entry?.participant?.id ||
+    entry?.team_id;
+
+  if (participantId && String(participantId) === String(homeParticipant?.id || "")) {
+    return "home";
+  }
+
+  if (participantId && String(participantId) === String(awayParticipant?.id || "")) {
+    return "away";
+  }
+
+  return resolveParticipantLocation(entry, homeParticipant, awayParticipant);
+}
+
+function normalizeOfficials(officials = []) {
+  return asArray(officials).map((entry) => ({
+    id: String(entry?.id || entry?.player_id || `${entry?.name || "official"}`),
+    name:
+      entry?.display_name ||
+      entry?.common_name ||
+      entry?.name ||
+      [entry?.firstname, entry?.lastname].filter(Boolean).join(" ") ||
+      "Official",
+    countryId: entry?.country_id || entry?.nationality_id || null,
+    image: entry?.image_path || null,
+  }));
+}
+
+function buildCoachAssignments(coaches, homeParticipant, awayParticipant) {
+  const assignments = {
+    home: [],
+    away: [],
+  };
+
+  asArray(coaches).forEach((entry) => {
+    const location = resolveOfficialLocation(entry, homeParticipant, awayParticipant);
+    const normalized = {
+      ...normalizeOfficials([entry])[0],
+      dateOfBirth: entry?.date_of_birth || null,
+    };
+
+    if (location === "home" || location === "away") {
+      assignments[location].push(normalized);
+    }
+  });
+
+  return assignments;
+}
+
+function mapStandingDetails(details = []) {
+  const detailMap = new Map(
+    asArray(details).map((entry) => [safeNumber(entry?.type_id, Number.NaN), safeNumber(entry?.value, 0)])
+  );
+
+  return {
+    played: detailMap.get(129) || 0,
+    wins: detailMap.get(130) || 0,
+    draws: detailMap.get(131) || 0,
+    losses: detailMap.get(132) || 0,
+    goalsFor: detailMap.get(133) || 0,
+    goalsAgainst: detailMap.get(134) || 0,
+    goalDifference: detailMap.get(179) || 0,
+  };
+}
+
+function normalizeStandingsTable(standings, stageId, homeParticipant, awayParticipant) {
+  const entries = asArray(standings);
+  const scopedEntries = entries.some((entry) => String(entry?.stage_id || "") === String(stageId || ""))
+    ? entries.filter((entry) => String(entry?.stage_id || "") === String(stageId || ""))
+    : entries;
+
+  const rows = scopedEntries
+    .map((entry) => {
+      const stats = mapStandingDetails(entry?.details);
+      const participantId = String(entry?.participant?.id || entry?.participant_id || "");
+      const isHome = participantId === String(homeParticipant?.id || "");
+      const isAway = participantId === String(awayParticipant?.id || "");
+
+      return {
+        id: String(entry?.id || participantId),
+        participantId,
+        team: entry?.participant?.name || "Team",
+        shortCode: entry?.participant?.short_code || null,
+        position: safeNumber(entry?.position, 0),
+        points: safeNumber(entry?.points, 0),
+        played: stats.played,
+        wins: stats.wins,
+        draws: stats.draws,
+        losses: stats.losses,
+        goalsFor: stats.goalsFor,
+        goalsAgainst: stats.goalsAgainst,
+        goalDifference:
+          stats.goalDifference || stats.goalsFor - stats.goalsAgainst,
+        form: asArray(entry?.form)
+          .sort((left, right) => safeNumber(left?.sort_order, 0) - safeNumber(right?.sort_order, 0))
+          .slice(-5)
+          .map((item) => item?.form || "-"),
+        highlighted: isHome || isAway,
+        side: isHome ? "home" : isAway ? "away" : null,
+      };
+    })
+    .filter((entry) => entry.position > 0)
+    .sort((left, right) => left.position - right.position);
+
+  return {
+    seasonId: String(entries[0]?.season_id || ""),
+    stageId: String(stageId || entries[0]?.stage_id || ""),
+    league: entries[0]?.league?.name || null,
+    season: entries[0]?.season?.name || null,
+    stage: entries[0]?.stage?.name || null,
+    rows,
+  };
+}
+
+function normalizeSquadPlayers(teamSquadEntries = [], teamName = "") {
+  return asArray(teamSquadEntries).map((entry, index) => ({
+    id: String(entry?.player?.id || entry?.player_id || `${teamName}:${index}`),
+    name:
+      entry?.player?.display_name ||
+      entry?.player?.common_name ||
+      entry?.player?.name ||
+      "Giocatore",
+    number: safeNumber(entry?.jersey_number, 0),
+    team: teamName,
+    pos:
+      entry?.detailedposition?.name ||
+      entry?.position?.name ||
+      entry?.player?.type?.name ||
+      "--",
+    position:
+      entry?.detailedposition?.name ||
+      entry?.position?.name ||
+      entry?.player?.type?.name ||
+      "--",
+    xg: 0,
+    shots: 0,
+    form: "Roster",
+    goals: 0,
+    assists: 0,
+    fouls: 0,
+    minutes: 0,
+    formHistory: DEFAULT_FORM,
+    insight: `${teamName}: profilo rosa caricato dal feed Sportmonks.`,
+    scorerOdds: 0,
+    scorerProb: 0,
+    height: entry?.player?.height || null,
+    weight: entry?.player?.weight || null,
+  }));
+}
+
+function buildDerivedProbabilities(xg, homeForm, awayForm) {
+  const formStrengthHome = getFormStrength(homeForm);
+  const formStrengthAway = getFormStrength(awayForm);
+  const totalXg = Math.max(0.2, safeNumber(xg.home) + safeNumber(xg.away));
+  const xgBiasHome = (safeNumber(xg.home) / totalXg) * 100;
+  const xgBiasAway = (safeNumber(xg.away) / totalXg) * 100;
+
+  return ensureProbabilitySum({
+    home: xgBiasHome * 0.62 + (34 + (formStrengthHome - formStrengthAway) * 1.8) * 0.38,
+    draw: Math.max(18, 30 - Math.abs(safeNumber(xg.home) - safeNumber(xg.away)) * 12),
+    away: xgBiasAway * 0.62 + (34 + (formStrengthAway - formStrengthHome) * 1.8) * 0.38,
+  });
+}
+
+function buildDerivedValueBet(probabilities, xg) {
+  if (probabilities.home >= 46 && xg.home - xg.away >= 0.25) {
+    return {
+      type: "1",
+      edge: Math.min(14, Math.round(probabilities.home - probabilities.away / 2 - 18)),
+      market: "1X2",
+    };
+  }
+
+  if (probabilities.away >= 44 && xg.away - xg.home >= 0.25) {
+    return {
+      type: "2",
+      edge: Math.min(14, Math.round(probabilities.away - probabilities.home / 2 - 18)),
+      market: "1X2",
+    };
+  }
+
+  const totalXg = xg.home + xg.away;
+
+  if (totalXg >= 2.9) {
+    return {
+      type: "Over 2.5",
+      edge: Math.min(10, Math.round((totalXg - 2.4) * 10)),
+      market: "O/U",
+    };
+  }
+
+  if (Math.min(xg.home, xg.away) >= 0.9) {
+    return {
+      type: "Goal",
+      edge: Math.min(8, Math.round(Math.min(xg.home, xg.away) * 4)),
+      market: "GG/NG",
+    };
+  }
+
+  return null;
+}
+
+function readNamedNumeric(value, keys = []) {
+  const normalizedKeys = keys.map(normalizeLookupKey);
+
+  if (!value || typeof value !== "object") {
+    return Number.NaN;
+  }
+
+  for (const [entryKey, entryValue] of Object.entries(value)) {
+    const normalizedKey = normalizeLookupKey(entryKey);
+
+    if (normalizedKeys.some((key) => normalizedKey === key || normalizedKey.includes(key))) {
+      const parsedValue = pickValueEntry(entryValue);
+
+      if (Number.isFinite(parsedValue)) {
+        return parsedValue;
+      }
+    }
+  }
+
+  return Number.NaN;
+}
+
+function normalizePredictionEntry(entry, homeParticipant, awayParticipant) {
+  const payload = entry?.predictions || entry?.data || entry;
+  const typeKey = normalizeLookupKey(
+    entry?.type?.developer_name || entry?.type?.code || entry?.type?.name || entry?.type_id
+  );
+  const homeValue = readNamedNumeric(payload, [
+    "home",
+    "home_win",
+    "homewinner",
+    "team_1",
+  ]);
+  const drawValue = readNamedNumeric(payload, ["draw", "tie", "x"]);
+  const awayValue = readNamedNumeric(payload, [
+    "away",
+    "away_win",
+    "awaywinner",
+    "team_2",
+  ]);
+  const participantValues = asArray(payload?.participants || payload?.predictions || payload?.values)
+    .map((candidate) => ({
+      location: resolveParticipantLocation(candidate, homeParticipant, awayParticipant),
+      value: pickValueEntry(candidate),
+    }))
+    .filter((candidate) => candidate.location && Number.isFinite(candidate.value));
+
+  const participantHome = participantValues.find((candidate) => candidate.location === "home")?.value;
+  const participantAway = participantValues.find((candidate) => candidate.location === "away")?.value;
+
+  const scoreCandidates = asArray(payload?.scores || payload?.scorelines || entry?.scores)
+    .map((scoreEntry) => ({
+      score:
+        scoreEntry?.score ||
+        scoreEntry?.label ||
+        scoreEntry?.name ||
+        `${scoreEntry?.home ?? "0"}:${scoreEntry?.away ?? "0"}`,
+      prob: Math.round(
+        safeNumber(
+          scoreEntry?.probability ||
+            scoreEntry?.percentage ||
+            scoreEntry?.value ||
+            scoreEntry?.weight,
+          0
+        )
+      ),
+    }))
+    .filter((scoreEntry) => scoreEntry.score && scoreEntry.prob > 0)
+    .slice(0, 3);
+  const yesValue = readNamedNumeric(payload, ["yes", "over", "goal"]);
+  const noValue = readNamedNumeric(payload, ["no", "under", "ngoal", "no_goal"]);
+
+  const oneXTwo =
+    Number.isFinite(homeValue) || Number.isFinite(drawValue) || Number.isFinite(awayValue)
+      ? ensureProbabilitySum({
+          home: homeValue,
+          draw: drawValue,
+          away: awayValue,
+        })
+      : Number.isFinite(participantHome) || Number.isFinite(participantAway)
+        ? ensureProbabilitySum({
+            home: participantHome,
+            draw: 100 - participantHome - participantAway,
+            away: participantAway,
+          })
+        : null;
+
+  if (!oneXTwo && !scoreCandidates.length && !Number.isFinite(yesValue) && !Number.isFinite(noValue)) {
+    return null;
+  }
+
+  return {
+    typeKey,
+    oneXTwo,
+    yesValue,
+    noValue,
+    scores: scoreCandidates,
+  };
+}
+
+function extractPredictionBundle(predictions, homeParticipant, awayParticipant) {
+  const bundle = {
+    probabilities: null,
+    ou: null,
+    gg: null,
+    scores: [],
+  };
+
+  asArray(predictions)
+    .map((entry) => normalizePredictionEntry(entry, homeParticipant, awayParticipant))
+    .filter(Boolean)
+    .forEach((entry) => {
+      if (!bundle.probabilities && entry.oneXTwo) {
+        bundle.probabilities = entry.oneXTwo;
+      }
+
+      if (!bundle.scores.length && entry.scores.length) {
+        bundle.scores = entry.scores;
+      }
+
+      if (
+        !bundle.gg &&
+        (entry.typeKey.includes("both_teams_to_score") ||
+          entry.typeKey.includes("goal_no_goal") ||
+          entry.typeKey.includes("btts"))
+      ) {
+        bundle.gg = {
+          goal: probabilityToOdds(entry.yesValue),
+          noGoal: probabilityToOdds(entry.noValue || 100 - entry.yesValue),
+        };
+      }
+
+      if (
+        !bundle.ou &&
+        (entry.typeKey.includes("over_under_2_5") ||
+          entry.typeKey.includes("over_under") ||
+          entry.typeKey.includes("totals"))
+      ) {
+        bundle.ou = {
+          over25: probabilityToOdds(entry.yesValue),
+          under25: probabilityToOdds(entry.noValue || 100 - entry.yesValue),
+        };
+      }
+    });
+
+  return bundle;
+}
+
+function extractFixtureExpectedGoals(expected, homeParticipant, awayParticipant) {
+  const entries = asArray(expected);
+  const values = {
+    home: Number.NaN,
+    away: Number.NaN,
+  };
+
+  entries.forEach((entry) => {
+    const typeKey = normalizeLookupKey(entry?.type?.developer_name || entry?.type?.code || entry?.type_id);
+
+    if (typeKey && !typeKey.includes("5304") && !typeKey.includes("expected_goals")) {
+      return;
+    }
+
+    const location = resolveParticipantLocation(entry, homeParticipant, awayParticipant);
+    const value = pickValueEntry(entry?.data || entry?.value || entry);
+
+    if (location && Number.isFinite(value) && !Number.isFinite(values[location])) {
+      values[location] = roundTo(value, 2);
+    }
+  });
+
+  return {
+    home: Number.isFinite(values.home) ? values.home : 0,
+    away: Number.isFinite(values.away) ? values.away : 0,
+  };
+}
+
+function getStateInfo(fixture = {}) {
+  const state = fixture?.state || fixture;
+  const rawState = normalizeLookupKey(
+    state?.short_name ||
+      state?.shortName ||
+      state?.state ||
+      state?.name ||
+      state?.developer_name ||
+      state?.result
+  );
+
+  if (
+    !rawState ||
+    rawState === "ns" ||
+    rawState === "notstarted" ||
+    rawState.includes("not_started") ||
+    rawState.includes("upcoming")
+  ) {
+    return { name: "Pre-match", shortName: "PRE" };
+  }
+
+  if (rawState.includes("halftime") || rawState.includes("break")) {
+    return { name: "Intervallo", shortName: "HT" };
+  }
+
+  if (rawState.includes("overtime") || rawState.includes("extra_time")) {
+    return { name: "Supplementari", shortName: "ET" };
+  }
+
+  if (rawState.includes("penalt")) {
+    return { name: "Rigori", shortName: "PEN" };
+  }
+
+  if (
+    rawState === "ft" ||
+    rawState.includes("finished") ||
+    rawState.includes("closed") ||
+    rawState.includes("ended") ||
+    rawState.includes("ft")
+  ) {
+    return { name: "Terminata", shortName: "FT" };
+  }
+
+  if (rawState.includes("postponed")) {
+    return { name: "Rinviata", shortName: "PPD" };
+  }
+
+  if (rawState.includes("cancelled")) {
+    return { name: "Annullata", shortName: "CAN" };
+  }
+
+  return { name: "In corso", shortName: "LIVE" };
+}
+
+function normalizeScoreValue(scoreEntry) {
+  if (!scoreEntry) {
+    return Number.NaN;
+  }
+
+  if (typeof scoreEntry?.score === "number" || typeof scoreEntry?.score === "string") {
+    return safeNumber(scoreEntry.score, Number.NaN);
+  }
+
+  if (typeof scoreEntry?.score === "object") {
+    return safeNumber(
+      scoreEntry.score?.goals ??
+        scoreEntry.score?.current ??
+        scoreEntry.score?.value ??
+        scoreEntry.score?.participant,
+      Number.NaN
+    );
+  }
+
+  return safeNumber(
+    scoreEntry?.goals ??
+      scoreEntry?.participant_score ??
+      scoreEntry?.result ??
+      scoreEntry?.value,
+    Number.NaN
+  );
+}
+
+function pickScoreSet(scores, homeParticipant, awayParticipant) {
+  const scoreEntries = asArray(scores);
+
+  if (!scoreEntries.length) {
+    return {
+      home: 0,
+      away: 0,
+    };
+  }
+
+  const priorityGroups = [
+    ["current", "live", "full_time", "ft", "regular_time"],
+    ["half_time", "ht"],
+  ];
+  const preferredEntries =
+    priorityGroups
+      .map((group) =>
+        scoreEntries.filter((entry) => {
+          const typeKey = normalizeLookupKey(
+            entry?.type?.developer_name || entry?.type?.code || entry?.type?.name || entry?.description
+          );
+
+          return group.some((keyword) => typeKey.includes(keyword));
+        })
+      )
+      .find((group) => group.length > 0) || scoreEntries;
+  const values = {
+    home: 0,
+    away: 0,
+  };
+
+  preferredEntries.forEach((entry) => {
+    const location = resolveParticipantLocation(entry, homeParticipant, awayParticipant);
+    const value = normalizeScoreValue(entry);
+
+    if (location && Number.isFinite(value)) {
+      values[location] = value;
+    }
+  });
+
+  return values;
+}
+
+function buildTeamStats(statistics, homeParticipant, awayParticipant, expectedGoals = null) {
+  const groupedStats = {
+    home: {},
+    away: {},
+  };
+
+  asArray(statistics).forEach((entry) => {
+    const location = resolveParticipantLocation(entry, homeParticipant, awayParticipant);
+
+    if (!location) {
+      return;
+    }
+
+    const key = normalizeLookupKey(
+      entry?.type?.developer_name || entry?.type?.code || entry?.type?.name || entry?.type_id
+    );
+    const value = pickValueEntry(entry?.data || entry?.value || entry);
+
+    if (!Number.isFinite(value) || !key) {
+      return;
+    }
+
+    groupedStats[location][key] = value;
+  });
+
+  const homeStats = groupedStats.home;
+  const awayStats = groupedStats.away;
+  const homeShots =
+    safeNumber(homeStats.shots_total, Number.NaN) ||
+    safeNumber(homeStats.total_shots, Number.NaN) ||
+    safeNumber(homeStats.shots, Number.NaN) ||
+    safeNumber(homeStats.shots_on_target) +
+      safeNumber(homeStats.shots_off_target) +
+      safeNumber(homeStats.shots_blocked);
+  const awayShots =
+    safeNumber(awayStats.shots_total, Number.NaN) ||
+    safeNumber(awayStats.total_shots, Number.NaN) ||
+    safeNumber(awayStats.shots, Number.NaN) ||
+    safeNumber(awayStats.shots_on_target) +
+      safeNumber(awayStats.shots_off_target) +
+      safeNumber(awayStats.shots_blocked);
+
+  return {
+    shots: {
+      home: roundTo(homeShots || 0, 0),
+      away: roundTo(awayShots || 0, 0),
+    },
+    shotsOnTarget: {
+      home: roundTo(safeNumber(homeStats.shots_on_target), 0),
+      away: roundTo(safeNumber(awayStats.shots_on_target), 0),
+    },
+    corners: {
+      home: roundTo(safeNumber(homeStats.corners || homeStats.corner_kicks), 0),
+      away: roundTo(safeNumber(awayStats.corners || awayStats.corner_kicks), 0),
+    },
+    attacks: {
+      home: roundTo(
+        safeNumber(homeStats.attacks) ||
+          safeNumber(homeStats.attacks_total) ||
+          safeNumber(homeStats.possessiontime) * 0.8 +
+            safeNumber(homeStats.shots_on_target) * 4 +
+            safeNumber(homeStats.corners || homeStats.corner_kicks) * 3,
+        0
+      ),
+      away: roundTo(
+        safeNumber(awayStats.attacks) ||
+          safeNumber(awayStats.attacks_total) ||
+          safeNumber(awayStats.possessiontime) * 0.8 +
+            safeNumber(awayStats.shots_on_target) * 4 +
+            safeNumber(awayStats.corners || awayStats.corner_kicks) * 3,
+        0
+      ),
+    },
+    dangerousAttacks: {
+      home: roundTo(
+        safeNumber(homeStats.dangerous_attacks) ||
+          safeNumber(homeStats.attacks_dangerous) ||
+          safeNumber(homeStats.shots_on_target) * 3 +
+            safeNumber(homeStats.corners || homeStats.corner_kicks) * 2,
+        0
+      ),
+      away: roundTo(
+        safeNumber(awayStats.dangerous_attacks) ||
+          safeNumber(awayStats.attacks_dangerous) ||
+          safeNumber(awayStats.shots_on_target) * 3 +
+            safeNumber(awayStats.corners || awayStats.corner_kicks) * 2,
+        0
+      ),
+    },
+    possession: {
+      home: roundTo(
+        safeNumber(homeStats.ball_possession || homeStats.possessiontime, 50),
+        0
+      ),
+      away: roundTo(
+        safeNumber(awayStats.ball_possession || awayStats.possessiontime, 50),
+        0
+      ),
+    },
+    fouls: {
+      home: roundTo(safeNumber(homeStats.fouls || homeStats.fouls_committed), 0),
+      away: roundTo(safeNumber(awayStats.fouls || awayStats.fouls_committed), 0),
+    },
+    yellowCards: {
+      home: roundTo(safeNumber(homeStats.yellow_cards), 0),
+      away: roundTo(safeNumber(awayStats.yellow_cards), 0),
+    },
+    xgLive: {
+      home: roundTo(
+        safeNumber(homeStats.expected_goals) || safeNumber(expectedGoals?.home),
+        2
+      ),
+      away: roundTo(
+        safeNumber(awayStats.expected_goals) || safeNumber(expectedGoals?.away),
+        2
+      ),
+    },
+  };
+}
+
+function normalizeEventType(entry) {
+  const typeKey = normalizeLookupKey(
+    entry?.type?.developer_name || entry?.type?.code || entry?.type?.name || entry?.type_id
+  );
+
+  if (typeKey.includes("goal")) return "goal";
+  if (typeKey.includes("yellow")) return "yellow";
+  if (typeKey.includes("red")) return "red";
+  if (typeKey.includes("substitution") || typeKey.includes("substituted")) return "substitution";
+  if (
+    typeKey.includes("shot") ||
+    typeKey.includes("chance") ||
+    typeKey.includes("danger") ||
+    typeKey.includes("attack")
+  ) {
+    return "dangerous";
+  }
+
+  return null;
+}
+
+function normalizeSportmonksEvent(entry, homeParticipant, awayParticipant) {
+  const type = normalizeEventType(entry);
+
+  if (!type) {
+    return null;
+  }
+
+  const minute = safeNumber(entry?.minute, safeNumber(entry?.result_info?.minute, 0));
+
+  return {
+    id: String(entry?.id || `${type}:${minute}:${entry?.participant_id || entry?.team_id || "0"}`),
+    minute: minute + safeNumber(entry?.extra_minute, 0),
+    type,
+    typeLabel: EVENT_TYPE_LABELS[type],
+    team: resolveParticipantLocation(entry, homeParticipant, awayParticipant) || "home",
+    player:
+      entry?.player_name ||
+      entry?.player?.display_name ||
+      entry?.player?.common_name ||
+      entry?.player?.name ||
+      null,
+    relatedPlayer:
+      entry?.related_player_name ||
+      entry?.relatedPlayer?.display_name ||
+      entry?.relatedPlayer?.common_name ||
+      entry?.relatedPlayer?.name ||
+      null,
+    result:
+      typeof entry?.result === "string" && entry.result.trim()
+        ? entry.result
+        : null,
+    info:
+      typeof entry?.info === "string" && entry.info.trim()
+        ? entry.info
+        : null,
+  };
+}
+
+function buildDangerPackage(homeName, awayName, score, stats, minute) {
+  const homePressure =
+    stats.dangerousAttacks.home * 1.25 +
+    stats.shotsOnTarget.home * 6 +
+    stats.corners.home * 2 +
+    (stats.possession.home - 50);
+  const awayPressure =
+    stats.dangerousAttacks.away * 1.25 +
+    stats.shotsOnTarget.away * 6 +
+    stats.corners.away * 2 +
+    (stats.possession.away - 50);
+  const dominantTeam = homePressure >= awayPressure ? homeName : awayName;
+  const dominantPressure = Math.max(homePressure, awayPressure);
+  const dangerIndex = Math.min(
+    95,
+    Math.max(
+      18,
+      Math.round(22 + dominantPressure * 0.75 + Math.max(score.home, score.away) * 6 + minute * 0.15)
+    )
+  );
+
+  let dangerMessage =
+    "Partita ancora sotto controllo, senza un accumulo forte di pressione offensiva.";
+
+  if (dangerIndex >= 70) {
+    dangerMessage = `Alta pressione offensiva di ${dominantTeam}. Possibile episodio pesante nei prossimi minuti.`;
+  } else if (dangerIndex >= 50) {
+    dangerMessage = `${dominantTeam} sta aumentando volume e qualita degli attacchi rispetto all'avversaria.`;
+  } else if (dangerIndex >= 35) {
+    dangerMessage = `Fase di studio con picchi sporadici: ${dominantTeam} ha comunque un leggero vantaggio territoriale.`;
+  }
+
+  return {
+    dangerIndex,
+    dangerMessage,
+    dangerHistory: Array.from({ length: 8 }, (_, index) =>
+      Math.max(12, dangerIndex - (7 - index) * 4)
+    ),
+  };
+}
+
+function buildLiveOdds(score, stats, minute) {
+  const homePressure =
+    stats.dangerousAttacks.home * 1.2 +
+    stats.shotsOnTarget.home * 6 +
+    (stats.possession.home - 50) * 0.4;
+  const awayPressure =
+    stats.dangerousAttacks.away * 1.2 +
+    stats.shotsOnTarget.away * 6 +
+    (stats.possession.away - 50) * 0.4;
+  const scoreDelta = score.home - score.away;
+  const drawProbability = Math.max(14, 34 - minute * 0.18 - Math.abs(scoreDelta) * 6);
+  const homeProbability = Math.max(
+    12,
+    34 + scoreDelta * 14 + (homePressure - awayPressure) * 0.35
+  );
+  const awayProbability = Math.max(10, 100 - homeProbability - drawProbability);
+  const normalized = ensureProbabilitySum({
+    home: Math.round(homeProbability),
+    draw: Math.round(drawProbability),
+    away: Math.round(Math.max(10, awayProbability)),
+  });
+  const goalProbability = Math.max(
+    12,
+    Math.min(
+      88,
+      28 + (stats.xgLive.home + stats.xgLive.away) * 18 + Math.max(homePressure, awayPressure) * 0.18
+    )
+  );
+
+  return {
+    over25: probabilityToOdds(Math.min(84, goalProbability + 8)),
+    goal: probabilityToOdds(goalProbability),
+    homeWin: probabilityToOdds(normalized.home),
+    draw: probabilityToOdds(normalized.draw),
+    awayWin: probabilityToOdds(normalized.away),
+    nextGoalHome: probabilityToOdds(Math.min(84, 28 + homePressure * 0.65)),
+    nextGoalAway: probabilityToOdds(Math.min(84, 28 + awayPressure * 0.65)),
+  };
+}
+
+function formatPositionLabel(position) {
+  const normalizedPosition = normalizeLookupKey(position);
+
+  if (normalizedPosition.includes("goal")) return "GK";
+  if (normalizedPosition.includes("back") || normalizedPosition.includes("def")) return "DF";
+  if (normalizedPosition.includes("mid")) return "CM";
+  if (normalizedPosition.includes("wing")) return "WG";
+  if (normalizedPosition.includes("forward") || normalizedPosition.includes("striker")) return "FW";
+  return String(position || "--").toUpperCase().slice(0, 3);
+}
+
+function getLineupFormationRows(players) {
+  const rowMap = new Map();
+
+  players.forEach((player) => {
+    const formationField = String(player?.formation_field || "").trim();
+    const [rowRaw, columnRaw] = formationField.split(":");
+    const row = safeNumber(rowRaw, Number.NaN);
+    const column = safeNumber(columnRaw, Number.NaN);
+
+    if (!Number.isFinite(row)) {
+      return;
+    }
+
+    if (!rowMap.has(row)) {
+      rowMap.set(row, []);
+    }
+
+    rowMap.get(row).push({
+      ...player,
+      __formationRow: row,
+      __formationColumn: Number.isFinite(column) ? column : rowMap.get(row).length + 1,
+    });
+  });
+
+  return Array.from(rowMap.entries())
+    .sort((left, right) => left[0] - right[0])
+    .map(([, rowPlayers]) =>
+      rowPlayers.sort((left, right) => left.__formationColumn - right.__formationColumn)
+    );
+}
+
+function deriveFormationFromRows(rows) {
+  if (rows.length <= 1) {
+    return rows[0]?.length ? "1" : "--";
+  }
+
+  return rows.slice(1).map((row) => row.length).join("-") || "--";
+}
+
+function createRenderedLineupPlayers(players, lineupStatus, formationOverride = "--") {
+  const rows = getLineupFormationRows(players);
+  const normalizedStatus = lineupStatus === "official" ? "confermato" : "probabile";
+
+  if (!rows.length) {
+    return {
+      formation: formationOverride || "--",
+      players: [],
+    };
+  }
+
+  const totalRows = rows.length;
+  const renderedPlayers = rows.flatMap((rowPlayers, rowIndex) => {
+    const y =
+      totalRows === 1 ? 50 : roundTo(14 + (rowIndex / (totalRows - 1)) * 72, 2);
+
+    return rowPlayers.map((player, playerIndex) => ({
+      id: String(player?.player_id || player?.id || `${player?.team_id || "team"}:${player?.jersey_number || playerIndex}`),
+      name: player?.player_name || player?.player?.display_name || player?.player?.common_name || player?.player?.name || "Giocatore",
+      number: safeNumber(player?.jersey_number, 0),
+      position: formatPositionLabel(
+        player?.detailedposition?.code ||
+          player?.position?.name ||
+          player?.player_position ||
+          player?.type?.name
+      ),
+      x: roundTo(((playerIndex + 1) / (rowPlayers.length + 1)) * 100, 2),
+      y,
+      status: normalizedStatus,
+    }));
+  });
+
+  const derivedFormation = deriveFormationFromRows(rows);
+
+  return {
+    formation: derivedFormation === "--" ? formationOverride || "--" : derivedFormation,
+    players: renderedPlayers,
+  };
+}
+
+function countPlayerEvents(events, playerName, eventType) {
+  const normalizedPlayerName = normalizeName(playerName);
+
+  return asArray(events).filter(
+    (event) =>
+      event.type === eventType &&
+      normalizeName(event.player) === normalizedPlayerName
+  ).length;
+}
+
+function getPlayerFormLabel(player) {
+  if (safeNumber(player?.xg) >= 0.8) return "Eccellente";
+  if (safeNumber(player?.xg) >= 0.45) return "Ottima";
+  if (safeNumber(player?.shots) >= 2) return "Buona";
+  return "Stabile";
+}
+
+function buildPlayerFormHistory(player) {
+  const base = Math.max(0, Math.round(safeNumber(player?.xg) * 2));
+
+  return Array.from({ length: 5 }, (_, index) =>
+    Math.max(0, base - (4 - index > 1 ? 1 : 0))
+  );
+}
+
+function buildPlayerInsight(player) {
+  if (safeNumber(player?.xg) >= 0.8) {
+    return `${player.name} arriva spesso in zone ad alto valore e resta il profilo offensivo piu pericoloso del match.`;
+  }
+
+  if (safeNumber(player?.shots) >= 3) {
+    return `${player.name} mantiene buon volume di tiro e puo generare valore anche senza quote marcatore bookmaker.`;
+  }
+
+  return `${player.name} e incluso nel feed Sportmonks corrente, ma il profilo resta descrittivo finche non arriva il layer odds dedicato.`;
+}
+
+function buildLineupPlayerProfiles(lineups, renderedLineups, normalizedEvents, homeName, awayName) {
+  const players = asArray(lineups)
+    .filter((lineupEntry) => lineupEntry?.formation_position || lineupEntry?.formation_field)
+    .map((lineupEntry) => {
+      const expectedEntry =
+        asArray(lineupEntry?.expected).find((entry) => {
+          const typeKey = normalizeLookupKey(
+            entry?.type?.developer_name || entry?.type?.code || entry?.type_id
+          );
+
+          return typeKey.includes("5304") || typeKey.includes("expected_goals");
+        }) || null;
+      const detailEntries = asArray(lineupEntry?.details);
+      const readDetailValue = (keywords = []) => {
+        const match = detailEntries.find((detailEntry) => {
+          const key = normalizeLookupKey(
+            detailEntry?.type?.developer_name || detailEntry?.type?.code || detailEntry?.type?.name || detailEntry?.type_id
+          );
+
+          return keywords.some((keyword) => key.includes(keyword));
+        });
+
+        return pickValueEntry(match?.value ?? match?.data ?? match);
+      };
+      const xg = roundTo(
+        pickValueEntry(expectedEntry?.data || expectedEntry) ||
+          readDetailValue(["expected_goals", "5304"]),
+        2
+      );
+      const shots = roundTo(
+        readDetailValue(["shots_total", "shots", "shots_on_target"]) ||
+          Math.max(0, Math.round(xg * 2.5)),
+        0
+      );
+      const name =
+        lineupEntry?.player_name ||
+        lineupEntry?.player?.display_name ||
+        lineupEntry?.player?.common_name ||
+        lineupEntry?.player?.name ||
+        "Giocatore";
+      const team =
+        renderedLineups.home.players.some(
+          (player) => String(player.id) === String(lineupEntry?.player_id || lineupEntry?.id)
+        )
+          ? homeName
+          : awayName;
+      const goals =
+        roundTo(readDetailValue(["goals"])) ||
+        countPlayerEvents(normalizedEvents, name, "goal");
+      const assists = roundTo(readDetailValue(["assists"]));
+      const fouls = roundTo(readDetailValue(["fouls"]));
+      const minutes = roundTo(readDetailValue(["minutes_played", "minutes"])) || 90;
+      const scorerProb = Math.min(
+        78,
+        Math.max(6, Math.round(10 + xg * 28 + shots * 3 + goals * 4))
+      );
+
+      return {
+        id: String(lineupEntry?.player_id || lineupEntry?.id || `${name}:${lineupEntry?.team_id || "team"}`),
+        name,
+        number: safeNumber(lineupEntry?.jersey_number, 0),
+        team,
+        pos: formatPositionLabel(
+          lineupEntry?.detailedposition?.code ||
+            lineupEntry?.position?.name ||
+            lineupEntry?.player_position ||
+            lineupEntry?.type?.name
+        ),
+        position:
+          lineupEntry?.detailedposition?.name ||
+          lineupEntry?.position?.name ||
+          lineupEntry?.player_position ||
+          lineupEntry?.type?.name ||
+          "--",
+        xg: xg || 0,
+        shots: shots || 0,
+        form: getPlayerFormLabel({ xg, shots }),
+        goals: goals || 0,
+        assists: assists || 0,
+        fouls: fouls || 0,
+        minutes: minutes || 0,
+        formHistory: buildPlayerFormHistory({ xg }),
+        insight: buildPlayerInsight({ name, xg, shots }),
+        scorerOdds: probabilityToOdds(scorerProb),
+        scorerProb,
+      };
+    });
+
+  return players.sort(
+    (left, right) =>
+      right.xg - left.xg || right.shots - left.shots || right.scorerProb - left.scorerProb
+  );
+}
+
+function buildImpactPlayers(playerProfiles = []) {
+  return [...playerProfiles]
+    .slice(0, 5)
+    .map((player) => ({
+      name: player.name,
+      odds: player.scorerOdds,
+      prob: player.scorerProb,
+      xg: player.xg,
+    }));
+}
+
+function buildMetadata(fixture, coverage, stateInfo) {
+  return [
+    {
+      id: "round",
+      code: "round",
+      label: "Round",
+      value:
+        fixture?.round?.name ||
+        (fixture?.round?.round ? `Round ${fixture.round.round}` : null),
+    },
+    {
+      id: "season",
+      code: "season",
+      label: "Stagione",
+      value: fixture?.season?.name || null,
+    },
+    {
+      id: "coverage",
+      code: "coverage",
+      label: "Coverage",
+      value: coverage.coverageScore >= 5 ? "Rich feed" : "Core feed",
+    },
+    {
+      id: "status",
+      code: "status",
+      label: "Status feed",
+      value: stateInfo.name,
+    },
+  ].filter((entry) => entry.value);
+}
+
+function buildCoverageSummary(fixture) {
+  const lineups = asArray(fixture?.lineups);
+  const statistics = asArray(fixture?.statistics);
+  const events = asArray(fixture?.events);
+  const predictions = asArray(fixture?.predictions);
+  const expected = asArray(fixture?.expected);
+  const referees = asArray(fixture?.referees);
+  const coaches = asArray(fixture?.coaches);
+  const odds = asArray(fixture?.odds);
+  const standings = asArray(fixture?.standings);
+  const formations = asArray(fixture?.formations);
+
+  return {
+    hasLineups: lineups.length > 0,
+    hasFormations:
+      lineups.some((entry) => entry?.formation_field || entry?.formation_position) ||
+      formations.some((entry) => String(entry?.formation || "").trim()),
+    hasVenue: Boolean(fixture?.venue?.name),
+    hasBasicTeamStats: statistics.length > 0,
+    hasBasicPlayerStats: lineups.some((entry) => asArray(entry?.details).length > 0),
+    hasEvents: events.length > 0,
+    hasPredictions: predictions.length > 0,
+    hasExpectedGoals: expected.length > 0,
+    hasPreMatchOdds: odds.length > 0,
+    hasReferees: referees.length > 0,
+    hasCoaches: coaches.length > 0,
+    hasStandings: standings.length > 0,
+    coverageScore: [
+      lineups.length > 0,
+      statistics.length > 0,
+      events.length > 0,
+      Boolean(fixture?.venue?.name),
+      predictions.length > 0,
+      expected.length > 0,
+      odds.length > 0,
+      referees.length > 0,
+      coaches.length > 0,
+      standings.length > 0,
+    ].filter(Boolean).length,
+  };
+}
+
+function getCompetitionInfo(fixture) {
+  return {
+    league: fixture?.league?.name || fixture?.name || "Sportmonks",
+    country:
+      fixture?.league?.country?.name ||
+      fixture?.league?.country_name ||
+      fixture?.country?.name ||
+      null,
+    round:
+      fixture?.round?.name ||
+      (fixture?.round?.round ? `Round ${fixture.round.round}` : null),
+    season: fixture?.season?.name || null,
+  };
+}
+
+function getVenueInfo(fixture) {
+  return {
+    name: fixture?.venue?.name || null,
+    city: fixture?.venue?.city_name || fixture?.venue?.city || null,
+  };
+}
+
+function buildBadges(stateInfo, coverage, predictionProvider) {
+  const badges = ["Feed Sportmonks"];
+
+  if (coverage.hasPredictions) {
+    badges.push("Predizioni provider");
+  } else if (predictionProvider === "derived_internal_model") {
+    badges.push("Modello derivato");
+  }
+
+  if (coverage.hasExpectedGoals) {
+    badges.push("xG disponibile");
+  }
+
+  if (coverage.hasPreMatchOdds) {
+    badges.push("Odds pre-match");
+  }
+
+  if (stateInfo.shortName === "LIVE") {
+    badges.push("Live");
+  }
+
+  return badges;
+}
+
+function buildCompetitionIds(fixture, homeParticipant, awayParticipant) {
+  return {
+    sportmonks_fixture_id: String(fixture?.id || ""),
+    sportmonks_league_id: fixture?.league?.id || null,
+    sportmonks_season_id: fixture?.season?.id || null,
+    sportmonks_home_participant_id: homeParticipant?.id || null,
+    sportmonks_away_participant_id: awayParticipant?.id || null,
+  };
+}
+
+function normalizeCoreSportmonksFixture(fixture = {}) {
+  const participants = asArray(fixture?.participants);
+  const { home: homeParticipant, away: awayParticipant } = getParticipantsByLocation(participants);
+  const kickoff = formatKickoff(fixture?.starting_at || fixture?.startingAt || fixture?.starting_at_timestamp);
+  const stateInfo = getStateInfo(fixture);
+  const predictionBundle = extractPredictionBundle(
+    fixture?.predictions,
+    homeParticipant,
+    awayParticipant
+  );
+  const expectedGoals = extractFixtureExpectedGoals(
+    fixture?.expected,
+    homeParticipant,
+    awayParticipant
+  );
+  const homeForm = buildFormArray(
+    homeParticipant?.form ||
+      homeParticipant?.meta?.form ||
+      homeParticipant?.last_5 ||
+      homeParticipant?.recent_form
+  );
+  const awayForm = buildFormArray(
+    awayParticipant?.form ||
+      awayParticipant?.meta?.form ||
+      awayParticipant?.last_5 ||
+      awayParticipant?.recent_form
+  );
+  const probabilities =
+    predictionBundle.probabilities ||
+    buildDerivedProbabilities(
+      {
+        home: expectedGoals.home || 1.1,
+        away: expectedGoals.away || 1.05,
+      },
+      homeForm,
+      awayForm
+    );
+  const derivedXg =
+    expectedGoals.home > 0 || expectedGoals.away > 0
+      ? expectedGoals
+      : buildExpectedGoalsFromProbabilities(probabilities);
+  const markets = buildGoalMarkets(derivedXg);
+  const coverage = buildCoverageSummary(fixture);
+  const scores = pickScoreSet(fixture?.scores, homeParticipant, awayParticipant);
+  const predictionProvider = coverage.hasPredictions ? "sportmonks_predictions" : "derived_internal_model";
+  const oddsBundle = extractOddsBundle(fixture?.odds);
+
+  return {
+    fixtureId: String(fixture?.id || ""),
+    homeParticipant,
+    awayParticipant,
+    kickoff,
+    stateInfo,
+    probabilities,
+    derivedXg,
+    markets: {
+      ou: oddsBundle.ou.over25 > 0 ? oddsBundle.ou : predictionBundle.ou || markets.ou,
+      gg: oddsBundle.gg.goal > 0 ? oddsBundle.gg : predictionBundle.gg || markets.gg,
+    },
+    predictedScores: predictionBundle.scores.length
+      ? predictionBundle.scores
+      : buildLikelyScores(probabilities, derivedXg),
+    coverage,
+    scores,
+    homeForm,
+    awayForm,
+    predictionProvider,
+    info: getCompetitionInfo(fixture),
+    venue: getVenueInfo(fixture),
+    providerIds: buildCompetitionIds(fixture, homeParticipant, awayParticipant),
+    subscription: asArray(fixture?.subscription || fixture?.subscriptions),
+    metadata: getFixtureMetadataEntries(fixture),
+    oddsBundle,
+  };
+}
+
+function normalizeScheduleLikeFixture(fixture = {}) {
+  const core = normalizeCoreSportmonksFixture(fixture);
+
+  return {
+    id: core.fixtureId,
+    sportEventId: core.fixtureId,
+    home: core.homeParticipant?.name || "Home",
+    homeShort: formatShortCode(core.homeParticipant),
+    away: core.awayParticipant?.name || "Away",
+    awayShort: formatShortCode(core.awayParticipant),
+    league: core.info.league,
+    leagueShort: formatShortCode({ name: core.info.league }),
+    country: core.info.country,
+    round: core.info.round,
+    date: core.kickoff.date,
+    time: core.kickoff.time,
+    status: getRelativeStatus(fixture?.starting_at || fixture?.startingAt),
+    state: core.stateInfo,
+    coverage: core.coverage,
+    prob: core.probabilities,
+    odds:
+      core.oddsBundle.available
+        ? core.oddsBundle.odds
+        : {
+            home: probabilityToOdds(core.probabilities.home),
+            draw: probabilityToOdds(core.probabilities.draw),
+            away: probabilityToOdds(core.probabilities.away),
+          },
+    ou: core.markets.ou,
+    gg: core.markets.gg,
+    xg: core.derivedXg,
+    valueBet: buildDerivedValueBet(core.probabilities, core.derivedXg),
+    scores: core.predictedScores,
+    confidence: buildConfidence(core.probabilities),
+    scorers: [],
+    bookmakers: core.oddsBundle.bookmakers,
+    homeForm: core.homeForm,
+    awayForm: core.awayForm,
+    h2h: [],
+    badges: buildBadges(core.stateInfo, core.coverage, core.predictionProvider),
+    injuries: [],
+    venue: core.venue,
+    prediction_provider: core.predictionProvider,
+    odds_provider: core.oddsBundle.available ? "sportmonks_pre_match_odds" : "not_available_with_current_feed",
+    provider_ids: core.providerIds,
+    bestOdds: core.oddsBundle.bestOdds,
+    bestBookmaker: core.oddsBundle.bestBookmaker,
+    movement: core.oddsBundle.movement,
+    currentScore:
+      core.stateInfo.shortName !== "PRE" && (core.scores.home || core.scores.away)
+        ? core.scores
+        : null,
+    apiLoaded: true,
+  };
+}
+
+export function normalizeSportmonksScheduleMatch(fixture = {}) {
+  return normalizeScheduleLikeFixture(fixture);
+}
+
+export function normalizeSportmonksFixture(fixture = {}) {
+  const core = normalizeCoreSportmonksFixture(fixture);
+  const normalizedEvents = asArray(fixture?.events)
+    .map((entry) => normalizeSportmonksEvent(entry, core.homeParticipant, core.awayParticipant))
+    .filter(Boolean)
+    .slice(-12);
+  const lineups = asArray(fixture?.lineups);
+  const formationOverrides = getFormationOverrides(
+    fixture?.formations,
+    core.homeParticipant,
+    core.awayParticipant
+  );
+  const lineupStatus = buildLineupStatus(fixture, lineups, formationOverrides);
+  const renderedLineups = {
+    home: createRenderedLineupPlayers(
+      lineups.filter(
+        (entry) =>
+          resolveParticipantLocation(entry, core.homeParticipant, core.awayParticipant) ===
+          "home"
+      ),
+      lineupStatus,
+      formationOverrides.home
+    ),
+    away: createRenderedLineupPlayers(
+      lineups.filter(
+        (entry) =>
+          resolveParticipantLocation(entry, core.homeParticipant, core.awayParticipant) ===
+          "away"
+      ),
+      lineupStatus,
+      formationOverrides.away
+    ),
+    raw: lineups,
+  };
+  const lineupPlayerProfiles = buildLineupPlayerProfiles(
+    lineups,
+    renderedLineups,
+    normalizedEvents,
+    core.homeParticipant?.name || "Home",
+    core.awayParticipant?.name || "Away"
+  );
+  const squadPlayers = {
+    home: normalizeSquadPlayers(fixture?.teamSquads?.home, core.homeParticipant?.name || "Home"),
+    away: normalizeSquadPlayers(fixture?.teamSquads?.away, core.awayParticipant?.name || "Away"),
+  };
+  const playerProfiles = lineupPlayerProfiles.length
+    ? lineupPlayerProfiles
+    : [...squadPlayers.home, ...squadPlayers.away];
+  const coachAssignments = buildCoachAssignments(
+    fixture?.coaches,
+    core.homeParticipant,
+    core.awayParticipant
+  );
+  const referees = normalizeOfficials(fixture?.referees);
+  const standings = normalizeStandingsTable(
+    fixture?.standings,
+    fixture?.stage?.id || fixture?.stage_id,
+    core.homeParticipant,
+    core.awayParticipant
+  );
+
+  return {
+    ...normalizeScheduleLikeFixture(fixture),
+    state: core.stateInfo,
+    currentScore:
+      core.stateInfo.shortName !== "PRE" ||
+      core.scores.home > 0 ||
+      core.scores.away > 0
+        ? core.scores
+        : null,
+    events: normalizedEvents,
+    lineups: {
+      home: renderedLineups.home,
+      away: renderedLineups.away,
+    },
+    formations: formationOverrides,
+    squads: squadPlayers,
+    players: playerProfiles,
+    scorers: buildImpactPlayers(playerProfiles),
+    coaches: coachAssignments,
+    referees,
+    standings,
+    metadata: buildMetadata(fixture, core.coverage, core.stateInfo),
+    lineup_status: lineupStatus,
+    lineupConfirmed: lineupStatus === "official",
+    bestOdds: core.oddsBundle.bestOdds,
+    bestBookmaker: core.oddsBundle.bestBookmaker,
+    movement: core.oddsBundle.movement,
+  };
+}
+
+function getLiveMinute(fixture, events = []) {
+  const state = fixture?.state || {};
+  const minuteValue =
+    safeNumber(state?.minute, Number.NaN) ||
+    safeNumber(state?.time?.minute, Number.NaN) ||
+    safeNumber(fixture?.minute, Number.NaN);
+
+  if (Number.isFinite(minuteValue)) {
+    return minuteValue + safeNumber(state?.extra_minute, 0);
+  }
+
+  const eventMinutes = events.map((event) => safeNumber(event.minute, 0));
+  return eventMinutes.length ? Math.max(...eventMinutes) : 0;
+}
+
+export function normalizeSportmonksLiveMatch(fixture = {}) {
+  const core = normalizeCoreSportmonksFixture(fixture);
+  const normalizedEvents = asArray(fixture?.events)
+    .map((entry) => normalizeSportmonksEvent(entry, core.homeParticipant, core.awayParticipant))
+    .filter(Boolean)
+    .slice(-8);
+  const stats = buildTeamStats(
+    fixture?.statistics,
+    core.homeParticipant,
+    core.awayParticipant,
+    core.derivedXg
+  );
+  const minute = getLiveMinute(fixture, normalizedEvents);
+  const danger = buildDangerPackage(
+    core.homeParticipant?.name || "Home",
+    core.awayParticipant?.name || "Away",
+    core.scores,
+    stats,
+    minute
+  );
+  const liveProbabilities = core.predictionProvider === "sportmonks_predictions" ? core.probabilities : null;
+  const lineups = asArray(fixture?.lineups);
+  const formationOverrides = getFormationOverrides(
+    fixture?.formations,
+    core.homeParticipant,
+    core.awayParticipant
+  );
+  const lineupStatus = buildLineupStatus(fixture, lineups, formationOverrides);
+
+  return {
+    id: core.fixtureId,
+    sportEventId: core.fixtureId,
+    home: core.homeParticipant?.name || "Home",
+    homeShort: formatShortCode(core.homeParticipant),
+    away: core.awayParticipant?.name || "Away",
+    awayShort: formatShortCode(core.awayParticipant),
+    homeScore: core.scores.home,
+    awayScore: core.scores.away,
+    minute,
+    league: core.info.league,
+    country: core.info.country,
+    round: core.info.round,
+    state: core.stateInfo.name,
+    coverage: core.coverage,
+    stats,
+    liveOdds: buildLiveOdds(core.scores, stats, minute),
+    liveProbabilities,
+    dangerIndex: danger.dangerIndex,
+    dangerMessage: danger.dangerMessage,
+    dangerHistory: danger.dangerHistory,
+    events: normalizedEvents,
+    lineup_status: lineupStatus,
+    lineupConfirmed: lineupStatus === "official",
+    provider_ids: core.providerIds,
+    apiLoaded: true,
+  };
+}
+
+export function mergeSportmonksLiveMatches(previousMatches = [], updatedMatches = []) {
+  const mergedMap = new Map(
+    asArray(previousMatches).map((match) => [String(match?.id || ""), match])
+  );
+
+  asArray(updatedMatches).forEach((match) => {
+    mergedMap.set(String(match?.id || ""), match);
+  });
+
+  return Array.from(mergedMap.values());
+}
+
+export async function fetchSportmonksScheduleWindow(days = SPORTMONKS_DEFAULT_SCHEDULE_DAYS) {
+  const safeDays = clampInteger(days, SPORTMONKS_DEFAULT_SCHEDULE_DAYS, 1, 14);
+  const fromDate = new Date();
+  const toDate = new Date();
+  toDate.setDate(toDate.getDate() + Math.max(0, safeDays - 1));
+  const from = buildDateKey(fromDate);
+  const to = buildDateKey(toDate);
+  const response = await requestSportmonksWithIncludeFallback(
+    `fixtures/between/${from}/${to}`,
+    SPORTMONKS_SCHEDULE_INCLUDE_ATTEMPTS,
+    {
+      expectCollection: true,
+      timezone: ROME_TIMEZONE,
+      perPage: 100,
+    }
+  );
+
+  return {
+    window: {
+      from,
+      to,
+      days: safeDays,
+    },
+    fixtures: asArray(response?.data),
+    raw: response,
+  };
+}
+
+export async function fetchSportmonksFixtureById(fixtureId) {
+  const normalizedFixtureId = String(fixtureId || "").trim();
+
+  if (!normalizedFixtureId) {
+    throw new Error("fixtureId non valido.");
+  }
+
+  const response = await requestSportmonksWithIncludeFallback(
+    `fixtures/${encodeURIComponent(normalizedFixtureId)}`,
+    SPORTMONKS_FIXTURE_INCLUDE_ATTEMPTS,
+    {
+      timezone: ROME_TIMEZONE,
+      perPage: null,
+    }
+  );
+
+  return response?.data || null;
+}
+
+export async function fetchSportmonksSeasonStandings(seasonId) {
+  const normalizedSeasonId = String(seasonId || "").trim();
+
+  if (!normalizedSeasonId) {
+    return [];
+  }
+
+  const response = await requestSportmonksCollection(
+    `standings/seasons/${encodeURIComponent(normalizedSeasonId)}`,
+    {
+      include: ["participant", "details", "form", "league", "season", "stage", "group", "round"],
+      perPage: 100,
+    }
+  );
+
+  return asArray(response?.data);
+}
+
+export async function fetchSportmonksTeamSquad(teamId) {
+  const normalizedTeamId = String(teamId || "").trim();
+
+  if (!normalizedTeamId) {
+    return [];
+  }
+
+  const response = await requestSportmonksCollection(
+    `squads/teams/${encodeURIComponent(normalizedTeamId)}`,
+    {
+      include: ["player", "position", "detailedPosition"],
+      perPage: 100,
+    }
+  );
+
+  return asArray(response?.data);
+}
+
+export async function fetchSportmonksLivescoresInplay() {
+  const response = await requestSportmonksWithIncludeFallback(
+    "livescores/inplay",
+    SPORTMONKS_LIVE_INCLUDE_ATTEMPTS,
+    {
+      expectCollection: true,
+      timezone: ROME_TIMEZONE,
+      perPage: 100,
+    }
+  );
+
+  return {
+    fixtures: asArray(response?.data),
+    raw: response,
+  };
+}
+
+export async function fetchSportmonksLivescoresLatest() {
+  const response = await requestSportmonksWithIncludeFallback(
+    "livescores/latest",
+    SPORTMONKS_LIVE_INCLUDE_ATTEMPTS,
+    {
+      expectCollection: true,
+      timezone: ROME_TIMEZONE,
+      perPage: 100,
+    }
+  );
+
+  return {
+    fixtures: asArray(response?.data),
+    raw: response,
+  };
+}
+
+export function getSportmonksProviderReadiness() {
+  const configured = Boolean(getSportmonksApiToken({ silent: true }));
+
+  return {
+    provider: SPORTMONKS_PROVIDER_ID,
+    configured,
+    ready: configured,
+    baseUrl: getSportmonksFootballBaseUrl(),
+    hasLive: configured,
+    hasPredictions: configured,
+    hasExpectedGoals: configured,
+    hasLineups: configured,
+    note: configured
+      ? "Provider Sportmonks configurato come fonte primaria del feed calcio."
+      : "Provider non configurato.",
+  };
+}
