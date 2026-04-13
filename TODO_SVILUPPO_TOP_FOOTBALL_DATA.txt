@@ -1,0 +1,348 @@
+TOP FOOTBALL DATA
+TODO SVILUPPO OPERATIVO
+
+Data: 2026-04-13
+Fonte: sintesi esecutiva derivata da `TOP_FOOTBALL_DATA_DOCUMENTO_OPERATIVO_FINALE.txt`
+
+====================================================================
+OBIETTIVO
+====================================================================
+
+Portare il progetto da MVP basato soprattutto su Sportradar a piattaforma
+coerente con il brief cliente:
+- Sportmonks per predittiva e statistica
+- Sportradar per live e fallback
+- OddsMatrix per quote e comparatore
+- Stripe + MongoDB per premium e persistenza
+
+====================================================================
+PRIORITA' 0 - BLOCCANTI DI PRODUZIONE
+====================================================================
+
+1. Stabilizzare il deploy Vercel
+- verificare build locale e build Vercel
+- separare env locale e produzione
+- impostare `NEXT_PUBLIC_APP_URL` corretto
+- verificare che `.env.production` non usi valori localhost
+Output atteso:
+- deploy production stabile
+- `/api/health` risponde `ok: true`
+
+2. Sistemare produzione MongoDB
+- usare DB produzione separato
+- creare utente Mongo dedicato con permessi `readWrite`
+- verificare collection minime: `leads`, `users`, `subscriptions`, `alerts`
+Output atteso:
+- lead salvate correttamente
+- base pronta per premium e alerting
+
+3. Sistemare produzione Stripe
+- sostituire chiavi `test` con chiavi `live`
+- creare `price_id` live del piano premium
+- aggiungere `STRIPE_WEBHOOK_SECRET`
+Output atteso:
+- checkout live funzionante
+- session verification corretta
+
+====================================================================
+PRIORITA' 1 - INFRASTRUTTURA DATI
+====================================================================
+
+4. Creare catalogo competizioni supportate
+- file consigliato: `src/lib/competitions/catalog.js`
+- includere:
+  `id`
+  `name`
+  `tier`
+  `provider ids`
+  `is_live_enabled`
+  `is_predictions_enabled`
+  `is_odds_enabled`
+- limitare il prodotto alle competizioni richieste dal brief
+Output atteso:
+- whitelist unica riusabile da frontend, API e job
+
+5. Creare layer provider separati
+- creare:
+  `src/lib/providers/sportradar/*`
+  `src/lib/providers/sportmonks/*`
+  `src/lib/providers/oddsmatrix/*`
+- spostare la logica provider-specific fuori dai componenti UI
+Output atteso:
+- codice provider isolato
+- integrazione piu facile da testare e sostituire
+
+6. Creare layer domain normalizzato
+- creare:
+  `src/lib/domain/matches/*`
+  `src/lib/domain/live/*`
+  `src/lib/domain/odds/*`
+- definire shape standard per:
+  match prematch
+  match live
+  fixture detail
+  odds context
+  combo engine input
+Output atteso:
+- frontend indipendente dal provider raw
+
+====================================================================
+PRIORITA' 2 - MODELLI PREDITTIVI
+====================================================================
+
+7. Integrare Sportmonks per predittiva
+- usare Sportmonks per:
+  prediction
+  xG storico
+  statistiche prematch
+  dati squadra e giocatori
+- mantenere provenance dati nel payload:
+  `prediction_provider`
+  `generated_at`
+  `model_version`
+Output atteso:
+- modelli predittivi non piu basati su fallback/mock
+
+8. Integrare OddsMatrix per prematch odds
+- introdurre service layer dedicato
+- recuperare 1X2, O/U, GG/NG, scorer, corner dove disponibili
+- normalizzare:
+  `bestOdds`
+  `bestBookmaker`
+  `movement`
+  `updatedAt`
+Output atteso:
+- quote bookmaker reali sulle match card e nel detail
+
+9. Implementare formula stabile Value Bet
+- formula minima:
+  `fair_odds = 1 / model_probability`
+  `edge_percent = ((bookmaker_odds / fair_odds) - 1) * 100`
+- salvare il mercato che genera valore
+Output atteso:
+- badge value bet reale e ripetibile
+
+====================================================================
+PRIORITA' 3 - ANALISI STATISTICA
+====================================================================
+
+10. Portare lineups e player data su Sportmonks
+- usare Sportmonks per:
+  lineups
+  player stats
+  injuries/suspensions
+  team stats storiche
+- distinguere stato lineup:
+  `expected`
+  `probable`
+  `official`
+Output atteso:
+- tab analisi statistica e match detail con dati provider reali
+
+11. Implementare workflow lineups T-60
+- schedulare refresh automatico a T-60 e T-15
+- aggiornare lo stato ufficiale delle formazioni
+Output atteso:
+- label "Formazioni ufficiali" davvero guidata da provider
+
+12. Aggiungere player context avanzato
+- xG player
+- shots
+- foul stats
+- scorer odds contestuali
+- heatmap se disponibile nel piano/provider
+Output atteso:
+- player popup coerente con il brief cliente
+
+====================================================================
+PRIORITA' 4 - DATI LIVE
+====================================================================
+
+13. Definire standard live definitivo
+- scegliere:
+  A) widget ready-to-use provider
+  B) UI custom su dati raw
+- se resta custom:
+  refresh server 5-10 secondi
+  refresh UI 2 secondi solo per animazione/interpolazione
+Output atteso:
+- live stabile e scalabile
+
+14. Integrare live odds reali
+- usare OddsMatrix o provider odds live abilitato
+- mostrare:
+  over/under
+  goal/no goal
+  next goal
+  1X2 live
+  dropping odds
+Output atteso:
+- `LiveOddsMatrix` alimentata da provider reale
+
+15. Formalizzare Indice di Pericolosita Pro
+- documentare formula ufficiale
+- input minimi:
+  dangerous attacks
+  xG live
+  shots on target
+  territorial pressure
+  odds drop velocity
+- soglie:
+  0-40 neutro
+  41-70 attenzione
+  71-100 alert rosso
+Output atteso:
+- alert proprietario consistente e spiegabile
+
+====================================================================
+PRIORITA' 5 - SMART MULTI-BET ENGINE
+====================================================================
+
+16. Sostituire combo mock con pipeline reale
+- input:
+  predictions
+  odds
+  whitelist mercati
+  confidence threshold
+- output:
+  `combo_id`
+  `strategy_type`
+  `legs`
+  `expected_value`
+  `risk_score`
+  `confidence_score`
+  `total_odds_best_bookmaker`
+Output atteso:
+- combo generate da dati reali
+
+17. Implementare 3 strategie minime
+- `safe`
+- `value`
+- `gold_accuracy`
+Output atteso:
+- sezione premium coerente con il brief
+
+====================================================================
+PRIORITA' 6 - PREMIUM, ALERT, BACKEND REALE
+====================================================================
+
+18. Spostare premium state server-side
+- non usare solo localStorage
+- creare persistenza su MongoDB
+- salvare:
+  user
+  customerId
+  subscriptionId
+  status
+  currentPeriodEnd
+Output atteso:
+- premium governato lato server
+
+19. Aggiungere webhook Stripe
+- gestire:
+  checkout completed
+  subscription updated
+  subscription deleted
+  invoice payment failed
+Output atteso:
+- stato abbonamento sempre sincronizzato
+
+20. Implementare alerting reale
+- salvare alert in DB
+- aggiungere follow match
+- inviare alert via almeno un canale:
+  in-app
+  Telegram
+  email
+Output atteso:
+- notifiche non piu demo/locali
+
+====================================================================
+PRIORITA' 7 - QUALITA' E OSSERVABILITA'
+====================================================================
+
+21. Aggiungere logging e health provider
+- log errori provider
+- log rate limit
+- log fallback attivati
+- health check per provider configurati
+Output atteso:
+- debug produzione piu rapido
+
+22. Aggiungere cache e scheduler reali
+- cache schedule
+- cache live
+- cache odds
+- Vercel Cron o worker per refresh
+Output atteso:
+- minor carico provider e UI piu fluida
+
+23. QA finale
+- verificare top competitions richieste
+- verificare modelli predittivi
+- verificare live
+- verificare premium
+- verificare fallback provider
+Output atteso:
+- release checklist pronta per produzione
+
+====================================================================
+CHIAVI E ACCESSI NECESSARI
+====================================================================
+
+Env gia' presenti o da usare:
+- `MONGODB_URI`
+- `MONGODB_DB`
+- `SPORTRADAR_API_KEY`
+- `SPORTRADAR_ODDS_API_KEY`
+- `SPORTRADAR_PROBABILITIES_API_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PREMIUM_PRICE_ID`
+- `NEXT_PUBLIC_APP_URL`
+
+Env da aggiungere per chiudere il progetto:
+- `SPORTMONKS_API_TOKEN`
+- `SPORTMONKS_BASE_URL`
+- `ODDSMATRIX_BASE_URL`
+- `ODDSMATRIX_API_KEY` oppure credenziali equivalenti
+- `STRIPE_WEBHOOK_SECRET`
+- `CRON_SECRET`
+- `TELEGRAM_BOT_TOKEN` se si usa Telegram
+
+Accessi richiesti:
+- Vercel admin
+- GitHub write
+- MongoDB Atlas
+- Stripe live
+- Sportradar account attivo
+- Sportmonks account attivo
+- OddsMatrix account attivo
+
+====================================================================
+ORDINE CONSIGLIATO DI ESECUZIONE
+====================================================================
+
+Ordine corretto:
+1. Hardening produzione
+2. Catalogo competizioni
+3. Layer provider + domain
+4. Stripe webhook + premium server-side
+5. Sportmonks predittiva/statistica
+6. OddsMatrix prematch/live
+7. Live engine e alerting
+8. Smart Multi-Bet reale
+9. QA finale
+
+====================================================================
+DEFINITION OF DONE
+====================================================================
+
+Il lavoro puo dirsi completato solo quando:
+- niente mock nei percorsi core
+- provider e fallback sono espliciti
+- premium e' server-side
+- odds sono reali
+- live e alert sono reali
+- palinsesti sono limitati al perimetro cliente
+- il team puo deployare con sole env e accessi documentati
+
