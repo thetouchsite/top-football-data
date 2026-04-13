@@ -89,8 +89,19 @@ export default function AnalisiStatistica() {
                   </div>
                   <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                     {sortedPlayers.map((p) => (
-                      <button key={p.id} onClick={() => setSelectedPlayer(p)}
-                        className={`w-full text-left p-3 rounded-xl transition-all ${selectedPlayer?.id === p.id ? "bg-primary/10 border border-primary/20" : "bg-secondary/30 hover:bg-secondary/50"}`}>
+                      <div
+                        key={p.id}
+                        onClick={() => setSelectedPlayer(p)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedPlayer(p);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        className={`w-full text-left p-3 rounded-xl transition-all cursor-pointer ${selectedPlayer?.id === p.id ? "bg-primary/10 border border-primary/20" : "bg-secondary/30 hover:bg-secondary/50"}`}
+                      >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-secondary/80 border border-border/50 flex items-center justify-center text-xs font-bold text-primary">{p.number}</div>
@@ -111,7 +122,7 @@ export default function AnalisiStatistica() {
                             </button>
                           </div>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </GlassCard>

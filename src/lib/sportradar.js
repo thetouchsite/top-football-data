@@ -1,5 +1,5 @@
 import "server-only";
-import sportradarSoccer from "@api/sportradar-soccer";
+import sportradarSoccer from "../../.api/apis/sportradar-soccer/index.js";
 
 export const SPORTRADAR_DEFAULT_ACCESS_LEVEL =
   process.env.SPORTRADAR_ACCESS_LEVEL || "trial";
