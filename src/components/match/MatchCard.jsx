@@ -21,8 +21,10 @@ export default function MatchCard({ match, compact = false }) {
     <GlassCard glow={!!match.valueBet} className="group relative">
       {/* Fav button */}
       <button
+        type="button"
+        aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
         onClick={(e) => { e.preventDefault(); toggleFavoriteMatch(match.id); }}
-        className="absolute top-4 right-4 p-1 z-10 opacity-60 hover:opacity-100 transition-opacity"
+        className="absolute top-4 right-4 p-1 z-10 opacity-60 hover:opacity-100 transition-opacity rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
       >
         <Star className={`w-3.5 h-3.5 ${isFav ? "fill-accent text-accent" : "text-muted-foreground"}`} />
       </button>
@@ -123,11 +125,12 @@ export default function MatchCard({ match, compact = false }) {
       )}
 
       {/* CTA */}
-      <Link to={`/match/${encodeURIComponent(match.id)}`}>
-        <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary/10 border border-primary/20 text-primary font-semibold text-xs hover:bg-primary/20 transition-all">
-          ANALIZZA MATCH
-          <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-        </button>
+      <Link
+        to={`/match/${encodeURIComponent(match.id)}`}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary/10 border border-primary/20 text-primary font-semibold text-xs hover:bg-primary/20 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+      >
+        ANALIZZA MATCH
+        <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
       </Link>
     </GlassCard>
   );

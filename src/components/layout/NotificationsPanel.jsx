@@ -26,18 +26,26 @@ export default function NotificationsPanel({ onClose: _onClose }) {
           )}
         </div>
         {unreadCount > 0 && (
-          <button onClick={markAllRead} className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+          <button
+            type="button"
+            onClick={markAllRead}
+            className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1 shrink-0 rounded-md px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
             <Check className="w-3 h-3" /> Segna tutto letto
           </button>
         )}
       </div>
 
-      <div className="max-h-80 overflow-y-auto">
+      <div className="max-h-80 overflow-y-auto overflow-x-hidden pl-0 pr-1.5">
         {notifications.map((n) => {
           const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.value_bet;
           return (
-            <button key={n.id} onClick={() => markRead(n.id)}
-              className={`w-full text-left px-4 py-3 border-b border-border/20 hover:bg-secondary/30 transition-all ${!n.read ? "bg-secondary/20" : ""}`}>
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => markRead(n.id)}
+              className={`w-full text-left px-4 py-3 border-b border-border/20 hover:bg-secondary/30 transition-all ${!n.read ? "bg-secondary/20" : ""}`}
+            >
               <div className="flex items-start gap-3">
                 <div className={`w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
                   <cfg.icon className={`w-3.5 h-3.5 ${cfg.color}`} />

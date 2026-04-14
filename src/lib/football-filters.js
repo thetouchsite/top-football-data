@@ -1,3 +1,5 @@
+import { SPORTMONKS_PRIORITY_LEAGUE_IDS } from "@/lib/sportmonks-priority-league-ids";
+
 const LEAGUE_BUCKETS = [
   { label: "Serie A", keywords: ["serie a"] },
   { label: "Premier League", keywords: ["premier league"] },
@@ -143,10 +145,38 @@ export function sortMatchesByCriterion(matches, criterion) {
   });
 }
 
-export function sortMatchesByFeaturedPriority(matches) {
+function getSportmonksLeaguePriorityRank(match, priorityLeagueIds) {
+  if (!priorityLeagueIds?.length) {
+    return 0;
+  }
+
+  const leagueId = Number(match?.provider_ids?.sportmonks_league_id || 0);
+  const index = priorityLeagueIds.findIndex((id) => Number(id) === leagueId);
+
+  if (index >= 0) {
+    return index;
+  }
+
+  return 10000;
+}
+
+/**
+ * Ordina i match: prima le leghe in `prioritySportmonksLeagueIds` (nell'ordine dato), poi tutte le altre.
+ * Default: {@link SPORTMONKS_PRIORITY_LEAGUE_IDS} così Serie A / top EU compaiono prima senza escludere il resto del feed.
+ */
+export function sortMatchesByFeaturedPriority(matches, options = {}) {
+  const prioritySportmonksLeagueIds =
+    options.prioritySportmonksLeagueIds ?? SPORTMONKS_PRIORITY_LEAGUE_IDS;
   const safeMatches = Array.isArray(matches) ? [...matches] : [];
 
   return safeMatches.sort((left, right) => {
+    const leftP = getSportmonksLeaguePriorityRank(left, prioritySportmonksLeagueIds);
+    const rightP = getSportmonksLeaguePriorityRank(right, prioritySportmonksLeagueIds);
+
+    if (leftP !== rightP) {
+      return leftP - rightP;
+    }
+
     const stateDifference = getStatePriority(left) - getStatePriority(right);
 
     if (stateDifference !== 0) {

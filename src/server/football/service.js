@@ -1,3 +1,4 @@
+import { sortMatchesByFeaturedPriority } from "@/lib/football-filters";
 import { collectCompetitionSummaries } from "@/lib/competitions/catalog";
 import { createFixtureDetail } from "@/lib/domain/fixtures";
 import { createProviderFreshness } from "@/lib/domain/freshness";
@@ -248,6 +249,24 @@ function buildEmptyFixturePayload(fixtureId, notice) {
   };
 }
 
+function humanizeSportmonksApiMessage(message) {
+  const raw = String(message || "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  if (
+    /no result\(s\) found/i.test(raw) ||
+    /did not return any data/i.test(raw) ||
+    (/subscription/i.test(raw) && /access/i.test(raw))
+  ) {
+    return "Nessun dato da questo endpoint Sportmonks: di solito significa che non ci sono partite live in questo momento oppure che il piano non include livescores in-play o gli add-on necessari. Verifica piano e permessi su Sportmonks.";
+  }
+
+  return raw;
+}
+
 function getLiveNoticeFromMatches(matches) {
   if (!matches.length) {
     return "";
@@ -409,14 +428,19 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
   const requestPromise = (async () => {
     try {
       const rawSchedules = await fetchSportmonksScheduleWindow(safeDays);
-      const normalizedMatches = rawSchedules.fixtures.map(normalizeSportmonksScheduleMatch);
+      const normalizedMatches = sortMatchesByFeaturedPriority(
+        rawSchedules.fixtures.map(normalizeSportmonksScheduleMatch)
+      );
       const updatedAt = Date.now();
+      const scheduleFilterHint = rawSchedules?.scheduleLeagueFilter
+        ? " Calendario ristretto dal filtro API leghe (SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT)."
+        : "";
       const payload = buildSchedulePayload({
         matches: normalizedMatches,
         window: rawSchedules.window,
         rawSchedules,
         source: "sportmonks_api",
-        notice: buildSportmonksPlanNotice(rawSchedules, normalizedMatches),
+        notice: `${buildSportmonksPlanNotice(rawSchedules, normalizedMatches) || ""}${scheduleFilterHint}`.trim(),
         updatedAt,
       });
 
@@ -489,16 +513,22 @@ export async function getLivescoresInplayPayload() {
         ? await fetchSportmonksLivescoresInplay()
         : await fetchSportmonksLivescoresLatest();
       const normalizedMatches = liveResponse.fixtures.map(normalizeSportmonksLiveMatch);
-      const mergedMatches = shouldFullSync
-        ? normalizedMatches
-        : mergeSportmonksLiveMatches(cacheStore.payload?.matches || [], normalizedMatches);
+      const mergedMatches = sortMatchesByFeaturedPriority(
+        shouldFullSync
+          ? normalizedMatches
+          : mergeSportmonksLiveMatches(cacheStore.payload?.matches || [], normalizedMatches)
+      );
       const updatedAt = Date.now();
+      const apiLiveMessage =
+        mergedMatches.length === 0
+          ? humanizeSportmonksApiMessage(liveResponse?.raw?.message)
+          : "";
       const payload = buildLivePayload({
         matches: mergedMatches,
         rawLivescores: liveResponse,
         source: shouldFullSync ? "sportmonks_api" : "sportmonks_live_latest",
         notice:
-          liveResponse?.raw?.message ||
+          apiLiveMessage ||
           buildSportmonksPlanNotice(liveResponse, mergedMatches) ||
           getLiveNoticeFromMatches(mergedMatches),
         updatedAt,

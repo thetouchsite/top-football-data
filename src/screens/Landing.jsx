@@ -328,7 +328,7 @@ export default function Landing() {
       {/* Stats */}
       <section className="relative z-10 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
             {stats.map((stat, i) => (
               <motion.div
                 key={i}

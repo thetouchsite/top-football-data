@@ -92,7 +92,7 @@ const TRUST = [
 ];
 
 export default function Premium() {
-  const { isPremium, user, billing, saveBillingState } = useApp();
+  const { isPremium, user, billing, saveBillingState, userMode } = useApp();
   const [loadingPlanId, setLoadingPlanId] = useState("");
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [checkoutState, setCheckoutState] = useState({
@@ -194,9 +194,14 @@ export default function Premium() {
     }
   };
 
-  const premiumPlanActive = useMemo(
-    () => isPremium && billing.plan === "premium",
-    [billing.plan, isPremium]
+  /** Solo abbonamento reale (Stripe / billing): la demo non blocca il checkout. */
+  const hasStripePremium = useMemo(
+    () =>
+      Boolean(
+        billing.isPremium &&
+        String(billing.plan || "").toLowerCase() === "premium"
+      ),
+    [billing.isPremium, billing.plan]
   );
 
   return (
@@ -292,7 +297,7 @@ export default function Premium() {
                   onClick={() => !plan.ctaDisabled && handleCheckout(plan.id)}
                   disabled={
                     plan.ctaDisabled ||
-                    (plan.id === "premium" && premiumPlanActive) ||
+                    (plan.id === "premium" && hasStripePremium) ||
                     loadingPlanId === plan.id
                   }
                   className={`w-full font-bold text-sm ${
@@ -303,9 +308,14 @@ export default function Premium() {
                 >
                   {loadingPlanId === plan.id
                     ? "Reindirizzamento..."
-                    : plan.id === "premium" && premiumPlanActive
+                    : plan.id === "premium" && hasStripePremium
                       ? "Piano attivo"
-                      : plan.cta}
+                      : plan.id === "premium" &&
+                          isPremium &&
+                          userMode === "premium" &&
+                          !hasStripePremium
+                        ? "Anteprima demo attiva · attiva Stripe"
+                        : plan.cta}
                 </Button>
               </GlassCard>
             </motion.div>

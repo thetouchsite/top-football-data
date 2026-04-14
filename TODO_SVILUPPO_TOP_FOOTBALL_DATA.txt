@@ -23,6 +23,8 @@ STATO ATTUALE IN 10 RIGHE
   storage key nuova per non trascinarsi legacy ids Sportradar.
 - Le pre-match odds Sportmonks sono ora integrate davvero in schedule e fixture
   detail; il comparatore finale OddsMatrix resta comunque ancora mancante.
+- Cursor ha aggiunto un pass ulteriore su ranking feed, shell UI, landing,
+  premium e navbar, senza cambiare il fatto che la base resta Sportmonks-first.
 - MongoDB locale continua a risultare problematico in health per il TLS/SSL.
 
 ====================================================================
@@ -64,6 +66,28 @@ COMPLETATO NEL REPO
 - Analisi Statistica su fixture ids Sportmonks
 - Navbar search su schedule reale
 - Watchlist match su schedule reale
+
+5. Ranking, filtro leghe e shell UI
+- nuovo file `src/lib/sportmonks-priority-league-ids.js`
+- `sortMatchesByFeaturedPriority()` ora usa prima i league ids Sportmonks prioritari
+- priorita top leagues senza escludere il resto del feed
+- supporto opzionale a filtro API stretto via env:
+  `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`
+  `SPORTMONKS_SCHEDULE_LEAGUE_IDS`
+- shell/layout aggiornati in:
+  `src/app/layout.jsx`
+  `src/app/providers.jsx`
+  `src/components/layout/SiteShell.jsx`
+  `src/components/layout/Navbar.jsx`
+  `src/components/layout/Footer.jsx`
+  `src/components/layout/NotificationsPanel.jsx`
+- refresh UI in:
+  `src/index.css`
+  `src/screens/Landing.jsx`
+  `src/screens/Dashboard.jsx`
+  `src/screens/Premium.jsx`
+  `src/components/match/MatchCard.jsx`
+  `src/components/shared/SectionHeader.jsx`
 
 5. Stato client / persistence
 - `AppContext` salva i favoriti in `top-football-favorites-v2`
@@ -115,6 +139,13 @@ FASE 5. Pass di copertura Sportmonks reale
 - lineup status corretto con metadata provider-driven
 - live verificato end-to-end: il vuoto attuale dipende dal feed/piano, non da filtri UI
 
+FASE 6. Pass Cursor su ordinamento e shell
+- schedule/live ordinati server-side con ranking per priority league ids Sportmonks
+- dashboard e feed featured orientati a mostrare prima le leghe top
+- introdotto filtro leghe API opzionale, ma default lasciato su calendario globale
+- landing/premium/navbar riscritti in chiave piu funnel/commerciale
+- app shell rifinita con `QueryClientProvider`, `MotionConfig` e safe-area spacing
+
 ====================================================================
 PRIORITA ATTIVE
 ====================================================================
@@ -134,6 +165,9 @@ P0. Validare feed Sportmonks reale in preview
   `predictions.type`
   `xGFixture`
   `inplayOdds`
+- decidere se lasciare il default attuale:
+  calendario globale + ranking top leagues
+  oppure attivare `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`
 
 P0. Sistemare MongoDB reale
 - health locale oggi segnala errore TLS/SSL
@@ -202,6 +236,9 @@ GAP APERTI OGGI
   `predictions.type`
   `xGFixture`
   `inplayOdds`
+- attenzione operativa:
+  se viene acceso `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`, il feed schedule
+  non e piu globale ma limitato alle league ids configurate via env
 
 ====================================================================
 INPUT NECESSARI DAL TEAM
@@ -220,11 +257,13 @@ ORDINE CONSIGLIATO DA QUI
 ====================================================================
 
 1. Validare in preview locale predictions/xG/live odds rispetto al piano Sportmonks
-2. Sistemare MongoDB reale
-3. Integrare OddsMatrix per comparatore e live odds bookmaker
-4. Chiudere premium server-side completo
-5. Aggiungere alerting persistito
-6. Costruire multi-bet reale
+2. Decidere policy definitiva calendario:
+   `global feed + priority ranking` oppure `strict league filter`
+3. Sistemare MongoDB reale
+4. Integrare OddsMatrix per comparatore e live odds bookmaker
+5. Chiudere premium server-side completo
+6. Aggiungere alerting persistito
+7. Costruire multi-bet reale
 
 ====================================================================
 DEFINITION OF DONE DELLA FASE ATTUALE
