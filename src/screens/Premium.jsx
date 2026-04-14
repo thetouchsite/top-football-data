@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import GlassCard from "@/components/shared/GlassCard";
 import { useApp } from "@/lib/AppContext";
+import { useNavigate } from "@/lib/router-compat";
 
 const PLANS = [
   {
@@ -82,7 +83,7 @@ const TRUST = [
   {
     icon: Star,
     label: "Premium reale",
-    desc: "Il piano non dipende piu solo dal demo mode",
+    desc: "Legato all'identita utente e non al vecchio demo mode",
   },
   {
     icon: Zap,
@@ -92,7 +93,8 @@ const TRUST = [
 ];
 
 export default function Premium() {
-  const { isPremium, user, billing, saveBillingState, userMode } = useApp();
+  const { isAuthenticated, user, billing, saveBillingState } = useApp();
+  const navigate = useNavigate();
   const [loadingPlanId, setLoadingPlanId] = useState("");
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [checkoutState, setCheckoutState] = useState({
@@ -139,7 +141,7 @@ export default function Premium() {
           return;
         }
 
-        saveBillingState({
+        await saveBillingState({
           ...payload.billing,
           source: "stripe_checkout",
         });
@@ -161,6 +163,11 @@ export default function Premium() {
   }, [checkoutState, saveBillingState]);
 
   const handleCheckout = async (planId) => {
+    if (!isAuthenticated) {
+      navigate("/register?next=/premium");
+      return;
+    }
+
     setLoadingPlanId(planId);
     setCheckoutMessage("");
 
@@ -194,7 +201,6 @@ export default function Premium() {
     }
   };
 
-  /** Solo abbonamento reale (Stripe / billing): la demo non blocca il checkout. */
   const hasStripePremium = useMemo(
     () =>
       Boolean(
@@ -310,11 +316,8 @@ export default function Premium() {
                     ? "Reindirizzamento..."
                     : plan.id === "premium" && hasStripePremium
                       ? "Piano attivo"
-                      : plan.id === "premium" &&
-                          isPremium &&
-                          userMode === "premium" &&
-                          !hasStripePremium
-                        ? "Anteprima demo attiva · attiva Stripe"
+                      : plan.id === "premium" && !isAuthenticated
+                        ? "Accedi per attivare"
                         : plan.cta}
                 </Button>
               </GlassCard>

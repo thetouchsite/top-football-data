@@ -67,3 +67,31 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 
 Il progetto e pronto per Vercel. Imposta su Vercel le stesse variabili ambiente usate in `.env.local`.
 
+# Top Football Pulse
+
+## Auth locale e Google
+
+- `register` e `login` devono funzionare anche in locale.
+- Se Mongo Atlas non e raggiungibile in sviluppo, l'auth usa un fallback SQLite locale persistente in `.data/auth-local.sqlite`.
+- In produzione il fallback non viene usato: se Mongo non risponde, l'auth fallisce esplicitamente.
+
+### Variabili env Google richieste
+
+```env
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=...
+NEXT_PUBLIC_GOOGLE_ONE_TAP_ENABLED=false
+```
+
+### Google Cloud Console
+
+Usa una credenziale OAuth Web Application con:
+
+- Authorized JavaScript origin: `http://localhost:3000`
+- Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
+
+Con queste env attive, login e registrazione mostrano:
+
+- bottone `Continua con Google`
+- Google One Tap sulle pagine pubbliche auth solo se `NEXT_PUBLIC_GOOGLE_ONE_TAP_ENABLED=true`

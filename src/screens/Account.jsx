@@ -1,20 +1,23 @@
+"use client";
+
 import React, { useState } from "react";
-import { Crown, Bell, Star, Shield, ChevronRight } from "lucide-react";
+import { Crown, Bell, Star, Shield, ChevronRight, LogOut, BadgeCheck } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import GlassCard from "@/components/shared/GlassCard";
 import { useApp } from "@/lib/AppContext";
 import { LEAGUES } from "@/lib/mockData";
-import { Link } from "@/lib/router-compat";
+import { Link, useNavigate } from "@/lib/router-compat";
 
 export default function Account() {
   const {
     user,
     isPremium,
-    userMode,
-    setUserMode,
+    isAdmin,
     billing,
     clearBillingState,
+    signOut,
   } = useApp();
+  const navigate = useNavigate();
   const [notifs, setNotifs] = useState({
     valueBet: true,
     liveAlert: true,
@@ -118,8 +121,11 @@ export default function Account() {
                       isPremium ? "text-accent" : "text-muted-foreground"
                     }`}
                   >
-                    Piano {isPremium ? "Premium" : user.planLabel}
+                    Piano {user.planLabel}
                   </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-1 uppercase tracking-wide">
+                  Ruolo: {isAdmin ? "admin" : user.role}
                 </div>
                 {billing.currentPeriodEnd && (
                   <span className="text-xs text-muted-foreground">
@@ -149,37 +155,35 @@ export default function Account() {
 
             <GlassCard>
               <h3 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-3">
-                Demo Mode
+                Sicurezza Account
               </h3>
               <div className="space-y-2">
-                <button
-                  onClick={() => setUserMode("guest")}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                    userMode === "guest"
-                      ? "bg-secondary/80 text-foreground border border-border"
-                      : "text-muted-foreground hover:bg-secondary/30"
-                  }`}
-                >
-                  Accesso Guest
-                </button>
-                <button
-                  onClick={() => setUserMode("premium")}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                    userMode === "premium"
-                      ? "bg-accent/10 text-accent border border-accent/20"
-                      : "text-muted-foreground hover:bg-secondary/30"
-                  }`}
-                >
-                  Accesso Premium demo
-                </button>
+                <div className="p-3 rounded-xl bg-secondary/30">
+                  <div className="flex items-center gap-2 text-sm text-foreground">
+                    <BadgeCheck className="w-4 h-4 text-primary" />
+                    Email {user.emailVerified ? "verificata" : "non verificata"}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Sessione server-side attiva e account associato a identita reale.
+                  </div>
+                </div>
                 {billing.customerId && (
                   <button
                     onClick={clearBillingState}
                     className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-muted-foreground hover:bg-secondary/30"
                   >
-                    Scollega stato Stripe locale
+                    Scollega mirror billing locale
                   </button>
                 )}
+                <button
+                  onClick={async () => {
+                    await signOut();
+                    navigate("/login", { replace: true });
+                  }}
+                  className="w-full flex items-center gap-2 text-left px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-muted-foreground hover:bg-secondary/30"
+                >
+                  <LogOut className="w-3.5 h-3.5" /> Esci dall'account
+                </button>
               </div>
             </GlassCard>
           </div>
@@ -273,10 +277,13 @@ export default function Account() {
                 </h3>
               </div>
               <div className="space-y-2">
-                <button className="w-full flex items-center justify-between p-3 rounded-xl bg-secondary/30 cursor-pointer hover:bg-secondary/50 transition-all">
-                  <span className="text-sm text-foreground">Modifica password</span>
+                <Link
+                  to="/watchlist"
+                  className="w-full flex items-center justify-between p-3 rounded-xl bg-secondary/30 cursor-pointer hover:bg-secondary/50 transition-all"
+                >
+                  <span className="text-sm text-foreground">Gestisci watchlist</span>
                   <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                </button>
+                </Link>
                 <button
                   onClick={openBillingPortal}
                   disabled={!billing.customerId || billingLoading}
@@ -289,6 +296,15 @@ export default function Account() {
                   </span>
                   <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 </button>
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-secondary/30 cursor-pointer hover:bg-secondary/50 transition-all"
+                  >
+                    <span className="text-sm text-foreground">Area admin</span>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </Link>
+                )}
                 <button className="w-full flex items-center justify-between p-3 rounded-xl bg-secondary/30 cursor-pointer hover:bg-secondary/50 transition-all">
                   <span className="text-sm text-foreground">Privacy & dati</span>
                   <ChevronRight className="w-4 h-4 text-muted-foreground" />

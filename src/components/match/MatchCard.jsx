@@ -15,7 +15,7 @@ function ConfBar({ val, max = 100, color = "bg-primary" }) {
 
 export default function MatchCard({ match, compact = false }) {
   const { favorites, toggleFavoriteMatch } = useApp();
-  const isFav = favorites.matches.includes(match.id);
+  const isFav = favorites.matches.includes(String(match.id));
 
   return (
     <GlassCard glow={!!match.valueBet} className="group relative">

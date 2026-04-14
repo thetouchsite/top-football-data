@@ -10,6 +10,19 @@ if (!globalForMongo.__mongoConnection) {
 }
 
 const cachedConnection = globalForMongo.__mongoConnection;
+let mongoFailureLogged = false;
+
+function logMongoFailure(error) {
+  if (mongoFailureLogged || process.env.NODE_ENV === "production") {
+    return;
+  }
+
+  mongoFailureLogged = true;
+  console.warn(
+    "[mongodb] Connessione Mongo non disponibile. In locale useremo fallback degradati dove previsto.",
+    error
+  );
+}
 
 export async function getMongoClient() {
   const uri = process.env.MONGODB_URI;
@@ -26,12 +39,34 @@ export async function getMongoClient() {
     cachedConnection.promise = MongoClient.connect(uri);
   }
 
-  cachedConnection.client = await cachedConnection.promise;
-  return cachedConnection.client;
+  try {
+    cachedConnection.client = await cachedConnection.promise;
+    return cachedConnection.client;
+  } catch (error) {
+    cachedConnection.promise = null;
+    logMongoFailure(error);
+    throw error;
+  }
 }
 
 export async function getDatabase() {
   const client = await getMongoClient();
   const databaseName = process.env.MONGODB_DB || "top-football-pulse";
   return client.db(databaseName);
+}
+
+export async function getOptionalMongoClient() {
+  try {
+    return await getMongoClient();
+  } catch {
+    return null;
+  }
+}
+
+export async function getOptionalDatabase() {
+  try {
+    return await getDatabase();
+  } catch {
+    return null;
+  }
 }
