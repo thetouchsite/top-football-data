@@ -16,6 +16,8 @@ Il progetto oggi e:
 - Sportmonks-first per i percorsi core calcio
 - con IDs canonici Sportmonks
 - con copy e payload molto piu coerenti con il brief cliente
+- con un pass UI/shell aggiuntivo fatto da Cursor su landing, premium,
+  navbar e gerarchia del feed
 - con Sportradar degradato a backup tecnico e modulo futures separato
 
 Il progetto oggi NON e ancora:
@@ -111,6 +113,11 @@ Significa che:
 - non usiamo mock nascosti nei percorsi core
 - se una capability non esiste davvero, la dichiariamo
 - il catalogo competizioni resta metadata prodotto, non blocco UX duro
+- il default attuale e:
+  calendario globale Sportmonks + ordinamento top leagues lato API/UI
+- esiste anche una modalita opzionale via env:
+  `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT=true`
+  per restringere gia a livello API il calendario alle league ids scelte
 
 Stati ammessi lato UI:
 - `sportmonks_api`
@@ -143,12 +150,18 @@ COSA E IMPLEMENTATO DAVVERO ORA
 - merge in cache delle fixture aggiornate
 - live odds sempre dichiarate come derivate se non bookmaker reali
 
-4. Search e watchlist riallineate
+4. Ranking e prioritizzazione feed
+- introdotto `src/lib/sportmonks-priority-league-ids.js`
+- ranking featured basato prima su league ids Sportmonks prioritari
+- top EU e Serie A spinte sopra in dashboard/modelli/live senza escludere le altre competizioni
+- supporto opzionale al filtro API stretto leghe tramite env
+
+5. Search e watchlist riallineate
 - navbar search usa schedule reale
 - watchlist partita usa schedule reale
 - favorites storage aggiornato a `top-football-favorites-v2`
 
-5. Provenance e freshness
+6. Provenance e freshness
 - provider
 - source
 - isFallback
@@ -267,6 +280,13 @@ FASE E. Pass di copertura Sportmonks reale
 - lineup status corretto con metadata provider-driven
 - finestra schedule UI portata a 14 giorni
 
+FASE F. Pass Cursor su UX shell e ranking
+- ordinamento featured rafforzato con priority league ids Sportmonks
+- supporto a filtro API stretto leghe, ma lasciato opzionale
+- navbar, footer, notifications, site shell e providers rivisti
+- landing e premium spostate piu vicino a un funnel marketing/prodotto
+- refresh di `index.css`, `MatchCard` e `SectionHeader`
+
 ====================================================================
 GAP PRINCIPALI RISPETTO AL BRIEF FINALE
 ====================================================================
@@ -305,6 +325,9 @@ INPUT NECESSARI DAL TEAM
   `statistics.type`
   `events.type`
 - conferma se `inplayOdds` e presente nel piano
+- decisione prodotto su questa variabile:
+  lasciare default `global feed + priority ranking`
+  oppure attivare `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`
 - fix MongoDB reale
 - webhook secret Stripe finale
 - credenziali/docs OddsMatrix
@@ -315,11 +338,13 @@ ORDINE DI SVILUPPO CONSIGLIATO DA OGGI
 ====================================================================
 
 1. Validare predictions/xG/live odds contro il piano Sportmonks reale
-2. Sistemare MongoDB reale
-3. Integrare OddsMatrix
-4. Chiudere gating premium server-side definitivo
-5. Aggiungere follow match e alert persistence
-6. Costruire multi-bet reale
+2. Decidere policy calendario definitiva:
+   `global feed + priority ranking` oppure `strict league filter`
+3. Sistemare MongoDB reale
+4. Integrare OddsMatrix
+5. Chiudere gating premium server-side definitivo
+6. Aggiungere follow match e alert persistence
+7. Costruire multi-bet reale
 
 ====================================================================
 CHECK GENERALE DELLA SITUAZIONE ATTUALE
@@ -333,6 +358,10 @@ Giudizio tecnico sintetico:
   schedule reale a 14 giorni
   odds pre-match Sportmonks
   standings/coaches/squads nella fixture detail
+- Cursor ha migliorato anche la leggibilita prodotto:
+  top matches piu orientati alle leghe target
+  shell piu solida
+  landing/premium piu commerciali
 - L'architettura e pronta per il passo successivo piu importante:
   OddsMatrix.
 - Il rischio principale non e piu architetturale, ma di copertura piano/provider:

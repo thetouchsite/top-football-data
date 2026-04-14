@@ -201,7 +201,11 @@ export function AppProvider({ children }) {
     );
   }, [favorites]);
 
-  const isPremium = billing.isPremium;
+  /** Premium effettivo: abbonamento Stripe reale oppure simulazione da demo mode navbar. */
+  const isPremium = Boolean(billing.isPremium || userMode === "premium");
+
+  /** Premium solo da demo (nessun billing Stripe attivo): utile per badge UI. */
+  const isDemoPremium = Boolean(isPremium && !billing.isPremium);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -256,7 +260,7 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      user, userMode, setUserMode, isPremium,
+      user, userMode, setUserMode, isPremium, isDemoPremium,
       billing, billingReady, saveBillingState, clearBillingState, refreshBillingState,
       notifications, unreadCount, markAllRead, markRead,
       favorites, toggleFavoriteMatch, toggleFavoriteTeam, toggleFavoritePlayer,

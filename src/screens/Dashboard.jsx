@@ -100,7 +100,7 @@ export default function Dashboard() {
         id: `live-${match.id}`,
         icon: Zap,
         color: "text-destructive",
-        message: `${match.home} vs ${match.away} · indice pericolosita ${match.dangerIndex}%`,
+        message: `${match.home} vs ${match.away} · indice di pericolosità ${match.dangerIndex}%`,
         time: "live",
       });
     });

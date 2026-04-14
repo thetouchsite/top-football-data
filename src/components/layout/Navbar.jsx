@@ -28,12 +28,50 @@ export default function Navbar() {
   const [userOpen, setUserOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchMatches, setSearchMatches] = useState([]);
-  const { user, isPremium, setUserMode, userMode, unreadCount } = useApp();
-  const searchRef = useRef(null);
+  const { user, isPremium, isDemoPremium, setUserMode, userMode, unreadCount } = useApp();
+  const searchInputRef = useRef(null);
+  const searchPanelRef = useRef(null);
+  const notifsPanelRef = useRef(null);
+  const userPanelRef = useRef(null);
+
+  const closeAllOverlays = React.useCallback(() => {
+    setSearchOpen(false);
+    setNotifsOpen(false);
+    setUserOpen(false);
+  }, []);
 
   useEffect(() => {
-    if (searchOpen && searchRef.current) searchRef.current.focus();
+    if (searchOpen && searchInputRef.current) searchInputRef.current.focus();
   }, [searchOpen]);
+
+  useEffect(() => {
+    closeAllOverlays();
+    setMobileOpen(false);
+  }, [location.pathname, closeAllOverlays]);
+
+  const anyOverlayOpen = searchOpen || notifsOpen || userOpen;
+
+  useEffect(() => {
+    if (!anyOverlayOpen) return;
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (searchPanelRef.current?.contains(target)) return;
+      if (notifsPanelRef.current?.contains(target)) return;
+      if (userPanelRef.current?.contains(target)) return;
+      closeAllOverlays();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [anyOverlayOpen, closeAllOverlays]);
+
+  useEffect(() => {
+    if (!anyOverlayOpen) return;
+    const handleEscape = (event) => {
+      if (event.key === "Escape") closeAllOverlays();
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [anyOverlayOpen, closeAllOverlays]);
 
   useEffect(() => {
     if (!searchOpen || searchMatches.length > 0) {
@@ -68,7 +106,7 @@ export default function Navbar() {
     : [];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 glass-strong">
+    <nav className="fixed top-0 left-0 right-0 z-50 glass-strong pt-[env(safe-area-inset-top,0px)]">
       <div className="max-w-7xl mx-auto px-3 sm:px-6">
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
@@ -101,15 +139,29 @@ export default function Navbar() {
           {/* Right controls */}
           <div className="flex items-center gap-1">
             {/* Search */}
-            <div className="relative">
-              <button onClick={() => setSearchOpen(!searchOpen)}
-                className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary/50">
+            <div className="relative" ref={searchPanelRef}>
+              <button
+                type="button"
+                aria-expanded={searchOpen}
+                aria-label="Cerca partite"
+                onClick={() => {
+                  setSearchOpen((open) => {
+                    const next = !open;
+                    if (next) {
+                      setNotifsOpen(false);
+                      setUserOpen(false);
+                    }
+                    return next;
+                  });
+                }}
+                className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              >
                 <Search className="w-4 h-4" />
               </button>
               {searchOpen && (
-                <div className="absolute right-0 top-10 w-72 glass-strong rounded-xl border border-border/50 shadow-xl z-50">
+                <div className="absolute right-0 top-10 w-72 max-w-[calc(100vw-1.5rem)] glass-strong rounded-xl border border-border/50 shadow-xl z-50">
                   <div className="p-3">
-                    <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)}
+                    <input ref={searchInputRef} value={query} onChange={(e) => setQuery(e.target.value)}
                       placeholder="Cerca partita, squadra, campionato..."
                       className="w-full bg-secondary/60 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/40"
                     />
@@ -117,8 +169,12 @@ export default function Navbar() {
                   {searchResults.length > 0 && (
                     <div className="pb-3">
                       {searchResults.map((m) => (
-                        <button key={m.id} onClick={() => { navigate(`/match/${m.id}`); setSearchOpen(false); setQuery(""); }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-secondary/40 transition-colors">
+                        <button
+                          type="button"
+                          key={m.id}
+                          onClick={() => { navigate(`/match/${m.id}`); setSearchOpen(false); setQuery(""); }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-secondary/40 transition-colors"
+                        >
                           <div className="text-xs font-semibold text-foreground">{m.home} vs {m.away}</div>
                           <div className="text-xs text-muted-foreground">{m.league} · {m.date} {m.time}</div>
                         </button>
@@ -133,9 +189,23 @@ export default function Navbar() {
             </div>
 
             {/* Notifications */}
-            <div className="relative">
-              <button onClick={() => { setNotifsOpen(!notifsOpen); setUserOpen(false); }}
-                className="relative p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary/50">
+            <div className="relative" ref={notifsPanelRef}>
+              <button
+                type="button"
+                aria-label="Notifiche"
+                aria-expanded={notifsOpen}
+                onClick={() => {
+                  setNotifsOpen((open) => {
+                    const next = !open;
+                    if (next) {
+                      setSearchOpen(false);
+                      setUserOpen(false);
+                    }
+                    return next;
+                  });
+                }}
+                className="relative p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              >
                 <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
                   <span className="absolute top-1 right-1 w-4 h-4 bg-destructive rounded-full text-xs flex items-center justify-center font-bold text-white">
@@ -147,21 +217,59 @@ export default function Navbar() {
             </div>
 
             {/* User */}
-            <div className="relative">
-              <button onClick={() => { setUserOpen(!userOpen); setNotifsOpen(false); }}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-all">
+            <div className="relative" ref={userPanelRef}>
+              <button
+                type="button"
+                aria-label="Menu utente"
+                aria-expanded={userOpen}
+                onClick={() => {
+                  setUserOpen((open) => {
+                    const next = !open;
+                    if (next) {
+                      setSearchOpen(false);
+                      setNotifsOpen(false);
+                    }
+                    return next;
+                  });
+                }}
+                title={
+                  isPremium
+                    ? isDemoPremium
+                      ? "Account Premium (anteprima demo)"
+                      : "Account Premium"
+                    : "Account"
+                }
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              >
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${isPremium ? "bg-accent/20 text-accent border border-accent/30" : "bg-secondary text-muted-foreground border border-border/50"}`}>
                   {user.avatar}
                 </div>
-                {isPremium && <span className="hidden sm:block text-xs font-semibold text-accent">Premium</span>}
+                {isPremium && (
+                  <span className="hidden sm:flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-accent">Premium</span>
+                    {isDemoPremium && (
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-px rounded border border-border/60 bg-secondary/70 text-muted-foreground"
+                        title="Nessun abbonamento Stripe: modalità demo dalla navbar"
+                      >
+                        Demo
+                      </span>
+                    )}
+                  </span>
+                )}
               </button>
               {userOpen && (
                 <div className="absolute right-0 top-10 w-56 glass-strong rounded-xl border border-border/50 shadow-xl z-50 p-2">
                   <div className="px-3 py-2 mb-1 border-b border-border/30">
                     <div className="font-semibold text-xs text-foreground">{user.name}</div>
                     <div className="text-xs text-muted-foreground">{user.email}</div>
-                    <div className={`text-xs font-semibold mt-1 ${isPremium ? "text-accent" : "text-muted-foreground"}`}>
-                      Piano: {user.planLabel}
+                    <div className={`text-xs font-semibold mt-1 flex flex-wrap items-center gap-1.5 ${isPremium ? "text-accent" : "text-muted-foreground"}`}>
+                      <span>Piano: {user.planLabel}</span>
+                      {isDemoPremium && (
+                        <span className="text-[10px] uppercase tracking-wide px-1.5 py-px rounded border border-border/50 bg-secondary/60 text-muted-foreground font-bold">
+                          Demo
+                        </span>
+                      )}
                     </div>
                   </div>
                   <Link to="/account" onClick={() => setUserOpen(false)}
@@ -178,12 +286,18 @@ export default function Navbar() {
                   </Link>
                   <div className="border-t border-border/30 mt-1 pt-1">
                     <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium">Demo mode:</div>
-                    <button onClick={() => { setUserMode("guest"); setUserOpen(false); }}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all ${userMode === "guest" ? "bg-secondary/60 text-foreground" : "text-muted-foreground hover:bg-secondary/30"}`}>
+                    <button
+                      type="button"
+                      onClick={() => { setUserMode("guest"); setUserOpen(false); }}
+                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all ${userMode === "guest" ? "bg-secondary/60 text-foreground" : "text-muted-foreground hover:bg-secondary/30"}`}
+                    >
                       👤 Accesso Guest
                     </button>
-                    <button onClick={() => { setUserMode("premium"); setUserOpen(false); }}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all ${userMode === "premium" ? "bg-accent/10 text-accent" : "text-muted-foreground hover:bg-secondary/30"}`}>
+                    <button
+                      type="button"
+                      onClick={() => { setUserMode("premium"); setUserOpen(false); }}
+                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all ${userMode === "premium" ? "bg-accent/10 text-accent" : "text-muted-foreground hover:bg-secondary/30"}`}
+                    >
                       👑 Accesso Premium
                     </button>
                   </div>
@@ -200,8 +314,18 @@ export default function Navbar() {
             )}
 
             {/* Mobile toggle */}
-            <button onClick={() => setMobileOpen(!mobileOpen)}
-              className="xl:hidden p-2 text-foreground hover:bg-secondary/50 rounded-lg">
+            <button
+              type="button"
+              aria-label={mobileOpen ? "Chiudi menu" : "Apri menu"}
+              onClick={() => {
+                setMobileOpen((open) => {
+                  const next = !open;
+                  if (next) closeAllOverlays();
+                  return next;
+                });
+              }}
+              className="xl:hidden p-2 text-foreground hover:bg-secondary/50 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
               {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
           </div>

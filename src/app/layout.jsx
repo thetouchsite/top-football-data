@@ -6,6 +6,12 @@ export const metadata = {
   description: "Dashboard calcio con Next.js, API Node.js e MongoDB.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="it">

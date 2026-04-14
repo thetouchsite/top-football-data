@@ -1,5 +1,9 @@
 import "server-only";
 
+import { SPORTMONKS_PRIORITY_LEAGUE_IDS } from "@/lib/sportmonks-priority-league-ids";
+
+export { SPORTMONKS_PRIORITY_LEAGUE_IDS };
+
 const ROME_TIMEZONE = "Europe/Rome";
 const DEFAULT_FORM = ["-", "-", "-", "-", "-"];
 const SCORE_CANDIDATES = [
@@ -138,6 +142,42 @@ export const SPORTMONKS_DEFAULT_SCHEDULE_DAYS = clampInteger(
   1,
   14
 );
+
+/**
+ * Filtro API `fixtureLeagues` su `fixtures/between` — solo se esplicitamente richiesto.
+ * Default: nessun filtro (calendario globale + priorità leghe in ordinamento lato server/UI).
+ * Imposta `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT=true` e opzionalmente `SPORTMONKS_SCHEDULE_LEAGUE_IDS` (altrimenti usa le leghe prioritarie).
+ * @see https://docs.sportmonks.com/v3/
+ */
+export function getSportmonksFixtureLeaguesFilterParam() {
+  const strict = ["1", "true", "yes"].includes(
+    String(process.env.SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT ?? "").toLowerCase()
+  );
+
+  if (!strict) {
+    return "";
+  }
+
+  const raw = String(process.env.SPORTMONKS_SCHEDULE_LEAGUE_IDS ?? "").trim();
+  const lower = raw.toLowerCase();
+
+  if (lower === "all" || lower === "global" || lower === "*") {
+    return "";
+  }
+
+  const source = raw || SPORTMONKS_PRIORITY_LEAGUE_IDS.join(",");
+
+  const ids = source
+    .split(/[,;\s]+/)
+    .map((entry) => entry.trim())
+    .filter((entry) => /^\d+$/.test(entry));
+
+  if (!ids.length) {
+    return "";
+  }
+
+  return `fixtureLeagues:${ids.join(",")}`;
+}
 
 function clampInteger(value, fallback, min, max) {
   const parsedValue = Number.parseInt(value, 10);
@@ -2385,13 +2425,16 @@ export async function fetchSportmonksScheduleWindow(days = SPORTMONKS_DEFAULT_SC
   toDate.setDate(toDate.getDate() + Math.max(0, safeDays - 1));
   const from = buildDateKey(fromDate);
   const to = buildDateKey(toDate);
+  const leagueFilters = getSportmonksFixtureLeaguesFilterParam();
   const response = await requestSportmonksWithIncludeFallback(
     `fixtures/between/${from}/${to}`,
     SPORTMONKS_SCHEDULE_INCLUDE_ATTEMPTS,
     {
       expectCollection: true,
       timezone: ROME_TIMEZONE,
-      perPage: 100,
+      /** Documentazione Sportmonks: per_page massimo 50 su questo endpoint. */
+      perPage: 50,
+      filters: leagueFilters || undefined,
     }
   );
 
@@ -2403,6 +2446,7 @@ export async function fetchSportmonksScheduleWindow(days = SPORTMONKS_DEFAULT_SC
     },
     fixtures: asArray(response?.data),
     raw: response,
+    scheduleLeagueFilter: leagueFilters || null,
   };
 }
 
@@ -2497,6 +2541,7 @@ export async function fetchSportmonksLivescoresLatest() {
 
 export function getSportmonksProviderReadiness() {
   const configured = Boolean(getSportmonksApiToken({ silent: true }));
+  const scheduleLeagueFilter = Boolean(getSportmonksFixtureLeaguesFilterParam());
 
   return {
     provider: SPORTMONKS_PROVIDER_ID,
@@ -2507,8 +2552,9 @@ export function getSportmonksProviderReadiness() {
     hasPredictions: configured,
     hasExpectedGoals: configured,
     hasLineups: configured,
+    scheduleLeagueFilter,
     note: configured
-      ? "Provider Sportmonks configurato come fonte primaria del feed calcio."
+      ? `Provider Sportmonks configurato come fonte primaria del feed calcio.${scheduleLeagueFilter ? " Filtro API leghe stretto (SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT) attivo." : " Calendario globale; leghe top ordinate per priorità in UI/API (senza escludere altre competizioni)."}`
       : "Provider non configurato.",
   };
 }
