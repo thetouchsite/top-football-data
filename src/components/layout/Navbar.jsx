@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "@/lib/router-compat";
@@ -179,7 +179,7 @@ export default function Navbar() {
                           className="w-full text-left px-4 py-2.5 hover:bg-secondary/40 transition-colors"
                         >
                           <div className="text-xs font-semibold text-foreground">{m.home} vs {m.away}</div>
-                          <div className="text-xs text-muted-foreground">{m.league} · {m.date} {m.time}</div>
+                          <div className="text-xs text-muted-foreground">{m.league} - {m.date} {m.time}</div>
                         </button>
                       ))}
                     </div>
@@ -263,9 +263,13 @@ export default function Navbar() {
                         className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
                         <User className="w-3.5 h-3.5" /> Il mio account
                       </Link>
-                      <Link to="/watchlist" onClick={() => setUserOpen(false)}
+                      <Link to="/preferiti" onClick={() => setUserOpen(false)}
                         className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
-                        <Star className="w-3.5 h-3.5" /> Watchlist
+                        <Star className="w-3.5 h-3.5" /> Preferiti
+                      </Link>
+                      <Link to="/seguiti" onClick={() => setUserOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
+                        <Bell className="w-3.5 h-3.5" /> Seguiti
                       </Link>
                       {isAdmin && (
                         <Link to="/admin" onClick={() => setUserOpen(false)}
@@ -368,3 +372,4 @@ export default function Navbar() {
     </nav>
   );
 }
+

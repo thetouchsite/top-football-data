@@ -1,12 +1,19 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  ACCOUNT_NOTIFICATION_SETTINGS,
+  createDefaultAccountState,
+} from "@/lib/account-config";
 import { authClient } from "@/lib/auth-client";
 
 const AppContext = createContext({});
 const BILLING_STORAGE_KEY = "top-football-billing";
 const LEGACY_FAVORITES_STORAGE_KEY = "top-football-favorites-v2";
+const LEGACY_FOLLOWING_STORAGE_KEY = "top-football-following-v1";
+const WATCHLIST_MIGRATION_MARKER_KEY = "top-football-favorites-migrated-v1";
+const FOLLOWING_MIGRATION_MARKER_KEY = "top-football-following-migrated-v1";
 const EMPTY_BILLING_STATE = {
   plan: "free",
   isPremium: false,
@@ -39,7 +46,103 @@ const INITIAL_NOTIFICATIONS = [
   { id: 5, type: "lineup", title: "Formazione Confermata", message: "Inter ha confermato la formazione ufficiale", time: "3 ore fa", read: true },
 ];
 
-function buildUserFromSession(session, billing) {
+function sanitizeUniqueStrings(values = []) {
+  return Array.from(
+    new Set(
+      (Array.isArray(values) ? values : [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function normalizeWatchlistState(value) {
+  return {
+    matches: sanitizeUniqueStrings(value?.matches).map((entry) => String(entry)),
+    teams: sanitizeUniqueStrings(value?.teams),
+    players: sanitizeUniqueStrings(value?.players),
+  };
+}
+
+function normalizeFollowingState(value) {
+  return {
+    matches: sanitizeUniqueStrings(value?.matches).map((entry) => String(entry)),
+    teams: sanitizeUniqueStrings(value?.teams),
+    players: sanitizeUniqueStrings(value?.players),
+    competitions: sanitizeUniqueStrings(value?.competitions),
+  };
+}
+
+function normalizeAccountState(value, fallback) {
+  const defaultState = fallback || createDefaultAccountState();
+
+  return {
+    profile: {
+      ...defaultState.profile,
+      ...(value?.profile || {}),
+    },
+    preferences: {
+      notifications: {
+        ...ACCOUNT_NOTIFICATION_SETTINGS,
+        ...(value?.preferences?.notifications || {}),
+      },
+      preferredCompetitions:
+        sanitizeUniqueStrings(value?.preferences?.preferredCompetitions).length > 0
+          ? sanitizeUniqueStrings(value?.preferences?.preferredCompetitions)
+          : defaultState.preferences.preferredCompetitions,
+    },
+    watchlist: normalizeWatchlistState(value?.watchlist || defaultState.watchlist),
+    following: normalizeFollowingState(value?.following || defaultState.following),
+    meta: {
+      ...(defaultState.meta || {}),
+      ...(value?.meta || {}),
+    },
+  };
+}
+
+function areStringArraysEqual(left = [], right = []) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((entry, index) => entry === right[index]);
+}
+
+function areWatchlistsEqual(left, right) {
+  return (
+    areStringArraysEqual(left?.matches || [], right?.matches || []) &&
+    areStringArraysEqual(left?.teams || [], right?.teams || []) &&
+    areStringArraysEqual(left?.players || [], right?.players || [])
+  );
+}
+
+function areFollowingsEqual(left, right) {
+  return (
+    areStringArraysEqual(left?.matches || [], right?.matches || []) &&
+    areStringArraysEqual(left?.teams || [], right?.teams || []) &&
+    areStringArraysEqual(left?.players || [], right?.players || []) &&
+    areStringArraysEqual(left?.competitions || [], right?.competitions || [])
+  );
+}
+
+function mergeWatchlists(primary, secondary) {
+  return {
+    matches: sanitizeUniqueStrings([...(primary?.matches || []), ...(secondary?.matches || [])]),
+    teams: sanitizeUniqueStrings([...(primary?.teams || []), ...(secondary?.teams || [])]),
+    players: sanitizeUniqueStrings([...(primary?.players || []), ...(secondary?.players || [])]),
+  };
+}
+
+function mergeFollowings(primary, secondary) {
+  return {
+    matches: sanitizeUniqueStrings([...(primary?.matches || []), ...(secondary?.matches || [])]),
+    teams: sanitizeUniqueStrings([...(primary?.teams || []), ...(secondary?.teams || [])]),
+    players: sanitizeUniqueStrings([...(primary?.players || []), ...(secondary?.players || [])]),
+    competitions: sanitizeUniqueStrings([...(primary?.competitions || []), ...(secondary?.competitions || [])]),
+  };
+}
+
+function buildUserFromSession(session, billing, accountState) {
   if (!session?.user) {
     return GUEST_USER;
   }
@@ -49,7 +152,9 @@ function buildUserFromSession(session, billing) {
     role === "admin" || role === "premium" || Boolean(billing?.isPremium || session.user.isPremium);
   const plan = billing?.plan || session.user.plan || (isPremium ? "premium" : "free");
   const planLabel = role === "admin" ? "Admin" : isPremium ? "Premium" : "Free";
-  const displayName = String(session.user.name || session.user.email || "Utente");
+  const displayName = String(
+    accountState?.profile?.displayName || session.user.name || session.user.email || "Utente"
+  );
 
   return {
     id: session.user.id,
@@ -70,10 +175,41 @@ export function AppProvider({ children }) {
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [favorites, setFavorites] = useState({ matches: [], teams: [], players: [] });
   const [favoritesReady, setFavoritesReady] = useState(false);
+  const [followingItems, setFollowingItems] = useState({
+    matches: [],
+    teams: [],
+    players: [],
+    competitions: [],
+  });
+  const [followingReady, setFollowingReady] = useState(false);
   const [filters, setFilters] = useState({ league: "all", valueOnly: false, sort: "time", view: "grid" });
   const [billing, setBilling] = useState(EMPTY_BILLING_STATE);
   const [billingReady, setBillingReady] = useState(false);
   const [accountReady, setAccountReady] = useState(false);
+  const [accountState, setAccountState] = useState(() => createDefaultAccountState());
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [preferencesSaving, setPreferencesSaving] = useState(false);
+  const [watchlistSaving, setWatchlistSaving] = useState(false);
+  const [followingSaving, setFollowingSaving] = useState(false);
+  const migrationRef = useRef("");
+  const followingMigrationRef = useRef("");
+
+  const patchAccountResource = React.useCallback(async (path, payload) => {
+    const response = await fetch(path, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Operazione account non riuscita.");
+    }
+
+    return result;
+  }, []);
 
   const refreshAccountState = React.useCallback(async () => {
     try {
@@ -86,14 +222,22 @@ export function AppProvider({ children }) {
         throw new Error(payload.error || "Impossibile recuperare la sessione account.");
       }
 
+      const fallbackAccount = createDefaultAccountState({
+        userId: payload?.session?.user?.id,
+        email: payload?.session?.user?.email,
+        displayName: payload?.session?.user?.name,
+      });
+
       setServerSession(payload.session || null);
       setBilling({
         ...EMPTY_BILLING_STATE,
         ...(payload.billing || {}),
       });
+      setAccountState(normalizeAccountState(payload.account, fallbackAccount));
     } catch {
       setServerSession(null);
       setBilling(EMPTY_BILLING_STATE);
+      setAccountState(createDefaultAccountState());
     } finally {
       setBillingReady(true);
       setAccountReady(true);
@@ -110,8 +254,8 @@ export function AppProvider({ children }) {
 
   const resolvedSession = serverSession || authSession.data || null;
   const user = useMemo(
-    () => buildUserFromSession(resolvedSession, billing),
-    [resolvedSession, billing]
+    () => buildUserFromSession(resolvedSession, billing, accountState),
+    [resolvedSession, billing, accountState]
   );
   const isAuthenticated = Boolean(resolvedSession?.user?.id);
   const isPremium = Boolean(user.isPremium);
@@ -119,6 +263,18 @@ export function AppProvider({ children }) {
 
   const favoritesStorageKey = useMemo(
     () => `top-football-favorites-v3:${user.id || "guest"}`,
+    [user.id]
+  );
+  const favoritesMigrationKey = useMemo(
+    () => `${WATCHLIST_MIGRATION_MARKER_KEY}:${user.id || "guest"}`,
+    [user.id]
+  );
+  const followingStorageKey = useMemo(
+    () => `top-football-following-v2:${user.id || "guest"}`,
+    [user.id]
+  );
+  const followingMigrationKey = useMemo(
+    () => `${FOLLOWING_MIGRATION_MARKER_KEY}:${user.id || "guest"}`,
     [user.id]
   );
 
@@ -129,24 +285,219 @@ export function AppProvider({ children }) {
 
     setFavoritesReady(false);
 
+    if (isAuthenticated) {
+      const serverWatchlist = normalizeWatchlistState(accountState?.watchlist);
+      const alreadyMigrated =
+        window.localStorage.getItem(favoritesMigrationKey) === "done";
+
+      if (alreadyMigrated) {
+        setFavorites(serverWatchlist);
+        setFavoritesReady(true);
+        return;
+      }
+
+      const storedFavorites = window.localStorage.getItem(favoritesStorageKey);
+      const legacyFavorites = window.localStorage.getItem(LEGACY_FAVORITES_STORAGE_KEY);
+      let localFavorites = { matches: [], teams: [], players: [] };
+
+      try {
+        localFavorites = normalizeWatchlistState(
+          JSON.parse(storedFavorites || legacyFavorites || "null")
+        );
+      } catch {
+        localFavorites = { matches: [], teams: [], players: [] };
+      }
+
+      const mergedFavorites = mergeWatchlists(serverWatchlist, localFavorites);
+      const migrationKey = `${user.id}:${JSON.stringify(mergedFavorites)}`;
+
+      const markWatchlistMigrationDone = () => {
+        window.localStorage.setItem(
+          favoritesStorageKey,
+          JSON.stringify(mergedFavorites)
+        );
+        window.localStorage.setItem(favoritesMigrationKey, "done");
+        window.localStorage.removeItem(LEGACY_FAVORITES_STORAGE_KEY);
+      };
+
+      setFavorites(mergedFavorites);
+      setFavoritesReady(true);
+
+      if (
+        !areWatchlistsEqual(serverWatchlist, mergedFavorites) &&
+        migrationRef.current !== migrationKey
+      ) {
+        migrationRef.current = migrationKey;
+
+        patchAccountResource("/api/account/watchlist", {
+          watchlist: mergedFavorites,
+        })
+          .then((result) => {
+            const fallbackAccount = createDefaultAccountState({
+              userId: user.id,
+              email: user.email,
+              displayName: user.name,
+            });
+
+            setAccountState((prev) =>
+              normalizeAccountState(result.account, {
+                ...fallbackAccount,
+                ...prev,
+              })
+            );
+            markWatchlistMigrationDone();
+          })
+          .catch(() => {
+            migrationRef.current = "";
+          });
+
+        return;
+      }
+
+      markWatchlistMigrationDone();
+
+      return;
+    }
+
     try {
       const storedFavorites = window.localStorage.getItem(favoritesStorageKey);
       const legacyFavorites = window.localStorage.getItem(LEGACY_FAVORITES_STORAGE_KEY);
       const parsedFavorites = JSON.parse(storedFavorites || legacyFavorites || "null");
 
-      setFavorites({
-        matches: Array.isArray(parsedFavorites?.matches)
-          ? parsedFavorites.matches.map((id) => String(id))
-          : [],
-        teams: Array.isArray(parsedFavorites?.teams) ? parsedFavorites.teams : [],
-        players: Array.isArray(parsedFavorites?.players) ? parsedFavorites.players : [],
-      });
+      setFavorites(normalizeWatchlistState(parsedFavorites));
     } catch {
       setFavorites({ matches: [], teams: [], players: [] });
     } finally {
       setFavoritesReady(true);
     }
-  }, [favoritesStorageKey]);
+  }, [
+    accountState?.watchlist,
+    favoritesStorageKey,
+    favoritesMigrationKey,
+    isAuthenticated,
+    patchAccountResource,
+    user.email,
+    user.id,
+    user.name,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    setFollowingReady(false);
+
+    if (isAuthenticated) {
+      const serverFollowing = normalizeFollowingState(accountState?.following);
+      const alreadyMigrated =
+        window.localStorage.getItem(followingMigrationKey) === "done";
+
+      if (alreadyMigrated) {
+        setFollowingItems(serverFollowing);
+        setFollowingReady(true);
+        return;
+      }
+
+      const storedFollowing = window.localStorage.getItem(followingStorageKey);
+      const legacyFollowing = window.localStorage.getItem(LEGACY_FOLLOWING_STORAGE_KEY);
+      let localFollowing = {
+        matches: [],
+        teams: [],
+        players: [],
+        competitions: [],
+      };
+
+      try {
+        localFollowing = normalizeFollowingState(
+          JSON.parse(storedFollowing || legacyFollowing || "null")
+        );
+      } catch {
+        localFollowing = {
+          matches: [],
+          teams: [],
+          players: [],
+          competitions: [],
+        };
+      }
+
+      const mergedFollowing = mergeFollowings(serverFollowing, localFollowing);
+      const migrationKey = `${user.id}:${JSON.stringify(mergedFollowing)}`;
+
+      const markFollowingMigrationDone = () => {
+        window.localStorage.setItem(
+          followingStorageKey,
+          JSON.stringify(mergedFollowing)
+        );
+        window.localStorage.setItem(followingMigrationKey, "done");
+        window.localStorage.removeItem(LEGACY_FOLLOWING_STORAGE_KEY);
+      };
+
+      setFollowingItems(mergedFollowing);
+      setFollowingReady(true);
+
+      if (
+        !areFollowingsEqual(serverFollowing, mergedFollowing) &&
+        followingMigrationRef.current !== migrationKey
+      ) {
+        followingMigrationRef.current = migrationKey;
+
+        patchAccountResource("/api/account/following", {
+          following: mergedFollowing,
+        })
+          .then((result) => {
+            const fallbackAccount = createDefaultAccountState({
+              userId: user.id,
+              email: user.email,
+              displayName: user.name,
+            });
+
+            setAccountState((prev) =>
+              normalizeAccountState(result.account, {
+                ...fallbackAccount,
+                ...prev,
+              })
+            );
+            markFollowingMigrationDone();
+          })
+          .catch(() => {
+            followingMigrationRef.current = "";
+          });
+
+        return;
+      }
+
+      markFollowingMigrationDone();
+
+      return;
+    }
+
+    try {
+      const storedFollowing = window.localStorage.getItem(followingStorageKey);
+      const legacyFollowing = window.localStorage.getItem(LEGACY_FOLLOWING_STORAGE_KEY);
+      const parsedFollowing = JSON.parse(storedFollowing || legacyFollowing || "null");
+
+      setFollowingItems(normalizeFollowingState(parsedFollowing));
+    } catch {
+      setFollowingItems({
+        matches: [],
+        teams: [],
+        players: [],
+        competitions: [],
+      });
+    } finally {
+      setFollowingReady(true);
+    }
+  }, [
+    accountState?.following,
+    followingStorageKey,
+    followingMigrationKey,
+    isAuthenticated,
+    patchAccountResource,
+    user.email,
+    user.id,
+    user.name,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !favoritesReady) {
@@ -163,34 +514,208 @@ export function AppProvider({ children }) {
     );
   }, [favorites, favoritesReady, favoritesStorageKey]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !followingReady) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      followingStorageKey,
+      JSON.stringify({
+        matches: followingItems.matches.map((id) => String(id)),
+        teams: followingItems.teams,
+        players: followingItems.players,
+        competitions: followingItems.competitions,
+      })
+    );
+  }, [followingItems, followingReady, followingStorageKey]);
+
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const applyAccountResult = React.useCallback((nextAccount) => {
+    const fallbackAccount = createDefaultAccountState({
+      userId: user.id,
+      email: user.email,
+      displayName: user.name,
+    });
+    const normalizedAccount = normalizeAccountState(nextAccount, fallbackAccount);
+
+    setAccountState(normalizedAccount);
+    setFavorites(normalizedAccount.watchlist);
+    setFollowingItems(normalizedAccount.following);
+    setServerSession((prev) => {
+      if (!prev?.user) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        user: {
+          ...prev.user,
+          name: normalizedAccount.profile.displayName,
+        },
+      };
+    });
+  }, [user.email, user.id, user.name]);
 
   const markAllRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   const markRead = (id) => setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
 
-  const toggleFavoriteMatch = (id) => {
+  const persistWatchlist = React.useCallback(async (nextWatchlist) => {
+    const normalizedWatchlist = normalizeWatchlistState(nextWatchlist);
+
+    if (!isAuthenticated) {
+      setFavorites(normalizedWatchlist);
+      setAccountState((prev) => ({
+        ...prev,
+        watchlist: normalizedWatchlist,
+      }));
+      return;
+    }
+
+    setWatchlistSaving(true);
+
+    try {
+      const result = await patchAccountResource("/api/account/watchlist", {
+        watchlist: normalizedWatchlist,
+      });
+      applyAccountResult(result.account);
+    } finally {
+      setWatchlistSaving(false);
+    }
+  }, [applyAccountResult, isAuthenticated, patchAccountResource]);
+
+  const persistFollowing = React.useCallback(async (nextFollowing) => {
+    const normalizedFollowing = normalizeFollowingState(nextFollowing);
+
+    if (!isAuthenticated) {
+      setFollowingItems(normalizedFollowing);
+      setAccountState((prev) => ({
+        ...prev,
+        following: normalizedFollowing,
+      }));
+      return;
+    }
+
+    setFollowingSaving(true);
+
+    try {
+      const result = await patchAccountResource("/api/account/following", {
+        following: normalizedFollowing,
+      });
+      applyAccountResult(result.account);
+    } finally {
+      setFollowingSaving(false);
+    }
+  }, [applyAccountResult, isAuthenticated, patchAccountResource]);
+
+  const toggleFavoriteMatch = React.useCallback(async (id) => {
     const normalizedId = String(id);
-    setFavorites((prev) => ({
-      ...prev,
-      matches: prev.matches.includes(normalizedId)
-        ? prev.matches.filter((matchId) => matchId !== normalizedId)
-        : [...prev.matches, normalizedId],
-    }));
-  };
+    const nextWatchlist = {
+      ...favorites,
+      matches: favorites.matches.includes(normalizedId)
+        ? favorites.matches.filter((matchId) => matchId !== normalizedId)
+        : [...favorites.matches, normalizedId],
+    };
 
-  const toggleFavoriteTeam = (name) => {
-    setFavorites((prev) => ({
-      ...prev,
-      teams: prev.teams.includes(name) ? prev.teams.filter((t) => t !== name) : [...prev.teams, name],
-    }));
-  };
+    await persistWatchlist(nextWatchlist);
+  }, [favorites, persistWatchlist]);
 
-  const toggleFavoritePlayer = (name) => {
-    setFavorites((prev) => ({
-      ...prev,
-      players: prev.players.includes(name) ? prev.players.filter((p) => p !== name) : [...prev.players, name],
-    }));
-  };
+  const toggleFavoriteTeam = React.useCallback(async (name) => {
+    const nextWatchlist = {
+      ...favorites,
+      teams: favorites.teams.includes(name)
+        ? favorites.teams.filter((team) => team !== name)
+        : [...favorites.teams, name],
+    };
+
+    await persistWatchlist(nextWatchlist);
+  }, [favorites, persistWatchlist]);
+
+  const toggleFavoritePlayer = React.useCallback(async (name) => {
+    const nextWatchlist = {
+      ...favorites,
+      players: favorites.players.includes(name)
+        ? favorites.players.filter((player) => player !== name)
+        : [...favorites.players, name],
+    };
+
+    await persistWatchlist(nextWatchlist);
+  }, [favorites, persistWatchlist]);
+
+  const toggleFollowMatch = React.useCallback(async (id) => {
+    const normalizedId = String(id);
+    const nextFollowing = {
+      ...followingItems,
+      matches: followingItems.matches.includes(normalizedId)
+        ? followingItems.matches.filter((matchId) => matchId !== normalizedId)
+        : [...followingItems.matches, normalizedId],
+    };
+
+    await persistFollowing(nextFollowing);
+  }, [followingItems, persistFollowing]);
+
+  const toggleFollowPlayer = React.useCallback(async (name) => {
+    const nextFollowing = {
+      ...followingItems,
+      players: followingItems.players.includes(name)
+        ? followingItems.players.filter((player) => player !== name)
+        : [...followingItems.players, name],
+    };
+
+    await persistFollowing(nextFollowing);
+  }, [followingItems, persistFollowing]);
+
+  const toggleFollowCompetition = React.useCallback(async (name) => {
+    const nextFollowing = {
+      ...followingItems,
+      competitions: followingItems.competitions.includes(name)
+        ? followingItems.competitions.filter((competition) => competition !== name)
+        : [...followingItems.competitions, name],
+    };
+
+    await persistFollowing(nextFollowing);
+  }, [followingItems, persistFollowing]);
+
+  const saveProfile = React.useCallback(async ({ displayName }) => {
+    if (!isAuthenticated) {
+      throw new Error("Autenticazione richiesta.");
+    }
+
+    setProfileSaving(true);
+
+    try {
+      const result = await patchAccountResource("/api/account/profile", {
+        displayName,
+      });
+      applyAccountResult(result.account);
+      return result.account;
+    } finally {
+      setProfileSaving(false);
+    }
+  }, [applyAccountResult, isAuthenticated, patchAccountResource]);
+
+  const saveAccountPreferences = React.useCallback(async ({
+    notifications: nextNotifications,
+    preferredCompetitions,
+  }) => {
+    if (!isAuthenticated) {
+      throw new Error("Autenticazione richiesta.");
+    }
+
+    setPreferencesSaving(true);
+
+    try {
+      const result = await patchAccountResource("/api/account/preferences", {
+        notifications: nextNotifications,
+        preferredCompetitions,
+      });
+      applyAccountResult(result.account);
+      return result.account;
+    } finally {
+      setPreferencesSaving(false);
+    }
+  }, [applyAccountResult, isAuthenticated, patchAccountResource]);
 
   const saveBillingState = React.useCallback(async (nextBilling) => {
     if (typeof window !== "undefined") {
@@ -218,6 +743,8 @@ export function AppProvider({ children }) {
     await authClient.signOut();
     setServerSession(null);
     setFavorites({ matches: [], teams: [], players: [] });
+    setFollowingItems({ matches: [], teams: [], players: [], competitions: [] });
+    setAccountState(createDefaultAccountState());
     await refreshAccountState();
   }, [refreshAccountState]);
 
@@ -231,6 +758,18 @@ export function AppProvider({ children }) {
       billing,
       billingReady,
       accountReady,
+      account: accountState,
+      watchlist: favorites,
+      following: followingItems,
+      accountNotifications: accountState.preferences.notifications,
+      preferredCompetitions: accountState.preferences.preferredCompetitions,
+      profileSaving,
+      preferencesSaving,
+      watchlistSaving,
+      followingSaving,
+      saveProfile,
+      saveAccountPreferences,
+      saveAccountFollowing: persistFollowing,
       saveBillingState,
       clearBillingState,
       refreshAccountState,
@@ -243,6 +782,9 @@ export function AppProvider({ children }) {
       toggleFavoriteMatch,
       toggleFavoriteTeam,
       toggleFavoritePlayer,
+      toggleFollowMatch,
+      toggleFollowPlayer,
+      toggleFollowCompetition,
       filters,
       setFilters,
     }}>

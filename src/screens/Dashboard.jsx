@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "@/lib/router-compat";
 import { motion } from "framer-motion";
 import {
@@ -100,7 +100,7 @@ export default function Dashboard() {
         id: `live-${match.id}`,
         icon: Zap,
         color: "text-destructive",
-        message: `${match.home} vs ${match.away} · indice di pericolosità ${match.dangerIndex}%`,
+        message: `${match.home} vs ${match.away} - indice di pericolosita ${match.dangerIndex}%`,
         time: "live",
       });
     });
@@ -110,7 +110,7 @@ export default function Dashboard() {
         id: `value-${match.id}`,
         icon: TrendingUp,
         color: "text-primary",
-        message: `${match.home} vs ${match.away} · value spot derivato ${match.valueBet.type}`,
+        message: `${match.home} vs ${match.away} - value spot derivato ${match.valueBet.type}`,
         time: "pre-match",
       });
     });
@@ -321,7 +321,7 @@ export default function Dashboard() {
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
                     <Star className="w-4 h-4 text-accent" /> I tuoi preferiti
                   </h2>
-                  <Link to="/watchlist" className="text-xs text-primary flex items-center gap-1">
+                  <Link to="/preferiti" className="text-xs text-primary flex items-center gap-1">
                     Vedi <ChevronRight className="w-3 h-3" />
                   </Link>
                 </div>
@@ -446,3 +446,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+

@@ -1,7 +1,7 @@
 TOP FOOTBALL DATA
 TODO SVILUPPO OPERATIVO
 
-Data aggiornamento: 2026-04-14
+Data aggiornamento: 2026-04-15
 Stato documento: allineato al codice reale del repository dopo il pass
 "Sportmonks-first core migration"
 
@@ -113,6 +113,50 @@ ULTIMI EDIT/FIX FATTI
 - errore OAuth raw Better Auth non e piu il target UX desiderato:
   login/register ricevono errore leggibile via query string quando Google fallisce
 
+9. Fondazione account utente persistente
+- introdotte collection dedicate per stato account utente:
+  `userAccountSettings`
+  `userWatchlists`
+  `userFollowings`
+- inizializzazione account resa piu ordinata:
+  documenti account materializzati al primo accesso e riallineati per `userId`
+- provider login letto dalla collection auth `accounts`
+  tramite `providerId` (`credential` / `google`) senza duplicare il dato
+- indici account previsti/allineati su Mongo:
+  `userAccountSettings.userId`
+  `userWatchlists.userId`
+  `userFollowings.userId`
+- aggiunti endpoint interni:
+  `/api/account/profile`
+  `/api/account/preferences`
+  `/api/account/watchlist`
+  `/api/account/following`
+- `/api/account/session` ora restituisce anche il blocco `account`
+- `AppContext` riallineato a dati account reali server-side
+- watchlist autenticata ora persistita su DB per utente
+- following autenticato ora persistito su DB per utente
+- migrazione soft da localStorage a DB aggiunta per i preferiti esistenti
+- migrazione soft da localStorage a DB aggiunta anche per i seguiti
+- per utenti autenticati il DB e ora la fonte primaria:
+  la migrazione da localStorage avviene una volta sola e non reintroduce
+  piu elementi rimossi da preferiti/seguiti
+- area account resa piu coerente:
+  profilo modificabile
+  notifiche persistenti
+  competizioni preferite persistenti
+  competizioni seguite persistenti
+- UI separata tra:
+  watchlist = elementi salvati
+  following = elementi monitorati
+- copy UI riallineata:
+  stella/salva per watchlist
+  segui per monitoraggio
+- nuova UX utente introdotta:
+  `/preferiti` dedicata
+  `/seguiti` dedicata con tab `Notifiche`
+  `/watchlist` lasciata solo come redirect legacy verso `/preferiti`
+  `/account` ripulita come pagina impostazioni, non piu hub misto
+
 FASE 1. Hardening Sportradar-first
 - health endpoint con readiness di mongo, stripe e provider
 - webhook billing e stato premium server-side
@@ -185,8 +229,20 @@ STATO ATTUALE
 - Il login Google locale e disponibile via bottone esplicito.
 - Il bootstrap locale puo risultare lento al primo avvio per il tentativo iniziale
   di connessione Mongo prima del fallback SQLite.
-- Watchlist e preferenze non sono ancora persistite a DB per utente:
-  la separazione per utente e oggi ancora locale lato browser.
+- Esiste ora una prima fondazione account persistente a DB per utente:
+  profilo, notifiche, competizioni preferite, watchlist e following.
+- La UI account ora legge/scrive davvero dati account server-side.
+- La watchlist autenticata non dipende piu solo dal browser.
+- Il concetto `follow/segui` e ora separato dalla watchlist a livello dati e UI.
+- Il provider di accesso account e leggibile in UI partendo da `accounts.providerId`.
+- Il menu utente ora punta a:
+  `Preferiti`
+  `Seguiti`
+  al posto del vecchio ingresso ambiguo `Watchlist`.
+- Match e player possono essere:
+  salvati in watchlist
+  seguiti per monitoraggio
+- Resta da validare end-to-end il comportamento reale dei seguiti in preview.
 
 GAP APERTI OGGI
 
@@ -204,14 +260,15 @@ GAP APERTI OGGI
 - persistence DB e gating finale ancora da chiudere del tutto
 
 4. Area utenti da consolidare
-- base auth reale presente ma account area ancora da rifinire
+- base auth reale presente e account area ora con prima persistenza DB
 - Google base auth e presente, ma va rifinita/stress-testata meglio in locale e deploy
-- watchlist e preferenze ancora non persistite in DB
+- watchlist e following ora separati
+- resta da collegare il sistema following a eventi/notifiche reali
 - premium va consolidato definitivamente con entitlement e billing
 - area admin introdotta ma ancora iniziale
 
 5. Alerting utente
-- niente follow match persistito
+- follow match/player/competitions ora persistito come sistema separato
 - niente alert live inviati davvero
 
 6. Sportmonks piano da verificare
@@ -278,6 +335,9 @@ P0. Consolidare area utenti sulla nuova base auth
   admin
 - definire middleware e guard server-side coerenti per tutto il progetto
 - completare profilo utente, settings, password/reset e privacy
+- rifinire la pagina account sopra la nuova base DB
+- completare privacy/dati e gestione sicurezza account
+- rifinire UX account/watchlist/following con test reali e casi edge
 - validare definitivamente Google OAuth in locale e deploy
 - decidere se riattivare One Tap solo dopo stabilizzazione completa del flusso Google
 - consolidare premium reale sopra billing + sessione + ruolo
@@ -293,12 +353,17 @@ P1. Definire piano API Sportmonks necessarie prima della validazione feed
 - chiarire cosa puo restare derivato internamente anche senza endpoint premium
 
 P1. Verificare watchlist / lista desiderati end-to-end
-- verificare persistenza locale add/remove match
+- verificare persistenza DB add/remove match autenticato
 - verificare navigazione da watchlist a match detail con fixture id Sportmonks
 - verificare comportamento quando la fixture salvata esce dalla finestra schedule corrente
-- verificare player follow e relativa UX
-- migrare la watchlist da storage locale a dati per-utente autenticato
+- verificare player save e relativa UX
+- verificare persistenza DB add/remove su following:
+  match
+  player
+  competition
+- verificare coerenza tra account, watchlist page e detail pages
 - decidere se salvare solo ids oppure anche uno snapshot minimo locale
+- decidere se salvare solo ids oppure anche uno snapshot minimo locale per following
 
 P2. Validare feed Sportmonks reale in preview
 - verificare che il piano attivo esponga davvero:
@@ -353,9 +418,14 @@ P5. Multi-bet reale
 ORDINE CONSIGLIATO DA QUI
 
 1. Consolidare area utenti e permessi server-side sopra la nuova base auth
-2. Migrare watchlist / preferenze da storage locale a persistenza per-utente autenticato
-3. Definire piano API Sportmonks necessario per V1 rispetto al trial/base attuale
-4. Verificare watchlist / lista desiderati end-to-end sul nuovo modello utente
+2. Chiudere area account persistente:
+   profilo
+   notifiche
+   competizioni preferite
+   watchlist
+   following
+3. Verificare watchlist / lista desiderati end-to-end sul nuovo modello utente
+4. Definire piano API Sportmonks necessario per V1 rispetto al trial/base attuale
 5. Validare in preview locale predictions/xG/live odds rispetto al piano Sportmonks
 6. Decidere policy definitiva calendario:
    `global feed + priority ranking` oppure `strict league filter`
