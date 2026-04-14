@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "@/lib/router-compat";
 import { motion } from "framer-motion";
-import { ArrowLeft, Clock, Star, TrendingUp, Crown } from "lucide-react";
+import { ArrowLeft, Bell, Clock, Star, TrendingUp, Crown } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GlassCard from "@/components/shared/GlassCard";
 import DataStatusChips from "@/components/shared/DataStatusChips";
@@ -80,7 +80,7 @@ export default function MatchDetail() {
   const { id } = useParams();
   const routeId = decodeURIComponent(String(id || ""));
   const fixtureIdToLoad = String(routeId || "").trim() || null;
-  const { favorites, toggleFavoriteMatch, isPremium } = useApp();
+  const { favorites, following, toggleFavoriteMatch, toggleFollowMatch, isPremium } = useApp();
   const [apiMatch, setApiMatch] = useState(null);
   const [fixtureLoading, setFixtureLoading] = useState(Boolean(fixtureIdToLoad));
   const [fixtureError, setFixtureError] = useState("");
@@ -124,6 +124,7 @@ export default function MatchDetail() {
 
   const match = apiMatch || createUnknownMatchFallback(routeId || Date.now().toString());
   const isFav = favorites.matches.includes(String(match.id));
+  const isFollowed = following.matches.includes(String(match.id));
   const availablePlayers = Array.isArray(match.players) ? match.players : [];
   const comparisonBookmakers =
     match.odds_provider === "not_available_with_current_feed" ? [] : match.bookmakers;
@@ -173,7 +174,7 @@ export default function MatchDetail() {
                   </div>
                   <span className="text-xs text-accent font-semibold">
                     {match.league}
-                    {match.state?.shortName ? ` · ${match.state.shortName}` : ""}
+                    {match.state?.shortName ? ` - ${match.state.shortName}` : ""}
                   </span>
                 </div>
                 <div className="text-center">
@@ -187,6 +188,17 @@ export default function MatchDetail() {
                 {match.valueBet && (
                   <ValueBetBadge type={match.valueBet.type} edge={match.valueBet.edge} />
                 )}
+                <button
+                  onClick={() => toggleFollowMatch(match.id)}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-xs font-semibold ${
+                    isFollowed
+                      ? "bg-primary/10 text-primary border border-primary/20"
+                      : "bg-secondary/50 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Bell className="w-4 h-4" />
+                  {isFollowed ? "Seguito" : "Segui"}
+                </button>
                 <button
                   onClick={() => toggleFavoriteMatch(match.id)}
                   className={`p-2 rounded-lg transition-all ${
@@ -405,7 +417,7 @@ export default function MatchDetail() {
                               <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
                                 <span className="text-foreground">{player.name}</span>
                                 <span className="text-muted-foreground">
-                                  #{player.number || "--"} · {player.position}
+                                  #{player.number || "--"} - {player.position}
                                 </span>
                               </div>
                             ))}
@@ -416,7 +428,7 @@ export default function MatchDetail() {
                               <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
                                 <span className="text-foreground">{player.name}</span>
                                 <span className="text-muted-foreground">
-                                  #{player.number || "--"} · {player.position}
+                                  #{player.number || "--"} - {player.position}
                                 </span>
                               </div>
                             ))}
@@ -572,3 +584,4 @@ export default function MatchDetail() {
     </div>
   );
 }
+

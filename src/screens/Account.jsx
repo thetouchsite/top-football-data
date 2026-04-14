@@ -1,12 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
-import { Crown, Bell, Star, Shield, ChevronRight, LogOut, BadgeCheck } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import React, { useEffect, useState } from "react";
+import {
+  BadgeCheck,
+  Bell,
+  ChevronRight,
+  Crown,
+  LogOut,
+  Shield,
+  Star,
+  UserRound,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import GlassCard from "@/components/shared/GlassCard";
 import { useApp } from "@/lib/AppContext";
 import { LEAGUES } from "@/lib/mockData";
 import { Link, useNavigate } from "@/lib/router-compat";
+
+function formatAuthProvider(provider) {
+  if (provider === "google") return "Google";
+  if (provider === "credential") return "Email e password";
+  return provider || "Non disponibile";
+}
 
 export default function Account() {
   const {
@@ -14,30 +30,93 @@ export default function Account() {
     isPremium,
     isAdmin,
     billing,
-    clearBillingState,
     signOut,
+    account,
+    accountNotifications,
+    preferredCompetitions,
+    favorites,
+    following,
+    saveProfile,
+    saveAccountPreferences,
+    profileSaving,
+    preferencesSaving,
   } = useApp();
   const navigate = useNavigate();
-  const [notifs, setNotifs] = useState({
-    valueBet: true,
-    liveAlert: true,
-    formazioni: true,
-    combo: false,
-  });
-  const [favLeagues, setFavLeagues] = useState([
-    "Serie A",
-    "Champions League",
-  ]);
+  const [displayName, setDisplayName] = useState(user.name || "");
+  const [profileMessage, setProfileMessage] = useState("");
+  const [featuredCompetitions, setFeaturedCompetitions] = useState(
+    preferredCompetitions
+  );
+  const [preferencesMessage, setPreferencesMessage] = useState("");
   const [billingMessage, setBillingMessage] = useState("");
   const [billingLoading, setBillingLoading] = useState(false);
+  const authProviders = Array.isArray(account?.meta?.authProviders)
+    ? account.meta.authProviders
+    : [];
+  const savedDisplayName = account?.profile?.displayName || user.name || "";
 
-  const toggleLeague = (league) => {
-    setFavLeagues((prev) =>
-      prev.includes(league)
-        ? prev.filter((item) => item !== league)
-        : [...prev, league]
-    );
-  };
+  useEffect(() => {
+    setDisplayName(savedDisplayName);
+  }, [savedDisplayName]);
+
+  useEffect(() => {
+    setFeaturedCompetitions(preferredCompetitions);
+  }, [preferredCompetitions]);
+
+  useEffect(() => {
+    const normalizedValue = String(displayName || "").trim();
+    const normalizedSaved = String(savedDisplayName || "").trim();
+
+    if (!normalizedValue || normalizedValue === normalizedSaved) {
+      if (!profileSaving) {
+        setProfileMessage("");
+      }
+      return;
+    }
+
+    setProfileMessage("Salvataggio...");
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        await saveProfile({ displayName: normalizedValue });
+        setProfileMessage("Profilo aggiornato.");
+      } catch (error) {
+        setProfileMessage(
+          error.message || "Impossibile aggiornare il profilo."
+        );
+      }
+    }, 700);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [displayName, saveProfile, savedDisplayName]);
+
+  useEffect(() => {
+    if (!profileMessage || profileSaving || profileMessage === "Salvataggio...") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setProfileMessage("");
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [profileMessage, profileSaving]);
+
+  useEffect(() => {
+    if (
+      !preferencesMessage ||
+      preferencesSaving ||
+      preferencesMessage === "Salvataggio..."
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setPreferencesMessage("");
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [preferencesMessage, preferencesSaving]);
 
   const openBillingPortal = async () => {
     if (!billing.customerId) {
@@ -78,9 +157,31 @@ export default function Account() {
     }
   };
 
+  const toggleFeaturedCompetition = async (competition) => {
+    const nextCompetitions = featuredCompetitions.includes(competition)
+      ? featuredCompetitions.filter((item) => item !== competition)
+      : [...featuredCompetitions, competition];
+
+    setFeaturedCompetitions(nextCompetitions);
+    setPreferencesMessage("Salvataggio...");
+
+    try {
+      await saveAccountPreferences({
+        notifications: accountNotifications,
+        preferredCompetitions: nextCompetitions,
+      });
+      setPreferencesMessage("Preferenze aggiornate.");
+    } catch (error) {
+      setFeaturedCompetitions(preferredCompetitions);
+      setPreferencesMessage(
+        error.message || "Impossibile aggiornare le preferenze."
+      );
+    }
+  };
+
   return (
     <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <h1 className="font-orbitron font-bold text-xl md:text-2xl text-foreground mb-8">
           IL MIO <span className="text-primary">ACCOUNT</span>
         </h1>
@@ -103,6 +204,7 @@ export default function Account() {
                   {billing.email || user.email}
                 </p>
               </div>
+
               <div
                 className={`p-3 rounded-xl text-center ${
                   isPremium
@@ -127,18 +229,8 @@ export default function Account() {
                 <div className="text-[11px] text-muted-foreground mt-1 uppercase tracking-wide">
                   Ruolo: {isAdmin ? "admin" : user.role}
                 </div>
-                {billing.currentPeriodEnd && (
-                  <span className="text-xs text-muted-foreground">
-                    Scadenza:{" "}
-                    {new Date(billing.currentPeriodEnd).toLocaleDateString("it-IT")}
-                  </span>
-                )}
-                {billing.subscriptionStatus && (
-                  <div className="text-[11px] text-muted-foreground mt-1">
-                    Stato Stripe: {billing.subscriptionStatus}
-                  </div>
-                )}
               </div>
+
               {!isPremium && (
                 <Link to="/premium" className="mt-3 block">
                   <button className="w-full py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold text-xs hover:bg-primary/20 transition-all">
@@ -146,11 +238,53 @@ export default function Account() {
                   </button>
                 </Link>
               )}
-              {billingMessage && (
-                <div className="mt-3 text-xs text-muted-foreground">
-                  {billingMessage}
+            </GlassCard>
+
+            <GlassCard>
+              <div className="flex items-center gap-2 mb-4">
+                <UserRound className="w-4 h-4 text-primary" />
+                <h3 className="font-semibold text-sm text-foreground">Profilo</h3>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="account-display-name"
+                    className="text-xs text-muted-foreground"
+                  >
+                    Nome visualizzato
+                  </Label>
+                  <Input
+                    id="account-display-name"
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    placeholder="Nome account"
+                    className="bg-secondary/30 border-border/40"
+                  />
                 </div>
-              )}
+
+                <div className="p-3 rounded-xl bg-secondary/30">
+                  <div className="text-xs text-muted-foreground">Email account</div>
+                  <div className="text-sm font-medium text-foreground mt-1">
+                    {user.email || "Non disponibile"}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-secondary/30">
+                  <div className="text-xs text-muted-foreground">
+                    Accesso configurato
+                  </div>
+                  <div className="text-sm font-medium text-foreground mt-1">
+                    {authProviders.length > 0
+                      ? authProviders.map(formatAuthProvider).join(" + ")
+                      : "Non disponibile"}
+                  </div>
+                </div>
+
+                <div className="text-xs text-muted-foreground min-h-4">
+                  {profileSaving ? "Salvataggio..." : profileMessage}
+                </div>
+              </div>
             </GlassCard>
 
             <GlassCard>
@@ -167,14 +301,7 @@ export default function Account() {
                     Sessione server-side attiva e account associato a identita reale.
                   </div>
                 </div>
-                {billing.customerId && (
-                  <button
-                    onClick={clearBillingState}
-                    className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-muted-foreground hover:bg-secondary/30"
-                  >
-                    Scollega mirror billing locale
-                  </button>
-                )}
+
                 <button
                   onClick={async () => {
                     await signOut();
@@ -182,7 +309,7 @@ export default function Account() {
                   }}
                   className="w-full flex items-center gap-2 text-left px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-muted-foreground hover:bg-secondary/30"
                 >
-                  <LogOut className="w-3.5 h-3.5" /> Esci dall'account
+                  <LogOut className="w-3.5 h-3.5" /> Esci dall&apos;account
                 </button>
               </div>
             </GlassCard>
@@ -191,74 +318,19 @@ export default function Account() {
           <div className="md:col-span-2 space-y-4">
             <GlassCard>
               <div className="flex items-center gap-2 mb-4">
-                <Bell className="w-4 h-4 text-foreground" />
-                <h3 className="font-semibold text-sm text-foreground">
-                  Notifiche
-                </h3>
-              </div>
-              <div className="space-y-3">
-                {[
-                  {
-                    key: "valueBet",
-                    label: "Value Bet rilevate",
-                    desc: "Alert quando viene identificato un valore",
-                  },
-                  {
-                    key: "liveAlert",
-                    label: "Alert Live",
-                    desc: "Notifiche per alta pressione e eventi importanti",
-                  },
-                  {
-                    key: "formazioni",
-                    label: "Formazioni confermate",
-                    desc: "Avviso quando escono le formazioni ufficiali",
-                  },
-                  {
-                    key: "combo",
-                    label: "Nuove combo premium",
-                    desc: "Notifica per nuove multiple algoritmiche",
-                  },
-                ].map((notification) => (
-                  <div
-                    key={notification.key}
-                    className="flex items-center justify-between p-3 rounded-xl bg-secondary/30"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-foreground">
-                        {notification.label}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {notification.desc}
-                      </div>
-                    </div>
-                    <Switch
-                      checked={notifs[notification.key]}
-                      onCheckedChange={(value) =>
-                        setNotifs((prev) => ({
-                          ...prev,
-                          [notification.key]: value,
-                        }))
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </GlassCard>
-
-            <GlassCard>
-              <div className="flex items-center gap-2 mb-4">
                 <Star className="w-4 h-4 text-accent" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Competizioni preferite
+                  Competizioni in evidenza
                 </h3>
               </div>
+
               <div className="flex flex-wrap gap-2">
                 {LEAGUES.map((league) => (
                   <button
                     key={league}
-                    onClick={() => toggleLeague(league)}
+                    onClick={() => toggleFeaturedCompetition(league)}
                     className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                      favLeagues.includes(league)
+                      featuredCompetitions.includes(league)
                         ? "bg-primary/10 border-primary/30 text-primary"
                         : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
                     }`}
@@ -267,23 +339,72 @@ export default function Account() {
                   </button>
                 ))}
               </div>
+
+              <div className="mt-4 text-xs text-muted-foreground">
+                Usate per personalizzare dashboard e priorita dei contenuti.
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground min-h-4">
+                {preferencesSaving ? "Salvataggio..." : preferencesMessage}
+              </div>
             </GlassCard>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <GlassCard>
+                <div className="flex items-center gap-2 mb-3">
+                  <Star className="w-4 h-4 text-accent" />
+                  <h3 className="font-semibold text-sm text-foreground">
+                    Preferiti
+                  </h3>
+                </div>
+                <div className="text-xs text-muted-foreground mb-4">
+                  Match e giocatori salvati per ritrovarli rapidamente. Nessun
+                  alert implicito.
+                </div>
+                <div className="text-sm text-foreground mb-4">
+                  {favorites.matches.length} match, {favorites.players.length} giocatori
+                </div>
+                <Link
+                  to="/preferiti"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold text-xs hover:bg-primary/20 transition-all"
+                >
+                  Gestisci preferiti
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </GlassCard>
+
+              <GlassCard>
+                <div className="flex items-center gap-2 mb-3">
+                  <Bell className="w-4 h-4 text-primary" />
+                  <h3 className="font-semibold text-sm text-foreground">
+                    Seguiti
+                  </h3>
+                </div>
+                <div className="text-xs text-muted-foreground mb-4">
+                  Match, giocatori e competizioni monitorati. Qui sono collegate
+                  anche le impostazioni notifiche.
+                </div>
+                <div className="text-sm text-foreground mb-4">
+                  {following.matches.length} match, {following.players.length} giocatori, {following.competitions.length} competizioni
+                </div>
+                <Link
+                  to="/seguiti"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold text-xs hover:bg-primary/20 transition-all"
+                >
+                  Gestisci seguiti
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </GlassCard>
+            </div>
 
             <GlassCard>
               <div className="flex items-center gap-2 mb-4">
                 <Shield className="w-4 h-4 text-muted-foreground" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Account
+                  Account e abbonamento
                 </h3>
               </div>
+
               <div className="space-y-2">
-                <Link
-                  to="/watchlist"
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-secondary/30 cursor-pointer hover:bg-secondary/50 transition-all"
-                >
-                  <span className="text-sm text-foreground">Gestisci watchlist</span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                </Link>
                 <button
                   onClick={openBillingPortal}
                   disabled={!billing.customerId || billingLoading}
@@ -296,6 +417,7 @@ export default function Account() {
                   </span>
                   <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 </button>
+
                 {isAdmin && (
                   <Link
                     to="/admin"
@@ -305,11 +427,23 @@ export default function Account() {
                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </Link>
                 )}
-                <button className="w-full flex items-center justify-between p-3 rounded-xl bg-secondary/30 cursor-pointer hover:bg-secondary/50 transition-all">
-                  <span className="text-sm text-foreground">Privacy & dati</span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                </button>
+
+                <div className="p-3 rounded-xl bg-secondary/30">
+                  <div className="text-sm text-foreground font-medium">
+                    Dati account
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Profilo, preferiti, seguiti e personalizzazione vengono salvati
+                    sul database associato all&apos;utente autenticato.
+                  </div>
+                </div>
               </div>
+
+              {billingMessage && (
+                <div className="mt-3 text-xs text-muted-foreground">
+                  {billingMessage}
+                </div>
+              )}
             </GlassCard>
           </div>
         </div>

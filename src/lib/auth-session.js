@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getAuth } from "@/lib/auth";
+import { getUserAccountState } from "@/lib/account-store";
 import { getBillingState } from "@/lib/billing-store";
 import { APP_ROLES, resolveAppRole, syncUserAccess } from "@/lib/auth-access";
 
@@ -55,16 +56,24 @@ export async function getEnrichedServerSession() {
     isPremium: Boolean(billing.isPremium),
   });
 
+  const account = await getUserAccountState({
+    userId: session.user.id,
+    email: session.user.email,
+    name: session.user.name,
+  });
+
   return {
     session: {
       ...session,
       user: {
         ...session.user,
+        name: account.profile.displayName || session.user.name,
         role: syncedAccess.role,
         plan: syncedAccess.plan,
         isPremium: syncedAccess.isPremium,
       },
     },
+    account,
     billing: {
       ...billing,
       plan: syncedAccess.plan,
