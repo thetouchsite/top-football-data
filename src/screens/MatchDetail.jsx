@@ -123,7 +123,7 @@ export default function MatchDetail() {
   }, [fixtureIdToLoad]);
 
   const match = apiMatch || createUnknownMatchFallback(routeId || Date.now().toString());
-  const isFav = favorites.matches.includes(match.id);
+  const isFav = favorites.matches.includes(String(match.id));
   const availablePlayers = Array.isArray(match.players) ? match.players : [];
   const comparisonBookmakers =
     match.odds_provider === "not_available_with_current_feed" ? [] : match.bookmakers;

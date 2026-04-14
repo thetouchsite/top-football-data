@@ -1,10 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+
+import { authClient } from "@/lib/auth-client";
 
 const AppContext = createContext({});
 const BILLING_STORAGE_KEY = "top-football-billing";
-const FAVORITES_STORAGE_KEY = "top-football-favorites-v2";
+const LEGACY_FAVORITES_STORAGE_KEY = "top-football-favorites-v2";
 const EMPTY_BILLING_STATE = {
   plan: "free",
   isPremium: false,
@@ -17,32 +19,16 @@ const EMPTY_BILLING_STATE = {
   updatedAt: null,
 };
 
-export const MOCK_USERS = {
-  guest: {
-    id: "guest",
-    name: "Ospite",
-    email: "ospite@demo.com",
-    plan: "free",
-    planLabel: "Free",
-    planExpiry: null,
-    avatar: "G",
-  },
-  premium: {
-    id: "premium",
-    name: "Marco Rossi",
-    email: "marco@demo.com",
-    plan: "premium",
-    planLabel: "Premium",
-    planExpiry: "31/12/2026",
-    avatar: "M",
-    favoriteLeagues: ["Serie A", "Champions League"],
-    notifications: {
-      valueBet: true,
-      liveAlert: true,
-      formazioni: true,
-      combo: false,
-    },
-  },
+const GUEST_USER = {
+  id: "guest",
+  name: "Guest",
+  email: null,
+  avatar: "G",
+  plan: "free",
+  planLabel: "Free",
+  role: "guest",
+  isPremium: false,
+  emailVerified: false,
 };
 
 const INITIAL_NOTIFICATIONS = [
@@ -53,159 +39,129 @@ const INITIAL_NOTIFICATIONS = [
   { id: 5, type: "lineup", title: "Formazione Confermata", message: "Inter ha confermato la formazione ufficiale", time: "3 ore fa", read: true },
 ];
 
+function buildUserFromSession(session, billing) {
+  if (!session?.user) {
+    return GUEST_USER;
+  }
+
+  const role = String(session.user.role || "user").toLowerCase();
+  const isPremium =
+    role === "admin" || role === "premium" || Boolean(billing?.isPremium || session.user.isPremium);
+  const plan = billing?.plan || session.user.plan || (isPremium ? "premium" : "free");
+  const planLabel = role === "admin" ? "Admin" : isPremium ? "Premium" : "Free";
+  const displayName = String(session.user.name || session.user.email || "Utente");
+
+  return {
+    id: session.user.id,
+    name: displayName,
+    email: session.user.email || null,
+    avatar: displayName.charAt(0).toUpperCase() || "U",
+    plan,
+    planLabel,
+    role,
+    isPremium,
+    emailVerified: Boolean(session.user.emailVerified),
+  };
+}
+
 export function AppProvider({ children }) {
-  const [userMode, setUserMode] = useState("guest"); // "guest" | "premium"
-  const [user, setUser] = useState(MOCK_USERS.guest);
+  const authSession = authClient.useSession();
+  const [serverSession, setServerSession] = useState(null);
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [favorites, setFavorites] = useState({ matches: [], teams: [], players: [] });
+  const [favoritesReady, setFavoritesReady] = useState(false);
   const [filters, setFilters] = useState({ league: "all", valueOnly: false, sort: "time", view: "grid" });
   const [billing, setBilling] = useState(EMPTY_BILLING_STATE);
   const [billingReady, setBillingReady] = useState(false);
+  const [accountReady, setAccountReady] = useState(false);
 
-  const syncBilling = React.useCallback((nextBilling) => {
-    setBilling((current) => ({ ...current, ...EMPTY_BILLING_STATE, ...nextBilling }));
-  }, []);
-
-  useEffect(() => {
-    setUser(MOCK_USERS[userMode]);
-  }, [userMode]);
-
-  const refreshBillingState = React.useCallback(async (seedBilling = null) => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    let initialBilling = seedBilling;
-
-    if (!initialBilling) {
-      try {
-        const storedBilling = window.localStorage.getItem(BILLING_STORAGE_KEY);
-        initialBilling = storedBilling ? JSON.parse(storedBilling) : EMPTY_BILLING_STATE;
-      } catch {
-        initialBilling = EMPTY_BILLING_STATE;
-      }
-    }
-
-    const customerId = String(initialBilling?.customerId || "").trim();
-    const email = String(initialBilling?.email || "").trim();
-
-    if (!customerId && !email) {
-      syncBilling({
-        ...EMPTY_BILLING_STATE,
-        ...initialBilling,
-      });
-      setBillingReady(true);
-      return;
-    }
-
+  const refreshAccountState = React.useCallback(async () => {
     try {
-      const searchParams = new URLSearchParams();
-
-      if (customerId) {
-        searchParams.set("customerId", customerId);
-      }
-
-      if (email) {
-        searchParams.set("email", email);
-      }
-
-      const response = await fetch(`/api/billing/status?${searchParams.toString()}`);
+      const response = await fetch("/api/account/session", {
+        cache: "no-store",
+      });
       const payload = await response.json();
 
       if (!response.ok) {
-        throw new Error(payload.error || "Impossibile sincronizzare lo stato billing.");
+        throw new Error(payload.error || "Impossibile recuperare la sessione account.");
       }
 
-      const nextBilling = {
+      setServerSession(payload.session || null);
+      setBilling({
         ...EMPTY_BILLING_STATE,
-        ...initialBilling,
-        ...payload.billing,
-      };
-
-      window.localStorage.setItem(BILLING_STORAGE_KEY, JSON.stringify(nextBilling));
-      syncBilling(nextBilling);
-    } catch {
-      syncBilling({
-        ...EMPTY_BILLING_STATE,
-        ...initialBilling,
-        source: initialBilling?.source || "local_support_state",
+        ...(payload.billing || {}),
       });
+    } catch {
+      setServerSession(null);
+      setBilling(EMPTY_BILLING_STATE);
     } finally {
       setBillingReady(true);
+      setAccountReady(true);
     }
-  }, [syncBilling]);
+  }, []);
+
+  useEffect(() => {
+    if (authSession.isPending) {
+      return;
+    }
+
+    refreshAccountState();
+  }, [authSession.data?.user?.id, authSession.isPending, refreshAccountState]);
+
+  const resolvedSession = serverSession || authSession.data || null;
+  const user = useMemo(
+    () => buildUserFromSession(resolvedSession, billing),
+    [resolvedSession, billing]
+  );
+  const isAuthenticated = Boolean(resolvedSession?.user?.id);
+  const isPremium = Boolean(user.isPremium);
+  const isAdmin = user.role === "admin";
+
+  const favoritesStorageKey = useMemo(
+    () => `top-football-favorites-v3:${user.id || "guest"}`,
+    [user.id]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    try {
-      const storedFavorites = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
-
-      if (storedFavorites) {
-        const parsedFavorites = JSON.parse(storedFavorites);
-        setFavorites({
-          matches: Array.isArray(parsedFavorites?.matches)
-            ? parsedFavorites.matches.map((id) => String(id))
-            : [],
-          teams: Array.isArray(parsedFavorites?.teams) ? parsedFavorites.teams : [],
-          players: Array.isArray(parsedFavorites?.players) ? parsedFavorites.players : [],
-        });
-      }
-    } catch {}
+    setFavoritesReady(false);
 
     try {
-      const storedBilling = window.localStorage.getItem(BILLING_STORAGE_KEY);
+      const storedFavorites = window.localStorage.getItem(favoritesStorageKey);
+      const legacyFavorites = window.localStorage.getItem(LEGACY_FAVORITES_STORAGE_KEY);
+      const parsedFavorites = JSON.parse(storedFavorites || legacyFavorites || "null");
 
-      if (!storedBilling) {
-        setBillingReady(true);
-        return;
-      }
-
-      const parsedBilling = JSON.parse(storedBilling);
-      syncBilling(parsedBilling);
-      refreshBillingState(parsedBilling);
+      setFavorites({
+        matches: Array.isArray(parsedFavorites?.matches)
+          ? parsedFavorites.matches.map((id) => String(id))
+          : [],
+        teams: Array.isArray(parsedFavorites?.teams) ? parsedFavorites.teams : [],
+        players: Array.isArray(parsedFavorites?.players) ? parsedFavorites.players : [],
+      });
     } catch {
-      setBillingReady(true);
+      setFavorites({ matches: [], teams: [], players: [] });
+    } finally {
+      setFavoritesReady(true);
     }
-  }, [refreshBillingState, syncBilling]);
+  }, [favoritesStorageKey]);
 
   useEffect(() => {
-    if (billing.isPremium) {
-      setUser((current) => ({
-        ...MOCK_USERS.premium,
-        email: billing.email || current.email || MOCK_USERS.premium.email,
-        planExpiry: billing.currentPeriodEnd
-          ? new Date(billing.currentPeriodEnd).toLocaleDateString("it-IT")
-          : MOCK_USERS.premium.planExpiry,
-      }));
-      return;
-    }
-
-    setUser(MOCK_USERS[userMode]);
-  }, [billing, userMode]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || !favoritesReady) {
       return;
     }
 
     window.localStorage.setItem(
-      FAVORITES_STORAGE_KEY,
+      favoritesStorageKey,
       JSON.stringify({
         matches: favorites.matches.map((id) => String(id)),
         teams: favorites.teams,
         players: favorites.players,
       })
     );
-  }, [favorites]);
-
-  /** Premium effettivo: abbonamento Stripe reale oppure simulazione da demo mode navbar. */
-  const isPremium = Boolean(billing.isPremium || userMode === "premium");
-
-  /** Premium solo da demo (nessun billing Stripe attivo): utile per badge UI. */
-  const isDemoPremium = Boolean(isPremium && !billing.isPremium);
+  }, [favorites, favoritesReady, favoritesStorageKey]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -221,12 +177,14 @@ export function AppProvider({ children }) {
         : [...prev.matches, normalizedId],
     }));
   };
+
   const toggleFavoriteTeam = (name) => {
     setFavorites((prev) => ({
       ...prev,
       teams: prev.teams.includes(name) ? prev.teams.filter((t) => t !== name) : [...prev.teams, name],
     }));
   };
+
   const toggleFavoritePlayer = (name) => {
     setFavorites((prev) => ({
       ...prev,
@@ -234,37 +192,59 @@ export function AppProvider({ children }) {
     }));
   };
 
-  const saveBillingState = React.useCallback((nextBilling) => {
-    if (typeof window === "undefined") {
-      return;
+  const saveBillingState = React.useCallback(async (nextBilling) => {
+    if (typeof window !== "undefined") {
+      const value = {
+        ...EMPTY_BILLING_STATE,
+        ...billing,
+        ...nextBilling,
+      };
+
+      window.localStorage.setItem(BILLING_STORAGE_KEY, JSON.stringify(value));
     }
 
-    const value = {
-      ...EMPTY_BILLING_STATE,
-      ...billing,
-      ...nextBilling,
-    };
+    await refreshAccountState();
+  }, [billing, refreshAccountState]);
 
-    window.localStorage.setItem(BILLING_STORAGE_KEY, JSON.stringify(value));
-    syncBilling(value);
-    refreshBillingState(value);
-  }, [billing, refreshBillingState, syncBilling]);
-
-  const clearBillingState = React.useCallback(() => {
+  const clearBillingState = React.useCallback(async () => {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(BILLING_STORAGE_KEY);
     }
 
-    syncBilling(EMPTY_BILLING_STATE);
-  }, [syncBilling]);
+    await refreshAccountState();
+  }, [refreshAccountState]);
+
+  const signOut = React.useCallback(async () => {
+    await authClient.signOut();
+    setServerSession(null);
+    setFavorites({ matches: [], teams: [], players: [] });
+    await refreshAccountState();
+  }, [refreshAccountState]);
 
   return (
     <AppContext.Provider value={{
-      user, userMode, setUserMode, isPremium, isDemoPremium,
-      billing, billingReady, saveBillingState, clearBillingState, refreshBillingState,
-      notifications, unreadCount, markAllRead, markRead,
-      favorites, toggleFavoriteMatch, toggleFavoriteTeam, toggleFavoritePlayer,
-      filters, setFilters,
+      user,
+      isAuthenticated,
+      isPremium,
+      isAdmin,
+      authSession,
+      billing,
+      billingReady,
+      accountReady,
+      saveBillingState,
+      clearBillingState,
+      refreshAccountState,
+      signOut,
+      notifications,
+      unreadCount,
+      markAllRead,
+      markRead,
+      favorites,
+      toggleFavoriteMatch,
+      toggleFavoriteTeam,
+      toggleFavoritePlayer,
+      filters,
+      setFilters,
     }}>
       {children}
     </AppContext.Provider>

@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "@/lib/router-compat";
 import {
   BarChart3, Activity, TrendingUp, Zap, Crown, Menu, X, ChevronRight,
-  Bell, Search, User, Star
+  Bell, Search, User, Star, LogOut, Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/AppContext";
@@ -28,7 +28,14 @@ export default function Navbar() {
   const [userOpen, setUserOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchMatches, setSearchMatches] = useState([]);
-  const { user, isPremium, isDemoPremium, setUserMode, userMode, unreadCount } = useApp();
+  const {
+    user,
+    isPremium,
+    isAdmin,
+    isAuthenticated,
+    unreadCount,
+    signOut,
+  } = useApp();
   const searchInputRef = useRef(null);
   const searchPanelRef = useRef(null);
   const notifsPanelRef = useRef(null);
@@ -109,7 +116,6 @@ export default function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 glass-strong pt-[env(safe-area-inset-top,0px)]">
       <div className="max-w-7xl mx-auto px-3 sm:px-6">
         <div className="flex items-center justify-between h-14">
-          {/* Logo */}
           <Link to="/dashboard" className="flex items-center gap-2 flex-shrink-0">
             <div className="w-7 h-7 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
               <BarChart3 className="w-3.5 h-3.5 text-primary" />
@@ -119,7 +125,6 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Nav */}
           <div className="hidden xl:flex items-center gap-0.5">
             {NAV_ITEMS.map((item) => {
               const isActive = location.pathname === item.path;
@@ -136,9 +141,7 @@ export default function Navbar() {
             })}
           </div>
 
-          {/* Right controls */}
           <div className="flex items-center gap-1">
-            {/* Search */}
             <div className="relative" ref={searchPanelRef}>
               <button
                 type="button"
@@ -188,7 +191,6 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Notifications */}
             <div className="relative" ref={notifsPanelRef}>
               <button
                 type="button"
@@ -216,7 +218,6 @@ export default function Navbar() {
               {notifsOpen && <NotificationsPanel onClose={() => setNotifsOpen(false)} />}
             </div>
 
-            {/* User */}
             <div className="relative" ref={userPanelRef}>
               <button
                 type="button"
@@ -232,29 +233,17 @@ export default function Navbar() {
                     return next;
                   });
                 }}
-                title={
-                  isPremium
-                    ? isDemoPremium
-                      ? "Account Premium (anteprima demo)"
-                      : "Account Premium"
-                    : "Account"
-                }
+                title={isAdmin ? "Account Admin" : isPremium ? "Account Premium" : "Account"}
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               >
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${isPremium ? "bg-accent/20 text-accent border border-accent/30" : "bg-secondary text-muted-foreground border border-border/50"}`}>
                   {user.avatar}
                 </div>
-                {isPremium && (
+                {isAuthenticated && (
                   <span className="hidden sm:flex items-center gap-1.5">
-                    <span className="text-xs font-semibold text-accent">Premium</span>
-                    {isDemoPremium && (
-                      <span
-                        className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-px rounded border border-border/60 bg-secondary/70 text-muted-foreground"
-                        title="Nessun abbonamento Stripe: modalità demo dalla navbar"
-                      >
-                        Demo
-                      </span>
-                    )}
+                    <span className={`text-xs font-semibold ${isPremium ? "text-accent" : "text-muted-foreground"}`}>
+                      {isAdmin ? "Admin" : user.planLabel}
+                    </span>
                   </span>
                 )}
               </button>
@@ -262,45 +251,62 @@ export default function Navbar() {
                 <div className="absolute right-0 top-10 w-56 glass-strong rounded-xl border border-border/50 shadow-xl z-50 p-2">
                   <div className="px-3 py-2 mb-1 border-b border-border/30">
                     <div className="font-semibold text-xs text-foreground">{user.name}</div>
-                    <div className="text-xs text-muted-foreground">{user.email}</div>
+                    <div className="text-xs text-muted-foreground">{user.email || "Non autenticato"}</div>
                     <div className={`text-xs font-semibold mt-1 flex flex-wrap items-center gap-1.5 ${isPremium ? "text-accent" : "text-muted-foreground"}`}>
                       <span>Piano: {user.planLabel}</span>
-                      {isDemoPremium && (
-                        <span className="text-[10px] uppercase tracking-wide px-1.5 py-px rounded border border-border/50 bg-secondary/60 text-muted-foreground font-bold">
-                          Demo
-                        </span>
-                      )}
                     </div>
                   </div>
-                  <Link to="/account" onClick={() => setUserOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
-                    <User className="w-3.5 h-3.5" /> Il mio account
-                  </Link>
-                  <Link to="/watchlist" onClick={() => setUserOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
-                    <Star className="w-3.5 h-3.5" /> Watchlist
-                  </Link>
+
+                  {isAuthenticated ? (
+                    <>
+                      <Link to="/account" onClick={() => setUserOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
+                        <User className="w-3.5 h-3.5" /> Il mio account
+                      </Link>
+                      <Link to="/watchlist" onClick={() => setUserOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
+                        <Star className="w-3.5 h-3.5" /> Watchlist
+                      </Link>
+                      {isAdmin && (
+                        <Link to="/admin" onClick={() => setUserOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
+                          <Shield className="w-3.5 h-3.5" /> Admin
+                        </Link>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Link to="/login" onClick={() => setUserOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
+                        <User className="w-3.5 h-3.5" /> Accedi
+                      </Link>
+                      <Link to="/register" onClick={() => setUserOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-foreground hover:bg-secondary/50 transition-all">
+                        <Star className="w-3.5 h-3.5" /> Crea account
+                      </Link>
+                    </>
+                  )}
+
                   <Link to="/premium" onClick={() => setUserOpen(false)}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-accent hover:bg-accent/10 transition-all">
                     <Crown className="w-3.5 h-3.5" /> Piani Premium
                   </Link>
-                  <div className="border-t border-border/30 mt-1 pt-1">
-                    <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium">Demo mode:</div>
-                    <button
-                      type="button"
-                      onClick={() => { setUserMode("guest"); setUserOpen(false); }}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all ${userMode === "guest" ? "bg-secondary/60 text-foreground" : "text-muted-foreground hover:bg-secondary/30"}`}
-                    >
-                      👤 Accesso Guest
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setUserMode("premium"); setUserOpen(false); }}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all ${userMode === "premium" ? "bg-accent/10 text-accent" : "text-muted-foreground hover:bg-secondary/30"}`}
-                    >
-                      👑 Accesso Premium
-                    </button>
-                  </div>
+
+                  {isAuthenticated && (
+                    <div className="border-t border-border/30 mt-1 pt-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await signOut();
+                          setUserOpen(false);
+                          navigate("/login");
+                        }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-xs text-muted-foreground hover:bg-secondary/30"
+                      >
+                        <LogOut className="w-3.5 h-3.5" /> Esci
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -313,7 +319,6 @@ export default function Navbar() {
               </Link>
             )}
 
-            {/* Mobile toggle */}
             <button
               type="button"
               aria-label={mobileOpen ? "Chiudi menu" : "Apri menu"}
@@ -332,7 +337,6 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile Nav */}
       {mobileOpen && (
         <div className="xl:hidden glass-strong border-t border-border/30 py-3 px-3 space-y-1">
           {NAV_ITEMS.map((item) => {
@@ -353,8 +357,10 @@ export default function Navbar() {
             <Link to="/premium" className="flex-1" onClick={() => setMobileOpen(false)}>
               <Button size="sm" className="w-full bg-primary text-primary-foreground text-xs glow-green-sm">Premium</Button>
             </Link>
-            <Link to="/account" className="flex-1" onClick={() => setMobileOpen(false)}>
-              <Button variant="outline" size="sm" className="w-full text-xs border-border/50">Account</Button>
+            <Link to={isAuthenticated ? "/account" : "/login"} className="flex-1" onClick={() => setMobileOpen(false)}>
+              <Button variant="outline" size="sm" className="w-full text-xs border-border/50">
+                {isAuthenticated ? "Account" : "Accedi"}
+              </Button>
             </Link>
           </div>
         </div>

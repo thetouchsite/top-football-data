@@ -1,6 +1,7 @@
 import "server-only";
 
-import { getDatabase } from "@/lib/mongodb";
+import { getOptionalDatabase } from "@/lib/mongodb";
+import { syncUserAccess } from "@/lib/auth-access";
 import {
   createSubscriptionState,
   isActiveSubscriptionStatus,
@@ -38,7 +39,14 @@ async function findExistingBilling(db, identifiers = {}) {
 }
 
 export async function upsertBillingState(input = {}) {
-  const db = await getDatabase();
+  const db = await getOptionalDatabase();
+
+  if (!db) {
+    throw new Error(
+      "Storage billing non disponibile in locale. Verifica la connessione MongoDB."
+    );
+  }
+
   const existing = await findExistingBilling(db, input);
   const billingState = createSubscriptionState(input, existing || {});
   const subscriptionQuery = buildLookupQuery(billingState);
@@ -91,11 +99,22 @@ export async function upsertBillingState(input = {}) {
     );
   }
 
+  await syncUserAccess({
+    email: billingState.email,
+    plan: billingState.plan,
+    isPremium: billingState.isPremium,
+  });
+
   return billingState;
 }
 
 export async function getBillingState(identifiers = {}) {
-  const db = await getDatabase();
+  const db = await getOptionalDatabase();
+
+  if (!db) {
+    return null;
+  }
+
   const record = await findExistingBilling(db, identifiers);
 
   return record ? createSubscriptionState(record) : null;

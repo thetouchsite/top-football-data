@@ -142,14 +142,14 @@ export default function Landing() {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <Link to="/dashboard">
+          <Link to="/login">
             <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
               Accedi
             </Button>
           </Link>
-          <Link to="/dashboard">
+          <Link to="/register">
             <Button size="sm" className="bg-primary text-primary-foreground font-semibold text-xs glow-green-sm">
-              Entra nella Piattaforma
+              Crea Account
             </Button>
           </Link>
         </div>

@@ -6,29 +6,7 @@ Stato documento: allineato al codice reale del repository dopo il pass
 "Sportmonks-first core migration"
 
 ====================================================================
-STATO ATTUALE IN 10 RIGHE
-====================================================================
-
-- Il progetto e buildabile e lint-clean.
-- Il core calcio usa ora Sportmonks come fonte primaria reale per schedule,
-  fixture detail, statistiche, lineups, predictions/xG quando disponibili e live.
-- Sportradar non e piu il provider principale user-facing.
-- Sportradar resta nel codice solo come fallback tecnico d'emergenza e per
-  il modulo futures separato.
-- L'ID pubblico canonico del prodotto e il fixture id Sportmonks.
-- I payload core restano normalizzati con provider, source, freshness,
-  competition, prediction_provider, odds_provider, lineup_status e provider_ids.
-- Search e watchlist partita usano feed reale e nuovi fixture ID, non piu mock.
-- I preferiti hanno version bump locale pulito:
-  storage key nuova per non trascinarsi legacy ids Sportradar.
-- Le pre-match odds Sportmonks sono ora integrate davvero in schedule e fixture
-  detail; il comparatore finale OddsMatrix resta comunque ancora mancante.
-- Cursor ha aggiunto un pass ulteriore su ranking feed, shell UI, landing,
-  premium e navbar, senza cambiare il fatto che la base resta Sportmonks-first.
-- MongoDB locale continua a risultare problematico in health per il TLS/SSL.
-
-====================================================================
-COMPLETATO NEL REPO
+ULTIMI EDIT/FIX FATTI
 ====================================================================
 
 1. Foundation provider/domain
@@ -100,9 +78,40 @@ COMPLETATO NEL REPO
 - fallback dichiarati
 - quote bookmaker match-by-match ancora non disponibili
 
-====================================================================
-FIX ESEGUITE NEL GRANDE REFACTOR
-====================================================================
+7. Foundation auth/account reale
+- login/register reali introdotti
+- sessione server-side reale introdotta
+- ruoli applicativi iniziali introdotti:
+  `user`
+  `premium`
+  `admin`
+- route auth dedicate introdotte in `src/app/api/auth/[...all]/route.js`
+- client auth dedicato in `src/lib/auth-client.js`
+- session/account guards introdotti in `src/lib/auth-session.js`
+- base access/role sync introdotta in `src/lib/auth-access.js`
+- area admin iniziale introdotta
+- navbar/account riallineati alla sessione reale
+- demo mode rimosso dal flusso principale
+
+8. Hardening auth locale + Google auth
+- fixata la UX Premium guest:
+  CTA ora porta a `/register?next=/premium`
+- login e registrazione ora portano con `next` coerente
+- Google auth preparata su:
+  `/login`
+  `/register`
+- Google One Tap reso opzionale via env:
+  `NEXT_PUBLIC_GOOGLE_ONE_TAP_ENABLED`
+- default locale impostato su One Tap spento per ridurre rumore FedCM
+- login Google mantenuto via bottone esplicito `Continua con Google`
+- account linking Google per email coincidente lasciato attivo
+- fallback auth locale introdotto:
+  se Mongo Atlas non e raggiungibile in dev, l'auth usa SQLite locale persistente
+  in `.data/auth-local.sqlite`
+- billing/access extra restano degradati se Mongo non e disponibile, ma
+  login/sessione non vanno piu in errore generico
+- errore OAuth raw Better Auth non e piu il target UX desiderato:
+  login/register ricevono errore leggibile via query string quando Google fallisce
 
 FASE 1. Hardening Sportradar-first
 - health endpoint con readiness di mongo, stripe e provider
@@ -147,61 +156,39 @@ FASE 6. Pass Cursor su ordinamento e shell
 - app shell rifinita con `QueryClientProvider`, `MotionConfig` e safe-area spacing
 
 ====================================================================
-PRIORITA ATTIVE
+STATO ATTUALE
 ====================================================================
 
-P0. Validare feed Sportmonks reale in preview
-- verificare che il piano attivo esponga davvero:
-  fixtures
-  livescores
-  lineups
-  statistics
-  standings
-  coaches
-  referees
-  formations
-  odds pre-match
-- verificare eventuali include/add-on mancanti sul piano:
-  `predictions.type`
-  `xGFixture`
-  `inplayOdds`
-- decidere se lasciare il default attuale:
-  calendario globale + ranking top leagues
-  oppure attivare `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`
+- Il progetto e buildabile e lint-clean.
+- Il core calcio usa ora Sportmonks come fonte primaria reale per schedule,
+  fixture detail, statistiche, lineups, predictions/xG quando disponibili e live.
+- Sportradar non e piu il provider principale user-facing.
+- Sportradar resta nel codice solo come fallback tecnico d'emergenza e per
+  il modulo futures separato.
+- L'ID pubblico canonico del prodotto e il fixture id Sportmonks.
+- I payload core restano normalizzati con provider, source, freshness,
+  competition, prediction_provider, odds_provider, lineup_status e provider_ids.
+- Search e watchlist partita usano feed reale e nuovi fixture ID, non piu mock.
+- I preferiti hanno version bump locale pulito:
+  storage key nuova per non trascinarsi legacy ids Sportradar.
+- La watchlist oggi persiste in locale e ricostruisce le partite salvate
+  dal feed schedule corrente a 14 giorni: funziona, ma va verificata meglio
+  sui casi fuori finestra / fixture non piu presenti nel calendario corrente.
+- Le pre-match odds Sportmonks sono ora integrate davvero in schedule e fixture
+  detail; il comparatore finale OddsMatrix resta comunque ancora mancante.
+- Cursor ha aggiunto un pass ulteriore su ranking feed, shell UI, landing,
+  premium e navbar, senza cambiare il fatto che la base resta Sportmonks-first.
+- MongoDB locale continua a risultare problematico in health per il TLS/SSL.
+- Esiste ora una base auth reale con sessione server-side e ruoli applicativi.
+- In locale l'auth puo ora continuare a funzionare anche se Mongo Atlas e giu,
+  usando SQLite solo per il layer auth.
+- Il login Google locale e disponibile via bottone esplicito.
+- Il bootstrap locale puo risultare lento al primo avvio per il tentativo iniziale
+  di connessione Mongo prima del fallback SQLite.
+- Watchlist e preferenze non sono ancora persistite a DB per utente:
+  la separazione per utente e oggi ancora locale lato browser.
 
-P0. Sistemare MongoDB reale
-- health locale oggi segnala errore TLS/SSL
-- senza questo resta incompleto il ciclo premium server-side
-
-P1. Integrare OddsMatrix
-- bookmaker comparison reale
-- best odds
-- movement
-- quote match-by-match nei blocchi UI
-
-P1. Chiudere premium server-side definitivo
-- user persistence
-- entitlement server-side completo
-- webhook Stripe validato in ambiente reale
-
-P2. Migliorare sezione analytics
-- player data piu ricca se il piano Sportmonks lo consente
-- coverage piu profonda
-- eventuale join con endpoint team/player/expected dedicati
-
-P2. Live e alerting
-- follow match persistito
-- alerting telegram/email/in-app
-- politiche di polling/refresh produzione
-
-P3. Multi-bet reale
-- combinazioni su mercati odds veri
-- engine safe/value/algorithmic reale
-- nessun placeholder locale nei percorsi premium finali
-
-====================================================================
 GAP APERTI OGGI
-====================================================================
 
 1. Odds match-by-match
 - pre-match odds Sportmonks ora disponibili
@@ -216,11 +203,18 @@ GAP APERTI OGGI
 - billing backend c'e
 - persistence DB e gating finale ancora da chiudere del tutto
 
-4. Alerting utente
+4. Area utenti da consolidare
+- base auth reale presente ma account area ancora da rifinire
+- Google base auth e presente, ma va rifinita/stress-testata meglio in locale e deploy
+- watchlist e preferenze ancora non persistite in DB
+- premium va consolidato definitivamente con entitlement e billing
+- area admin introdotta ma ancora iniziale
+
+5. Alerting utente
 - niente follow match persistito
 - niente alert live inviati davvero
 
-5. Sportmonks piano da verificare
+6. Sportmonks piano da verificare
 - confermato in preview locale:
   schedule
   fixture
@@ -240,9 +234,7 @@ GAP APERTI OGGI
   se viene acceso `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`, il feed schedule
   non e piu globale ma limitato alle league ids configurate via env
 
-====================================================================
 INPUT NECESSARI DAL TEAM
-====================================================================
 
 - conferma degli endpoint Sportmonks realmente inclusi nel piano
 - conferma se `predictions.type`, `xGFixture` e `inplayOdds` sono attivi
@@ -251,26 +243,14 @@ INPUT NECESSARI DAL TEAM
 - webhook secret Stripe finale
 - credenziali/docs OddsMatrix
 - conferma scope V1 free vs premium
+- credenziali Google OAuth reali:
+  `GOOGLE_CLIENT_ID`
+  `GOOGLE_CLIENT_SECRET`
+  `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
 
-====================================================================
-ORDINE CONSIGLIATO DA QUI
-====================================================================
-
-1. Validare in preview locale predictions/xG/live odds rispetto al piano Sportmonks
-2. Decidere policy definitiva calendario:
-   `global feed + priority ranking` oppure `strict league filter`
-3. Sistemare MongoDB reale
-4. Integrare OddsMatrix per comparatore e live odds bookmaker
-5. Chiudere premium server-side completo
-6. Aggiungere alerting persistito
-7. Costruire multi-bet reale
-
-====================================================================
 DEFINITION OF DONE DELLA FASE ATTUALE
-====================================================================
 
-La fase "Sportmonks-first core migration" puo dirsi chiusa solo quando:
-
+- La fase "Sportmonks-first core migration" puo dirsi chiusa solo quando:
 - preview locale mostra match reali Sportmonks in dashboard/modelli/live
 - preview locale mostra standings, coaches, referees, squads e pre-match odds reali in fixture detail
 - `/api/health` vede Sportmonks come provider core
@@ -278,3 +258,109 @@ La fase "Sportmonks-first core migration" puo dirsi chiusa solo quando:
 - search/watchlist navigano con ids Sportmonks
 - build e lint restano verdi
 - i documenti operativi restano allineati al codice
+
+====================================================================
+TO DO (PROSSIME COSE DA FARE)
+====================================================================
+
+P0. Consolidare area utenti sulla nuova base auth
+- separare chiaramente:
+  autenticazione
+  autorizzazione
+  billing premium
+  profilo utente
+  wishlist / follow / notifiche
+  admin area
+- definire quali route e API devono essere:
+  pubbliche
+  autenticate
+  premium
+  admin
+- definire middleware e guard server-side coerenti per tutto il progetto
+- completare profilo utente, settings, password/reset e privacy
+- validare definitivamente Google OAuth in locale e deploy
+- decidere se riattivare One Tap solo dopo stabilizzazione completa del flusso Google
+- consolidare premium reale sopra billing + sessione + ruolo
+- far evolvere l'area admin da base iniziale a pannello operativo
+
+P1. Definire piano API Sportmonks necessarie prima della validazione feed
+- mappare tutte le feature prodotto rispetto agli endpoint davvero necessari
+- separare chiaramente:
+  essenziali V1 con trial/base
+  nice-to-have
+  premium/add-on
+- costruire tabella "feature -> endpoint/include -> piano richiesto"
+- chiarire cosa puo restare derivato internamente anche senza endpoint premium
+
+P1. Verificare watchlist / lista desiderati end-to-end
+- verificare persistenza locale add/remove match
+- verificare navigazione da watchlist a match detail con fixture id Sportmonks
+- verificare comportamento quando la fixture salvata esce dalla finestra schedule corrente
+- verificare player follow e relativa UX
+- migrare la watchlist da storage locale a dati per-utente autenticato
+- decidere se salvare solo ids oppure anche uno snapshot minimo locale
+
+P2. Validare feed Sportmonks reale in preview
+- verificare che il piano attivo esponga davvero:
+  fixtures
+  livescores
+  lineups
+  statistics
+  standings
+  coaches
+  referees
+  formations
+  odds pre-match
+- verificare eventuali include/add-on mancanti sul piano:
+  `predictions.type`
+  `xGFixture`
+  `inplayOdds`
+- decidere se lasciare il default attuale:
+  calendario globale + ranking top leagues
+  oppure attivare `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`
+
+P2. Sistemare MongoDB reale
+- health locale oggi segnala errore TLS/SSL
+- senza questo resta incompleto il ciclo premium server-side
+- ridurre il tempo di attesa locale prima del fallback SQLite auth
+
+P3. Integrare OddsMatrix
+- bookmaker comparison reale
+- best odds
+- movement
+- quote match-by-match nei blocchi UI
+
+P3. Chiudere premium server-side definitivo
+- user persistence
+- entitlement server-side completo
+- webhook Stripe validato in ambiente reale
+
+P4. Migliorare sezione analytics
+- player data piu ricca se il piano Sportmonks lo consente
+- coverage piu profonda
+- eventuale join con endpoint team/player/expected dedicati
+
+P4. Live e alerting
+- follow match persistito
+- alerting telegram/email/in-app
+- politiche di polling/refresh produzione
+
+P5. Multi-bet reale
+- combinazioni su mercati odds veri
+- engine safe/value/algorithmic reale
+- nessun placeholder locale nei percorsi premium finali
+
+ORDINE CONSIGLIATO DA QUI
+
+1. Consolidare area utenti e permessi server-side sopra la nuova base auth
+2. Migrare watchlist / preferenze da storage locale a persistenza per-utente autenticato
+3. Definire piano API Sportmonks necessario per V1 rispetto al trial/base attuale
+4. Verificare watchlist / lista desiderati end-to-end sul nuovo modello utente
+5. Validare in preview locale predictions/xG/live odds rispetto al piano Sportmonks
+6. Decidere policy definitiva calendario:
+   `global feed + priority ranking` oppure `strict league filter`
+7. Sistemare MongoDB reale
+8. Integrare OddsMatrix per comparatore e live odds bookmaker
+9. Chiudere premium server-side completo
+10. Aggiungere alerting persistito
+11. Costruire multi-bet reale
