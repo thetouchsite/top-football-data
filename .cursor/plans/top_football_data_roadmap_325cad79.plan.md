@@ -11,6 +11,9 @@ todos:
   - id: sportmonks-matrix
     content: "Dettaglio costi/add-on: estendere sezione 5 roadmap in docs/sportmonks-matrix.md (pre-match vs + live)"
     status: pending
+  - id: sportmonks-value-bets-api
+    content: "Opzionale: integrare API ufficiale Sportmonks Value bets (add-on Predictions) — GET predictions/value-bets e per fixture; oggi UI usa solo buildDerivedValueBet"
+    status: pending
   - id: ui-minimal
     content: Pass di snellimento UI su Dashboard, Modelli, Analisi, Match detail, Multi-bet con pattern ripetibili
     status: pending
@@ -36,7 +39,7 @@ isProject: false
 
 ## Piani operativi per step (dettaglio)
 
-Ogni step primario ha un piano dedicato — indice: [`.cursor/plans/plan-00-indice-step-primari.md`](plan-00-indice-step-primari.md). Step 0 (Sportradar) **completato**: [`plan-00-sportradar-removal.md`](plan-00-sportradar-removal.md).
+Gli step operativi (0, 1, 2, …) sono descritti nelle sezioni numerate di questo stesso file roadmap.
 
 ## Contesto dal codice attuale
 
@@ -56,13 +59,13 @@ Ogni step primario ha un piano dedicato — indice: [`.cursor/plans/plan-00-indi
 
 ## 0. Rimozione dipendenze Sportradar — **COMPLETATO**
 
-Implementato: nessun pacchetto Sportradar, nessun fallback nel servizio football, health senza `sportradar`, domain/UI ripuliti, README aggiornato. Futures API = placeholder. Dettaglio e verifica: [`plan-00-sportradar-removal.md`](plan-00-sportradar-removal.md).
+Implementato: nessun pacchetto Sportradar, nessun fallback nel servizio football, health senza `sportradar`, domain/UI ripuliti, README aggiornato. Futures API = placeholder.
 
 ---
 
 ## 1. Nascondere «Dati Live» — **COMPLETATO**
 
-**Implementato (aprile 2026):** feature flag `NEXT_PUBLIC_FEATURE_DATI_LIVE` (abilitato solo se valore esattamente `true`; default assente = spento). Dettaglio: [`plan-01-dati-live-flag.md`](plan-01-dati-live-flag.md).
+**Implementato (aprile 2026):** feature flag `NEXT_PUBLIC_FEATURE_DATI_LIVE` (abilitato solo se valore esattamente `true`; default assente = spento). Piano operativo dettagliato: [`feature_flag_dati_live_5d1b1ea0.plan.md`](feature_flag_dati_live_5d1b1ea0.plan.md).
 
 - Helper: [`src/lib/feature-flags.js`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\feature-flags.js) (`isDatiLiveFeatureEnabled`).
 - **Middleware:** [`src/middleware.js`](c:\Users\ET\Downloads\Works\top-football-data\src\middleware.js) — con flag off, redirect `/dati-live` → `/dashboard`.
@@ -135,7 +138,9 @@ Prefisso tipico: `https://api.sportmonks.com/v3/football/` (override: `SPORTMONK
 5. `livescores/inplay`
 6. `livescores/latest`
 
-Non risultano nel repo chiamate HTTP dedicate solo a endpoint «predictions» se non già inclusi nelle risposte fixture/schedule (dipende da risposta reale e add-on).
+**Non implementate nel codice (backlog):** endpoint **Value bets** Sportmonks — `GET .../football/predictions/value-bets` e `GET .../football/predictions/value-bets/fixtures/{fixture_id}` (richiedono add-on **Predictions**). Tutorial: [Value Bet](https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions/value-bet). La UI «value bet» attuale usa **`buildDerivedValueBet`** nel normalizer, non questa API.
+
+Non risultano nel repo chiamate HTTP dedicate solo ad altri endpoint «predictions» o value-bets se non inclusi nelle risposte fixture/schedule (dipende da risposta reale e add-on).
 
 ### 5.4 Aree del prodotto senza API dati calcio esterna
 
@@ -159,13 +164,13 @@ Non risultano nel repo chiamate HTTP dedicate solo a endpoint «predictions» se
 |----------|------|
 | **Futures / outrights** (Multi-bet) | Implementare chiamate v3 e sostituire [`odds/futures/route.js`](c:\Users\ET\Downloads\Works\top-football-data\src\app\api\football\odds\futures\route.js) |
 | **Quote pre-match per comparatore** | Add-on **Odds** (o **Premium Odds** per più bookmaker) — [Plans & pricing](https://www.sportmonks.com/football-api/plans-pricing/) |
-| **Predictions / value ufficiali SM** | Add-on **Predictions** |
+| **Predictions / value ufficiali SM** | Add-on **Predictions**; value bet «vero» = endpoint `predictions/value-bets` (fair_odd vs odd bookmaker), non il derivato `buildDerivedValueBet` |
 | **xG / expected dal provider** | Verificare che il piano espanda il payload fixture o servano include aggiuntivi |
 | **Live odds bookmaker** (non solo derivate) | Spesso add-on separato; collegato alla pagina Dati Live |
 | **Piano leghe / rate limit** | Base Starter/Growth/Pro; filtro [`getSportmonksFixtureLeaguesFilterParam`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\providers\sportmonks\index.js) per ridurre perimetro |
 | **Matrice costi scritta** | Estendere sezione 5 o creare `docs/sportmonks-matrix.md` (todo `sportmonks-matrix` nel frontmatter) con costi stimati per scenario |
 
-Link documentazione: [Football API v3](https://docs.sportmonks.com/v3/), [Predictions](https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions).
+Link documentazione: [Football API v3](https://docs.sportmonks.com/v3/), [Predictions](https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions), [Value Bet (add-on Predictions)](https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions/value-bet).
 
 ---
 

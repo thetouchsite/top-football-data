@@ -10,7 +10,8 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 - API routes Node.js
 - MongoDB
 - Sportmonks Football API per fixture, schedule, livescores, statistiche, quote pre-match (in base al piano)
-- Calcolo value bet interno nel progetto
+- **Value bet in UI:** oggi da **modello interno** (`buildDerivedValueBet` in `src/lib/providers/sportmonks/index.js`), non dagli endpoint ufficiali Sportmonks.
+- **Value bet Sportmonks (API ufficiale):** richiede add-on **Predictions**; endpoint `GET /v3/football/predictions/value-bets` e `.../value-bets/fixtures/{id}` (fair odd, bookmaker, odd, stake, `is_value`). Documentazione: [Value Bet (Sportmonks)](https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions/value-bet). **Non ancora integrato** nel repo — backlog prodotto.
 
 ## Avvio locale
 
@@ -44,7 +45,15 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 ## Provider Strategy
 
 - Sportmonks Football API v3: schedule, fixture detail, livescores, dati squadra/classifiche (in base al piano e agli include)
-- Value bet: calcolo interno usando probabilita modello e quote implied
+- Probabilita **1X2**: da predizioni API Sportmonks se presenti, altrimenti modello derivato nel normalizer.
+- Probabilita **O/U 2.5 e GG/NG** esposte come `ouProb` / `ggProb` sul match normalizzato: ordine di priorita
+  (1) percentuali da predizioni API yes/no, (2) percentuali allineate al modello derivato `buildGoalMarkets`
+  (stesse basi numeriche delle quote derivate), (3) probabilita implicite dalle quote bookmaker (`100/quota`)
+  quando si usano decimali dal bookmaker. Dettaglio implementazione: `src/lib/providers/sportmonks/index.js`
+  (`extractPredictionBundle`, `buildGoalMarkets`, `resolveScheduleOuGgProbabilities`).
+- Value bet (attuale): segnale **euristico interno** (`buildDerivedValueBet`), non è l’output dell’API
+  **Value bets** di Sportmonks. Quando il contratto includerà l’add-on Predictions, valutare integrazione
+  degli endpoint value-bets e uso in UI al posto o accanto al derivato.
 
 ## Stato attuale
 
