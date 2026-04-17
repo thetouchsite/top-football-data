@@ -12,7 +12,6 @@
     "typecheck": "tsc -p ./jsconfig.json --noEmit"
   },
   "dependencies": {
-    "@api/sportradar-soccer": "file:.api/apis/sportradar-soccer",
     "@better-auth/mongo-adapter": "^1.6.3",
     "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^4.1.2",

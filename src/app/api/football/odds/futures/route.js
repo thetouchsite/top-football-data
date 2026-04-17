@@ -1,32 +1,22 @@
 import { NextResponse } from "next/server";
-import { SPORTRADAR_DEFAULT_SOCCER_SPORT_ID } from "@/lib/sportradar";
-import { getFuturesOddsPayload } from "@/server/football/service";
+
+import { SPORTMONKS_PROVIDER_ID } from "@/lib/providers/sportmonks";
 
 export const runtime = "nodejs";
 
-export async function GET(request) {
-  try {
-    const sportId =
-      request.nextUrl.searchParams.get("sportId") ||
-      SPORTRADAR_DEFAULT_SOCCER_SPORT_ID;
-    const requestedCompetitionId =
-      request.nextUrl.searchParams.get("competitionId") || "";
-    return NextResponse.json(
-      await getFuturesOddsPayload({
-        sportId,
-        competitionId: requestedCompetitionId,
-      })
-    );
-  } catch (error) {
-    console.error("Failed to fetch Sportradar futures odds:", error);
-
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Impossibile recuperare i futures odds da Sportradar.",
-      },
-      { status: 500 }
-    );
-  }
+/**
+ * Futures/outrights non sono ancora esposti via Sportmonks in questo endpoint.
+ * Placeholder finche gli outrights non sono esposti da Sportmonks; la UI riceve liste vuote coerenti.
+ */
+export async function GET() {
+  return NextResponse.json({
+    competitions: [],
+    selectedCompetition: null,
+    markets: [],
+    provider: SPORTMONKS_PROVIDER_ID,
+    source: "not_implemented",
+    isFallback: false,
+    notice:
+      "Futures/outrights: da integrare con Sportmonks. Il precedente feed e stato dismesso.",
+  });
 }

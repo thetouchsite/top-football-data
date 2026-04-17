@@ -48,8 +48,6 @@ export function createPrematchMatch(match, context = {}) {
       match?.provider_ids ||
       (provider === "sportmonks" && match?.id
         ? { sportmonks_fixture_id: String(match.id) }
-        : provider === "sportradar" && (match?.sportEventId || match?.id)
-          ? { sportradar_sport_event_id: String(match?.sportEventId || match?.id) }
-          : {}),
+        : {}),
   };
 }

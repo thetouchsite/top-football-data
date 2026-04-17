@@ -26,9 +26,7 @@ function formatSourceLabel(source) {
   if (normalizedSource === "sportmonks_api") return "Feed Sportmonks";
   if (normalizedSource === "sportmonks_live_latest") return "Sync live incrementale";
   if (normalizedSource === "sportmonks_cache") return "Cache provider";
-  if (normalizedSource === "sportradar_api") return "Feed Sportradar";
-  if (normalizedSource === "sportradar_cache") return "Cache provider";
-  if (normalizedSource === "emergency_fallback_sportradar") return "Fallback tecnico Sportradar";
+  if (normalizedSource === "not_implemented") return "Non implementato";
   if (normalizedSource === "provider_unavailable") return "Feed non disponibile";
   if (normalizedSource === "local_snapshot") return "Fallback snapshot locale";
   if (normalizedSource === "local_mock_data") return "Fallback locale dichiarato";
@@ -53,7 +51,6 @@ function formatPredictionProviderLabel(provider) {
   if (provider === "sportmonks_predictions") return "Predizioni: Sportmonks";
   if (provider === "derived_internal_model") return "Predizioni: modello derivato";
   if (provider === "fallback_local_model") return "Predizioni: fallback locale";
-  if (provider === "sportradar_probabilities") return "Predizioni: Sportradar Probabilities";
   return `Predizioni: ${provider}`;
 }
 

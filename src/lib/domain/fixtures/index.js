@@ -49,8 +49,6 @@ export function createFixtureDetail(fixture, context = {}) {
       fixture?.provider_ids ||
       (provider === "sportmonks" && fixture?.id
         ? { sportmonks_fixture_id: String(fixture.id) }
-        : provider === "sportradar" && (fixture?.sportEventId || fixture?.id)
-          ? { sportradar_sport_event_id: String(fixture?.sportEventId || fixture?.id) }
-          : {}),
+        : {}),
   };
 }

@@ -1,7 +1,5 @@
 const DEFAULT_PROVIDER_IDS = {
-  sportradar: [],
   sportmonks: [],
-  oddsmatrix: [],
 };
 
 const COMPETITION_CATALOG = [

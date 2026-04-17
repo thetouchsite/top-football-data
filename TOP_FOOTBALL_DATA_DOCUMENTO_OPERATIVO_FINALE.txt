@@ -1,7 +1,7 @@
 TOP FOOTBALL DATA
 DOCUMENTO OPERATIVO FINALE PER DEV
 
-Data aggiornamento: 2026-04-14
+Data aggiornamento: 2026-04-17
 Base del documento: stato reale del repository dopo il pass
 "Sportmonks-first core migration"
 
@@ -18,7 +18,7 @@ Il progetto oggi e:
 - con copy e payload molto piu coerenti con il brief cliente
 - con un pass UI/shell aggiuntivo fatto da Cursor su landing, premium,
   navbar e gerarchia del feed
-- con Sportradar degradato a backup tecnico e modulo futures separato
+- senza Sportradar nel codice; GET /api/football/odds/futures e placeholder fino a outrights Sportmonks
 
 Il progetto oggi NON e ancora:
 - una piattaforma con comparatore quote bookmaker reale
@@ -65,8 +65,7 @@ STATO ATTUALE REALE DEL REPO
   `src/server/football/service.js`
 - Sportmonks client e normalizzazione:
   `src/lib/providers/sportmonks/index.js`
-- Sportradar resta disponibile come backup:
-  `src/lib/providers/sportradar/*`
+- Sportradar: rimosso dal repository (nessun backup nel codice)
 
 4. Stato build
 - `npm run build` OK
@@ -91,16 +90,12 @@ Copertura primaria attuale Sportmonks:
 - predictions/xG quando disponibili nel piano
 - live
 
-Provider secondari / residuali:
-- Sportradar:
-  fallback tecnico emergenziale
-  futures odds separati
-- OddsMatrix:
-  NON ancora integrato
+Quote e odds:
+- unico provider dati: Sportmonks (pre-match/live in base al piano); nessun secondo provider odds esterno.
 
 Conclusione operativa:
 - lato prodotto il feed visibile e Sportmonks-first
-- lato engineering esiste ancora una rete di sicurezza Sportradar
+- lato engineering nessun secondo provider: solo Sportmonks + cache locale su errore/rate limit
 
 ====================================================================
 POLICY FEED ATTUALE
@@ -123,7 +118,7 @@ Stati ammessi lato UI:
 - `sportmonks_api`
 - `sportmonks_live_latest`
 - `sportmonks_cache`
-- `emergency_fallback_sportradar`
+- `not_implemented` (es. futures placeholder)
 - `provider_unavailable`
 
 ====================================================================
@@ -291,11 +286,11 @@ FASE F. Pass Cursor su UX shell e ranking
 GAP PRINCIPALI RISPETTO AL BRIEF FINALE
 ====================================================================
 
-1. OddsMatrix reale mancante
-- bookmaker comparison finale cross-provider
+1. Copertura odds / comparatore rispetto al brief
+- bookmaker comparison piu ricca (dipende da include odds Sportmonks nel piano)
 - best odds per market piu robusti
 - movement storico
-- quote contestuali live e multi-bookmaker complete
+- quote contestuali live e multi-bookmaker complete ove il piano lo consente
 
 2. Value bet reale mancante
 - oggi il valore e ancora un signal derivato
@@ -330,7 +325,6 @@ INPUT NECESSARI DAL TEAM
   oppure attivare `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`
 - fix MongoDB reale
 - webhook secret Stripe finale
-- credenziali/docs OddsMatrix
 - conferma perimetro Free vs Premium
 
 ====================================================================
@@ -341,7 +335,7 @@ ORDINE DI SVILUPPO CONSIGLIATO DA OGGI
 2. Decidere policy calendario definitiva:
    `global feed + priority ranking` oppure `strict league filter`
 3. Sistemare MongoDB reale
-4. Integrare OddsMatrix
+4. Approfondire odds Sportmonks (include/add-on piano) e comparatore in UI
 5. Chiudere gating premium server-side definitivo
 6. Aggiungere follow match e alert persistence
 7. Costruire multi-bet reale
@@ -362,8 +356,8 @@ Giudizio tecnico sintetico:
   top matches piu orientati alle leghe target
   shell piu solida
   landing/premium piu commerciali
-- L'architettura e pronta per il passo successivo piu importante:
-  OddsMatrix.
+- L'architettura e pronta per il passo successivo: arricchire quote e comparatore
+  sul feed Sportmonks gia integrato.
 - Il rischio principale non e piu architetturale, ma di copertura piano/provider:
   il piano locale non espone `predictions.type`, `xGFixture` e `inplayOdds`.
 - Il blocco tecnico piu concreto fuori dal feed calcio resta MongoDB TLS/SSL.

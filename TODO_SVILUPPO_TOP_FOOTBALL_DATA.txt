@@ -206,20 +206,20 @@ STATO ATTUALE
 - Il progetto e buildabile e lint-clean.
 - Il core calcio usa ora Sportmonks come fonte primaria reale per schedule,
   fixture detail, statistiche, lineups, predictions/xG quando disponibili e live.
-- Sportradar non e piu il provider principale user-facing.
-- Sportradar resta nel codice solo come fallback tecnico d'emergenza e per
-  il modulo futures separato.
+- Sportradar e stato rimosso dal codice (aprile 2026): nessun pacchetto ne fallback.
+- GET /api/football/odds/futures resta placeholder fino a integrazione outrights Sportmonks.
 - L'ID pubblico canonico del prodotto e il fixture id Sportmonks.
 - I payload core restano normalizzati con provider, source, freshness,
   competition, prediction_provider, odds_provider, lineup_status e provider_ids.
 - Search e watchlist partita usano feed reale e nuovi fixture ID, non piu mock.
 - I preferiti hanno version bump locale pulito:
-  storage key nuova per non trascinarsi legacy ids Sportradar.
+  storage key nuova per non trascinarsi legacy ids non canonici.
 - La watchlist oggi persiste in locale e ricostruisce le partite salvate
   dal feed schedule corrente a 14 giorni: funziona, ma va verificata meglio
   sui casi fuori finestra / fixture non piu presenti nel calendario corrente.
 - Le pre-match odds Sportmonks sono ora integrate davvero in schedule e fixture
-  detail; il comparatore finale OddsMatrix resta comunque ancora mancante.
+  detail; il comparatore multi-bookmaker completo resta da costruire sopra gli odds
+  Sportmonks disponibili nel piano.
 - Cursor ha aggiunto un pass ulteriore su ranking feed, shell UI, landing,
   premium e navbar, senza cambiare il fatto che la base resta Sportmonks-first.
 - MongoDB locale continua a risultare problematico in health per il TLS/SSL.
@@ -298,7 +298,6 @@ INPUT NECESSARI DAL TEAM
 - conferma se `lineups.xGLineup` e `statistics.type` sono attivi in produzione
 - fix o nuova stringa MongoDB valida
 - webhook secret Stripe finale
-- credenziali/docs OddsMatrix
 - conferma scope V1 free vs premium
 - credenziali Google OAuth reali:
   `GOOGLE_CLIENT_ID`
@@ -389,8 +388,8 @@ P2. Sistemare MongoDB reale
 - senza questo resta incompleto il ciclo premium server-side
 - ridurre il tempo di attesa locale prima del fallback SQLite auth
 
-P3. Integrare OddsMatrix
-- bookmaker comparison reale
+P3. Completare odds / comparatore su Sportmonks
+- bookmaker comparison reale (in base agli include odds del piano)
 - best odds
 - movement
 - quote match-by-match nei blocchi UI
@@ -430,7 +429,7 @@ ORDINE CONSIGLIATO DA QUI
 6. Decidere policy definitiva calendario:
    `global feed + priority ranking` oppure `strict league filter`
 7. Sistemare MongoDB reale
-8. Integrare OddsMatrix per comparatore e live odds bookmaker
+8. Completare comparatore e live odds bookmaker via feed Sportmonks (piano/include)
 9. Chiudere premium server-side completo
 10. Aggiungere alerting persistito
 11. Costruire multi-bet reale

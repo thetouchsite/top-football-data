@@ -1,12 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { getDatabase } from "@/lib/mongodb";
-import {
-  getOddsmatrixProviderReadiness,
-} from "@/lib/providers/oddsmatrix";
-import {
-  getSportradarProviderReadiness,
-} from "@/lib/providers/sportradar";
 import { getSportmonksProviderReadiness } from "@/lib/providers/sportmonks";
 import { getPremiumPlan, getStripe, getStripeMode } from "@/lib/stripe";
 
@@ -57,9 +51,7 @@ function getStripeReadiness() {
 export async function GET() {
   const mongodb = await getMongoReadiness();
   const stripe = getStripeReadiness();
-  const sportradar = getSportradarProviderReadiness();
   const sportmonks = getSportmonksProviderReadiness();
-  const oddsmatrix = getOddsmatrixProviderReadiness();
 
   return NextResponse.json({
     ok: mongodb.ready && stripe.ready && sportmonks.ready,
@@ -72,9 +64,7 @@ export async function GET() {
       mongodb,
       stripe,
       providers: {
-        sportradar,
         sportmonks,
-        oddsmatrix,
       },
     },
   });
