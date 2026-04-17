@@ -180,14 +180,14 @@ export default function Account() {
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
+    <div className="app-page">
+      <div className="app-content-narrow">
         <h1 className="font-orbitron font-bold text-xl md:text-2xl text-foreground mb-8">
           IL MIO <span className="text-primary">ACCOUNT</span>
         </h1>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="space-y-4">
+        <div className="grid min-w-0 gap-6 md:grid-cols-3">
+          <div className="min-w-0 space-y-4">
             <GlassCard>
               <div className="text-center mb-4">
                 <div
@@ -315,7 +315,7 @@ export default function Account() {
             </GlassCard>
           </div>
 
-          <div className="md:col-span-2 space-y-4">
+          <div className="min-w-0 space-y-4 md:col-span-2">
             <GlassCard>
               <div className="flex items-center gap-2 mb-4">
                 <Star className="w-4 h-4 text-accent" />

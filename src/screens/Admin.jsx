@@ -43,11 +43,11 @@ export default function Admin() {
   }, []);
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="font-orbitron font-black text-2xl text-foreground flex items-center gap-3">
+    <div className="app-page">
+      <div className="app-content-wide">
+        <div className="mb-8 flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="flex flex-wrap items-center gap-3 font-orbitron text-2xl font-black text-foreground">
               <Shield className="w-6 h-6 text-accent" />
               AREA ADMIN
             </h1>
@@ -59,7 +59,7 @@ export default function Admin() {
             type="button"
             onClick={loadUsers}
             disabled={loading}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            className="w-full shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
           >
             <RefreshCcw className="w-4 h-4 mr-2" />
             Aggiorna
@@ -72,7 +72,7 @@ export default function Admin() {
           </GlassCard>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="mb-6 grid min-w-0 grid-cols-2 gap-4 md:grid-cols-4">
           <GlassCard>
             <div className="text-xs text-muted-foreground mb-1">Utenti</div>
             <div className="font-orbitron font-black text-2xl text-foreground">{users.length}</div>
@@ -114,10 +114,10 @@ export default function Admin() {
                   key={user.id || user.email}
                   className="p-4 rounded-xl bg-secondary/30 border border-border/30"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <div className="font-semibold text-foreground">{user.name || "Utente"}</div>
-                      <div className="text-xs text-muted-foreground">{user.email}</div>
+                      <div className="break-all text-xs text-muted-foreground">{user.email}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] uppercase tracking-wide px-2 py-1 rounded-full bg-secondary/70 text-muted-foreground border border-border/40">

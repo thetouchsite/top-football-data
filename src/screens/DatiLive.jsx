@@ -110,8 +110,8 @@ export default function DatiLive() {
   const liveProbabilities = m?.liveProbabilities || EMPTY_PROBABILITIES;
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="app-page">
+      <div className="app-content">
         <SectionHeader
           title="DATI LIVE"
           accentWord="LIVE"
@@ -161,35 +161,30 @@ export default function DatiLive() {
 
         {liveMatches.length > 0 ? (
           <>
-            <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
+            <div className="scrollbar-hide mb-6 flex max-w-full min-w-0 gap-3 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch]">
               {liveMatches.map((liveMatch) => (
                 <button
                   key={liveMatch.id}
+                  type="button"
                   onClick={() => setSelectedMatchId(liveMatch.id)}
-                  className={`flex-shrink-0 glass rounded-xl px-4 py-3 text-left transition-all ${
+                  className={`glass w-[min(18rem,calc(100vw-2rem))] shrink-0 rounded-xl px-4 py-3 text-left transition-all ${
                     selectedMatchId === liveMatch.id
                       ? "border-primary/30 glow-green-sm"
                       : "hover:border-border"
                   }`}
                 >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Radio className="w-3 h-3 text-destructive animate-pulse" />
-                    <span className="text-xs text-destructive font-bold uppercase">Live</span>
-                    <span className="text-xs text-accent ml-1">{liveMatch.league}</span>
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <Radio className="h-3 w-3 shrink-0 animate-pulse text-destructive" />
+                    <span className="text-xs font-bold uppercase text-destructive">Live</span>
+                    <span className="ml-1 truncate text-xs text-accent">{liveMatch.league}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-foreground">
-                      {liveMatch.home}
-                    </span>
+                  <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                    <span className="truncate text-xs font-semibold text-foreground">{liveMatch.home}</span>
                     <span className="font-orbitron text-sm font-black text-foreground">
                       {liveMatch.homeScore}-{liveMatch.awayScore}
                     </span>
-                    <span className="text-xs font-semibold text-foreground">
-                      {liveMatch.away}
-                    </span>
-                    <span className="text-xs text-primary font-bold ml-1">
-                      {liveMatch.minute}'
-                    </span>
+                    <span className="truncate text-xs font-semibold text-foreground">{liveMatch.away}</span>
+                    <span className="text-xs font-bold text-primary sm:ml-1">{liveMatch.minute}'</span>
                   </div>
                 </button>
               ))}
@@ -203,33 +198,33 @@ export default function DatiLive() {
                   key={m.id}
                 >
                   <GlassCard className="mb-6 border-primary/20">
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-full bg-secondary/80 border border-border/50 flex items-center justify-center text-xs font-bold">
+                    <div className="flex flex-col flex-wrap gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex min-w-0 flex-1 flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
+                        <div className="flex min-w-0 max-w-full items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border/50 bg-secondary/80 text-xs font-bold">
                             {m.homeShort}
                           </div>
-                          <span className="font-bold text-lg text-foreground">{m.home}</span>
+                          <span className="truncate text-lg font-bold text-foreground">{m.home}</span>
                         </div>
-                        <div className="text-center">
+                        <div className="shrink-0 text-center">
                           <div className="font-orbitron text-4xl font-black text-foreground">
                             {m.homeScore} - {m.awayScore}
                           </div>
-                          <div className="flex items-center gap-1.5 justify-center mt-1">
-                            <Circle className="w-2.5 h-2.5 fill-primary text-primary animate-pulse" />
+                          <div className="mt-1 flex items-center justify-center gap-1.5">
+                            <Circle className="h-2.5 w-2.5 animate-pulse fill-primary text-primary" />
                             <span className="font-orbitron text-base font-bold text-primary">
                               {m.minute}'
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold text-lg text-foreground">{m.away}</span>
-                          <div className="w-12 h-12 rounded-full bg-secondary/80 border border-border/50 flex items-center justify-center text-xs font-bold">
+                        <div className="flex min-w-0 max-w-full items-center gap-3">
+                          <span className="truncate text-lg font-bold text-foreground">{m.away}</span>
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border/50 bg-secondary/80 text-xs font-bold">
                             {m.awayShort}
                           </div>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-1 text-right">
+                      <div className="flex min-w-0 flex-col gap-1 text-left sm:text-right">
                         <span className="text-xs text-accent">
                           {m.league}
                           {m.country ? ` · ${m.country}` : ""}
@@ -254,8 +249,8 @@ export default function DatiLive() {
                   </GlassCard>
                 </motion.div>
 
-                <div className="grid lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2 space-y-5">
+                <div className="grid min-w-0 gap-6 lg:grid-cols-3">
+                  <div className="min-w-0 space-y-5 lg:col-span-2">
                     <GlassCard>
                       <div className="relative w-full h-48 rounded-xl overflow-hidden bg-gradient-to-b from-green-900/40 via-green-800/30 to-green-900/40 border border-green-700/20">
                         <div className="absolute inset-0">
@@ -266,10 +261,10 @@ export default function DatiLive() {
                         </div>
                         <div className="absolute top-1/3 left-[65%] w-4 h-4 rounded-full bg-primary/80 animate-pulse-glow" />
                         <div className="absolute top-1/3 left-[65%] -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full bg-primary/10 animate-pulse" />
-                        <div className="absolute top-2 left-3 text-xs font-bold text-white/80 bg-black/40 px-2 py-1 rounded">
+                        <div className="absolute left-3 top-2 max-w-[45%] truncate rounded bg-black/40 px-2 py-1 text-xs font-bold text-white/80">
                           {m.home}
                         </div>
-                        <div className="absolute bottom-2 right-3 text-xs font-bold text-white/80 bg-black/40 px-2 py-1 rounded">
+                        <div className="absolute bottom-2 right-3 max-w-[45%] truncate rounded bg-black/40 px-2 py-1 text-xs font-bold text-white/80">
                           {m.away}
                         </div>
                       </div>
@@ -314,7 +309,7 @@ export default function DatiLive() {
                     <LiveTimeline events={m.events || []} home={m.home} away={m.away} />
                   </div>
 
-                  <div className="space-y-5">
+                  <div className="min-w-0 space-y-5">
                     <DangerIndex
                       value={m.dangerIndex}
                       message={m.dangerMessage}

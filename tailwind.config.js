@@ -56,6 +56,11 @@ const config = {
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
   			},
+  			live: 'hsl(var(--live))',
+  			surface: {
+  				DEFAULT: 'hsl(var(--surface))',
+  				raised: 'hsl(var(--surface-raised))'
+  			},
   			sidebar: {
   				DEFAULT: 'hsl(var(--sidebar-background))',
   				foreground: 'hsl(var(--sidebar-foreground))',

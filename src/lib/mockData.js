@@ -37,7 +37,7 @@ export const MATCHES = [
       { date: "22/10/23", home: "Milan", away: "Inter", score: "0-1" },
       { date: "19/02/23", home: "Inter", away: "Milan", score: "1-0" },
     ],
-    badges: ["Squadra in forma", "Trend Over 2.5", "Value Spot"],
+    badges: ["Squadra in forma", "Trend Over 2.5", "Value bet"],
     injuries: [
       { name: "de Vrij", team: "Inter", status: "assente" },
       { name: "Bennacer", team: "Milan", status: "dubbio" },
@@ -154,7 +154,7 @@ export const MATCHES = [
       { date: "10/03/25", home: "Liverpool", away: "Man Utd", score: "2-0" },
       { date: "07/12/24", home: "Man Utd", away: "Liverpool", score: "0-3" },
     ],
-    badges: ["Value Spot", "Trend 2"],
+    badges: ["Value bet", "Trend 2"],
     injuries: [{ name: "Rashford", team: "Man Utd", status: "dubbio" }],
     live: null,
   },

@@ -693,6 +693,15 @@ function buildGoalMarkets(xg) {
     Math.max(35, 22 + Math.min(xg.home, xg.away) * 22 + totalXg * 8)
   );
 
+  const ouProbDerived = {
+    over25: Math.round(over25Probability),
+    under25: Math.round(100 - over25Probability),
+  };
+  const ggProbDerived = {
+    goal: Math.round(goalProbability),
+    noGoal: Math.round(100 - goalProbability),
+  };
+
   return {
     ou: {
       over15: probabilityToOdds(Math.min(90, over25Probability + 18)),
@@ -706,6 +715,9 @@ function buildGoalMarkets(xg) {
       goal: probabilityToOdds(goalProbability),
       noGoal: probabilityToOdds(100 - goalProbability),
     },
+    /** Allineate alle stesse formule usate per le quote derivate sopra (modello interno). */
+    ouProbDerived,
+    ggProbDerived,
   };
 }
 
@@ -1165,6 +1177,8 @@ function buildDerivedValueBet(probabilities, xg) {
 
   const totalXg = xg.home + xg.away;
 
+  /* Over 2.5: edge = (totalXg - 2.4) * 10 arrotondato, tetto 10%.
+   * Per totalXg >= ~3.4 molte partite finiscono sul massimo 10% (effetto plateau in UI). */
   if (totalXg >= 2.9) {
     return {
       type: "Over 2.5",
@@ -1284,11 +1298,21 @@ function normalizePredictionEntry(entry, homeParticipant, awayParticipant) {
   };
 }
 
+function apiPercentFromPredictionValue(value) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return Math.round(Math.min(100, Math.max(0, value)));
+}
+
 function extractPredictionBundle(predictions, homeParticipant, awayParticipant) {
   const bundle = {
     probabilities: null,
     ou: null,
     gg: null,
+    /** Percentuali O/U e GG solo se presenti nelle predizioni API (yes/no). */
+    ouProb: null,
+    ggProb: null,
     scores: [],
   };
 
@@ -1314,6 +1338,16 @@ function extractPredictionBundle(predictions, homeParticipant, awayParticipant) 
           goal: probabilityToOdds(entry.yesValue),
           noGoal: probabilityToOdds(entry.noValue || 100 - entry.yesValue),
         };
+        const goalPct = apiPercentFromPredictionValue(entry.yesValue);
+        if (goalPct !== null) {
+          const noGoalPct = Number.isFinite(entry.noValue)
+            ? apiPercentFromPredictionValue(entry.noValue)
+            : apiPercentFromPredictionValue(100 - entry.yesValue);
+          bundle.ggProb = {
+            goal: goalPct,
+            noGoal: noGoalPct ?? Math.max(0, Math.min(100, 100 - goalPct)),
+          };
+        }
       }
 
       if (
@@ -1326,6 +1360,16 @@ function extractPredictionBundle(predictions, homeParticipant, awayParticipant) 
           over25: probabilityToOdds(entry.yesValue),
           under25: probabilityToOdds(entry.noValue || 100 - entry.yesValue),
         };
+        const overPct = apiPercentFromPredictionValue(entry.yesValue);
+        if (overPct !== null) {
+          const underPct = Number.isFinite(entry.noValue)
+            ? apiPercentFromPredictionValue(entry.noValue)
+            : apiPercentFromPredictionValue(100 - entry.yesValue);
+          bundle.ouProb = {
+            over25: overPct,
+            under25: underPct ?? Math.max(0, Math.min(100, 100 - overPct)),
+          };
+        }
       }
     });
 
@@ -2165,6 +2209,11 @@ function normalizeCoreSportmonksFixture(fixture = {}) {
       ou: oddsBundle.ou.over25 > 0 ? oddsBundle.ou : predictionBundle.ou || markets.ou,
       gg: oddsBundle.gg.goal > 0 ? oddsBundle.gg : predictionBundle.gg || markets.gg,
     },
+    /** Percentuali O/U e GG coerenti con le quote del modello derivato (`buildGoalMarkets`). */
+    derivedMarketProbabilities: {
+      ou: markets.ouProbDerived,
+      gg: markets.ggProbDerived,
+    },
     predictedScores: predictionBundle.scores.length
       ? predictionBundle.scores
       : buildLikelyScores(probabilities, derivedXg),
@@ -2179,11 +2228,66 @@ function normalizeCoreSportmonksFixture(fixture = {}) {
     subscription: asArray(fixture?.subscription || fixture?.subscriptions),
     metadata: getFixtureMetadataEntries(fixture),
     oddsBundle,
+    /** Probabilità O/U e GG ricavate dalle predizioni API (yes/no), quando presenti. */
+    predictionMarketProbabilities: {
+      ou: predictionBundle.ouProb || null,
+      gg: predictionBundle.ggProb || null,
+    },
   };
+}
+
+function impliedPercentFromDecimalOdd(decimal) {
+  if (!Number.isFinite(decimal) || decimal <= 1) {
+    return null;
+  }
+  return Math.round(Math.min(99, Math.max(1, 100 / decimal)));
+}
+
+function impliedOuGgFromDisplayDecimals(ouMarkets, ggMarkets) {
+  const ouImplied = {
+    over25: impliedPercentFromDecimalOdd(ouMarkets?.over25),
+    under25: impliedPercentFromDecimalOdd(ouMarkets?.under25),
+  };
+  const ggImplied = {
+    goal: impliedPercentFromDecimalOdd(ggMarkets?.goal),
+    noGoal: impliedPercentFromDecimalOdd(ggMarkets?.noGoal),
+  };
+  return {
+    ou: ouImplied.over25 !== null || ouImplied.under25 !== null ? ouImplied : null,
+    gg: ggImplied.goal !== null || ggImplied.noGoal !== null ? ggImplied : null,
+  };
+}
+
+function resolveScheduleOuGgProbabilities(core) {
+  const ouFromBookmaker = core.oddsBundle.ou.over25 > 0;
+  const ggFromBookmaker = core.oddsBundle.gg.goal > 0;
+  const implied = impliedOuGgFromDisplayDecimals(core.markets.ou, core.markets.gg);
+
+  let ouProb;
+  if (ouFromBookmaker) {
+    ouProb = implied.ou;
+  } else if (core.predictionMarketProbabilities?.ou) {
+    ouProb = core.predictionMarketProbabilities.ou;
+  } else {
+    ouProb = core.derivedMarketProbabilities?.ou || implied.ou;
+  }
+
+  let ggProb;
+  if (ggFromBookmaker) {
+    ggProb = implied.gg;
+  } else if (core.predictionMarketProbabilities?.gg) {
+    ggProb = core.predictionMarketProbabilities.gg;
+  } else {
+    ggProb = core.derivedMarketProbabilities?.gg || implied.gg;
+  }
+
+  return { ouProb, ggProb };
 }
 
 function normalizeScheduleLikeFixture(fixture = {}) {
   const core = normalizeCoreSportmonksFixture(fixture);
+
+  const { ouProb, ggProb } = resolveScheduleOuGgProbabilities(core);
 
   return {
     id: core.fixtureId,
@@ -2212,6 +2316,8 @@ function normalizeScheduleLikeFixture(fixture = {}) {
           },
     ou: core.markets.ou,
     gg: core.markets.gg,
+    ouProb,
+    ggProb,
     xg: core.derivedXg,
     valueBet: buildDerivedValueBet(core.probabilities, core.derivedXg),
     scores: core.predictedScores,
