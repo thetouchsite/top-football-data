@@ -20,6 +20,7 @@ import {
   matchLeagueFilter,
   sortMatchesByCriterion,
 } from "@/lib/football-filters";
+import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 
 const STATUS_TABS = [
   { key: "all", label: "Tutti" },
@@ -61,10 +62,10 @@ export default function ModelliPredittivi() {
       setScheduleError("");
 
       try {
-        const [schedulePayload, livePayload] = await Promise.all([
-          getScheduleWindow(14),
-          getLivescoresInplay().catch(() => null),
-        ]);
+        const schedulePayload = await getScheduleWindow(14);
+        const livePayload = isDatiLiveFeatureEnabled()
+          ? await getLivescoresInplay().catch(() => null)
+          : null;
 
         if (!isActive) {
           return;

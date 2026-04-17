@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "@/lib/router-compat";
 import {
   BarChart3, Activity, TrendingUp, Zap, Crown, Menu, X, ChevronRight,
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/AppContext";
 import { getScheduleWindow } from "@/api/football";
 import NotificationsPanel from "./NotificationsPanel";
+import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
@@ -40,6 +41,14 @@ export default function Navbar() {
   const searchPanelRef = useRef(null);
   const notifsPanelRef = useRef(null);
   const userPanelRef = useRef(null);
+
+  const navItems = useMemo(
+    () =>
+      NAV_ITEMS.filter(
+        (item) => item.path !== "/dati-live" || isDatiLiveFeatureEnabled()
+      ),
+    []
+  );
 
   const closeAllOverlays = React.useCallback(() => {
     setSearchOpen(false);
@@ -126,7 +135,7 @@ export default function Navbar() {
           </Link>
 
           <div className="hidden xl:flex items-center gap-0.5">
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
                 <Link key={item.path} to={item.path}
@@ -343,7 +352,7 @@ export default function Navbar() {
 
       {mobileOpen && (
         <div className="xl:hidden glass-strong border-t border-border/30 py-3 px-3 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)}

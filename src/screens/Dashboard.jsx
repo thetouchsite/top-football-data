@@ -22,6 +22,7 @@ import {
   matchLeagueFilter,
   sortMatchesByFeaturedPriority,
 } from "@/lib/football-filters";
+import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 
 const QUICK_LEAGUES = [
   "Tutti",
@@ -44,18 +45,30 @@ export default function Dashboard() {
 
     const loadDashboardFeeds = async () => {
       try {
-        const [nextSchedulePayload, nextLivePayload] = await Promise.all([
-          getScheduleWindow(14),
-          getLivescoresInplay(),
-        ]);
+        if (isDatiLiveFeatureEnabled()) {
+          const [nextSchedulePayload, nextLivePayload] = await Promise.all([
+            getScheduleWindow(14),
+            getLivescoresInplay(),
+          ]);
 
-        if (!isActive) {
-          return;
+          if (!isActive) {
+            return;
+          }
+
+          setSchedulePayload(nextSchedulePayload);
+          setLivePayload(nextLivePayload);
+          setDashboardNotice(nextLivePayload.notice || nextSchedulePayload.notice || "");
+        } else {
+          const nextSchedulePayload = await getScheduleWindow(14);
+
+          if (!isActive) {
+            return;
+          }
+
+          setSchedulePayload(nextSchedulePayload);
+          setLivePayload(null);
+          setDashboardNotice(nextSchedulePayload.notice || "");
         }
-
-        setSchedulePayload(nextSchedulePayload);
-        setLivePayload(nextLivePayload);
-        setDashboardNotice(nextLivePayload.notice || nextSchedulePayload.notice || "");
       } catch (error) {
         if (isActive) {
           setDashboardNotice(
@@ -132,6 +145,42 @@ export default function Dashboard() {
   const today = feedMatches.filter((match) => getMatchStatusBucket(match) === "today").length;
   const featuredTitle = today > 0 ? "Top Match del Giorno" : "Prossimo Slot Disponibile";
 
+  const statCards = useMemo(() => {
+    const cards = [
+      {
+        label: "Match Oggi",
+        value: today,
+        icon: Clock,
+        color: "text-blue-400",
+        path: "/modelli-predittivi",
+      },
+      {
+        label: "Value Bet",
+        value: valueBets.length,
+        icon: TrendingUp,
+        color: "text-primary",
+        path: "/modelli-predittivi",
+      },
+    ];
+    if (isDatiLiveFeatureEnabled()) {
+      cards.push({
+        label: "Partite Live",
+        value: liveCount,
+        icon: Zap,
+        color: "text-destructive",
+        path: "/dati-live",
+      });
+    }
+    cards.push({
+      label: "Combo Premium",
+      value: isPremium ? "Preview" : "Locked",
+      icon: Crown,
+      color: "text-accent",
+      path: "/multi-bet",
+    });
+    return cards;
+  }, [today, valueBets.length, liveCount, isPremium]);
+
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -149,50 +198,28 @@ export default function Dashboard() {
               freshness={schedulePayload?.freshness}
               predictionProvider={feedMatches[0]?.prediction_provider}
               oddsProvider={feedMatches[0]?.odds_provider}
+              notice={isDatiLiveFeatureEnabled() ? undefined : dashboardNotice}
             />
-            <DataStatusChips
-              provider={livePayload?.provider}
-              source={livePayload?.source}
-              freshness={livePayload?.freshness}
-              predictionProvider={liveMatches[0]?.prediction_provider}
-              oddsProvider={liveMatches[0]?.odds_provider}
-              lineupStatus={liveMatches[0]?.lineup_status}
-              notice={dashboardNotice}
-            />
+            {isDatiLiveFeatureEnabled() && (
+              <DataStatusChips
+                provider={livePayload?.provider}
+                source={livePayload?.source}
+                freshness={livePayload?.freshness}
+                predictionProvider={liveMatches[0]?.prediction_provider}
+                oddsProvider={liveMatches[0]?.odds_provider}
+                lineupStatus={liveMatches[0]?.lineup_status}
+                notice={dashboardNotice}
+              />
+            )}
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-          {[
-            {
-              label: "Match Oggi",
-              value: today,
-              icon: Clock,
-              color: "text-blue-400",
-              path: "/modelli-predittivi",
-            },
-            {
-              label: "Value Bet",
-              value: valueBets.length,
-              icon: TrendingUp,
-              color: "text-primary",
-              path: "/modelli-predittivi",
-            },
-            {
-              label: "Partite Live",
-              value: liveCount,
-              icon: Zap,
-              color: "text-destructive",
-              path: "/dati-live",
-            },
-            {
-              label: "Combo Premium",
-              value: isPremium ? "Preview" : "Locked",
-              icon: Crown,
-              color: "text-accent",
-              path: "/multi-bet",
-            },
-          ].map((stat, index) => (
+        <div
+          className={`grid grid-cols-2 gap-3 mb-8 ${
+            statCards.length >= 4 ? "md:grid-cols-4" : "md:grid-cols-3"
+          }`}
+        >
+          {statCards.map((stat, index) => (
             <motion.div
               key={stat.label}
               initial={{ opacity: 0, y: 20 }}
@@ -430,13 +457,15 @@ export default function Dashboard() {
                     <span className="text-xs text-foreground">Multi-Bet preview</span>
                     <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
                   </Link>
-                  <Link
-                    to="/dati-live"
-                    className="flex items-center justify-between p-2.5 rounded-lg bg-secondary/40 hover:bg-secondary/60 transition-all group"
-                  >
-                    <span className="text-xs text-foreground">Live center</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
-                  </Link>
+                  {isDatiLiveFeatureEnabled() && (
+                    <Link
+                      to="/dati-live"
+                      className="flex items-center justify-between p-2.5 rounded-lg bg-secondary/40 hover:bg-secondary/60 transition-all group"
+                    >
+                      <span className="text-xs text-foreground">Live center</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
+                    </Link>
+                  )}
                 </div>
               </GlassCard>
             )}

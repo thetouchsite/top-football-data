@@ -27,6 +27,7 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 - `STRIPE_SECRET_KEY`: chiave segreta Stripe per checkout e billing portal
 - `STRIPE_PREMIUM_PRICE_ID`: price id Stripe del piano premium mensile
 - `NEXT_PUBLIC_APP_URL`: URL base pubblica dell'app, usata nei redirect Stripe
+- `NEXT_PUBLIC_FEATURE_DATI_LIVE`: opzionale; imposta a `true` per mostrare la sezione Dati Live (nav, fetch livescore, `/dati-live`). Se assente o diverso da `true`, la funzione è spenta (meno chiamate API livescore). Dopo il cambio su Vercel eseguire un nuovo deploy.
 
 ## API disponibili
 
