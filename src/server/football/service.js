@@ -5,23 +5,6 @@ import { createProviderFreshness } from "@/lib/domain/freshness";
 import { createLiveMatch } from "@/lib/domain/live";
 import { createPrematchMatch } from "@/lib/domain/matches";
 import {
-  buildLiveProbabilityMap,
-  fetchSportradarCompetitionFutures,
-  fetchSportradarLiveData,
-  fetchSportradarLiveProbabilities,
-  fetchSportradarOddsCompetitions,
-  fetchSportradarScheduleWindow,
-  fetchSportradarSportEventBundle,
-  mergeLiveMatchWithProbabilities,
-  normalizeSportradarFixture,
-  normalizeSportradarFuturesMarket,
-  normalizeSportradarLiveMatch,
-  normalizeSportradarOddsCompetition,
-  normalizeSportradarScheduleMatch,
-  SPORTRADAR_DEFAULT_SOCCER_SPORT_ID,
-  SPORTRADAR_PROVIDER_ID,
-} from "@/lib/providers/sportradar";
-import {
   fetchSportmonksFixtureById,
   fetchSportmonksLivescoresInplay,
   fetchSportmonksLivescoresLatest,
@@ -40,15 +23,6 @@ const SCHEDULE_CACHE_TTL_MS = 60_000;
 const LIVE_CACHE_TTL_MS = 5_000;
 const LIVE_FULL_SYNC_INTERVAL_MS = 60_000;
 const FIXTURE_CACHE_TTL_MS = 300_000;
-
-const PREFERRED_COMPETITIONS = [
-  "serie a",
-  "premier league",
-  "champions league",
-  "uefa champions league",
-  "la liga",
-  "bundesliga",
-];
 
 function getScheduleCacheStore() {
   if (!globalThis.__footballScheduleWindowCache) {
@@ -104,10 +78,6 @@ function getFixtureInflightStore() {
   return globalThis.__footballFixtureInflight;
 }
 
-function hasSportradarFallback() {
-  return Boolean(process.env.SPORTRADAR_API_KEY);
-}
-
 function isRateLimitError(error) {
   return String(error?.message || "").toLowerCase().includes("too many requests");
 }
@@ -158,10 +128,7 @@ function buildSchedulePayload({
     rawSchedules,
     provider,
     source,
-    isFallback:
-      provider !== SPORTMONKS_PROVIDER_ID ||
-      source === "emergency_fallback_sportradar" ||
-      source === "provider_unavailable",
+    isFallback: provider !== SPORTMONKS_PROVIDER_ID || source === "provider_unavailable",
     freshness: createProviderFreshness({
       updatedAt,
       ttlMs: SCHEDULE_CACHE_TTL_MS,
@@ -186,10 +153,7 @@ function buildLivePayload({
     rawLivescores,
     provider,
     source,
-    isFallback:
-      provider !== SPORTMONKS_PROVIDER_ID ||
-      source === "emergency_fallback_sportradar" ||
-      source === "provider_unavailable",
+    isFallback: provider !== SPORTMONKS_PROVIDER_ID || source === "provider_unavailable",
     freshness: createProviderFreshness({
       updatedAt,
       ttlMs: LIVE_CACHE_TTL_MS,
@@ -222,10 +186,7 @@ function buildFixturePayload({
       competition: fixture.competition,
       provider,
       source,
-      isFallback:
-        provider !== SPORTMONKS_PROVIDER_ID ||
-        source === "emergency_fallback_sportradar" ||
-        source === "provider_unavailable",
+      isFallback: provider !== SPORTMONKS_PROVIDER_ID || source === "provider_unavailable",
       freshness: fixture.freshness,
       rawFixture,
       notice,
@@ -307,109 +268,6 @@ function buildSportmonksPlanNotice(rawPayload, matches = []) {
   return `Piano Sportmonks attivo: ${planNames.join(", ")}. Add-on predictions/xG/odds non rilevati nel feed corrente.`;
 }
 
-async function getSportradarScheduleFallback(days, originalError) {
-  if (!hasSportradarFallback()) {
-    return null;
-  }
-
-  const rawSchedules = await fetchSportradarScheduleWindow(days);
-  const normalizedMatches = rawSchedules.schedules.map((entry) =>
-    normalizeSportradarScheduleMatch(entry)
-  );
-
-  return buildSchedulePayload({
-    matches: normalizedMatches,
-    window: rawSchedules.window,
-    rawSchedules,
-    provider: SPORTRADAR_PROVIDER_ID,
-    source: "emergency_fallback_sportradar",
-    notice:
-      originalError?.message ||
-      "Sportmonks non disponibile: uso un fallback tecnico Sportradar.",
-    updatedAt: Date.now(),
-  });
-}
-
-async function getSportradarLiveFallback(originalError) {
-  if (!hasSportradarFallback()) {
-    return null;
-  }
-
-  const [rawLivescores, liveProbabilitiesResult] = await Promise.allSettled([
-    fetchSportradarLiveData(),
-    fetchSportradarLiveProbabilities(),
-  ]);
-
-  if (rawLivescores.status !== "fulfilled") {
-    throw rawLivescores.reason;
-  }
-
-  const probabilityMap =
-    liveProbabilitiesResult.status === "fulfilled"
-      ? buildLiveProbabilityMap(liveProbabilitiesResult.value)
-      : new Map();
-  const timelineMap = new Map(
-    rawLivescores.value.timelines.map((timeline) => [timeline?.id, timeline])
-  );
-  const ids = Array.from(
-    new Set([
-      ...rawLivescores.value.summaries.map((summary) => summary?.sport_event?.id),
-      ...rawLivescores.value.timelines.map((timeline) => timeline?.id),
-    ].filter(Boolean))
-  );
-  const normalizedMatches = ids
-    .map((id) => {
-      const normalizedMatch = normalizeSportradarLiveMatch(
-        rawLivescores.value.summaries.find((summary) => summary?.sport_event?.id === id),
-        timelineMap.get(id)
-      );
-
-      return normalizedMatch
-        ? mergeLiveMatchWithProbabilities(normalizedMatch, probabilityMap.get(id))
-        : null;
-    })
-    .filter(Boolean);
-
-  return buildLivePayload({
-    matches: normalizedMatches,
-    rawLivescores: {
-      livescores: rawLivescores.value,
-      probabilities:
-        liveProbabilitiesResult.status === "fulfilled"
-          ? liveProbabilitiesResult.value
-          : null,
-    },
-    provider: SPORTRADAR_PROVIDER_ID,
-    source: "emergency_fallback_sportradar",
-    notice:
-      originalError?.message ||
-      "Sportmonks live non disponibile: uso un fallback tecnico Sportradar.",
-    updatedAt: Date.now(),
-  });
-}
-
-function pickCompetition(competitions, explicitCompetitionId) {
-  if (explicitCompetitionId) {
-    return competitions.find((competition) => competition.id === explicitCompetitionId) || null;
-  }
-
-  const configuredCompetitionId = process.env.SPORTRADAR_FUTURES_COMPETITION_ID;
-
-  if (configuredCompetitionId) {
-    return (
-      competitions.find((competition) => competition.id === configuredCompetitionId) || null
-    );
-  }
-
-  const preferredMatch = competitions.find((competition) =>
-    PREFERRED_COMPETITIONS.some((preferred) =>
-      competition.name.toLowerCase().includes(preferred)
-    )
-  );
-
-  return preferredMatch || competitions[0] || null;
-}
-
 export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDULE_DAYS) {
   const safeDays = Number.isFinite(days) ? days : SPORTMONKS_DEFAULT_SCHEDULE_DAYS;
   const cacheKey = String(safeDays);
@@ -452,34 +310,23 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
           matches: cachedEntry.payload.matches,
           window: cachedEntry.payload.window,
           rawSchedules: cachedEntry.payload.rawSchedules,
-          provider: cachedEntry.payload.provider,
-          source:
-            cachedEntry.payload.provider === SPORTRADAR_PROVIDER_ID
-              ? "emergency_fallback_sportradar"
-              : "sportmonks_cache",
-          notice:
-            cachedEntry.payload.provider === SPORTRADAR_PROVIDER_ID
-              ? "Sportmonks non disponibile. Mostro l'ultimo fallback tecnico disponibile."
-              : isRateLimitError(error)
-                ? "Rate limit Sportmonks raggiunto. Mostro l'ultimo calendario disponibile dalla cache provider."
-                : error.message || "Mostro l'ultimo calendario disponibile dalla cache provider.",
+          provider: SPORTMONKS_PROVIDER_ID,
+          source: "sportmonks_cache",
+          notice: isRateLimitError(error)
+            ? "Rate limit Sportmonks raggiunto. Mostro l'ultimo calendario disponibile dalla cache provider."
+            : error.message || "Mostro l'ultimo calendario disponibile dalla cache provider.",
           updatedAt: cachedEntry.updatedAt,
         });
       }
 
-      const fallbackPayload = await getSportradarScheduleFallback(safeDays, error).catch(() => null);
-
-      return (
-        fallbackPayload ||
-        buildSchedulePayload({
-          matches: [],
-          window: null,
-          rawSchedules: null,
-          source: "provider_unavailable",
-          notice: error.message || "Impossibile recuperare il calendario dal provider corrente.",
-          updatedAt: null,
-        })
-      );
+      return buildSchedulePayload({
+        matches: [],
+        window: null,
+        rawSchedules: null,
+        source: "provider_unavailable",
+        notice: error.message || "Impossibile recuperare il calendario dal provider corrente.",
+        updatedAt: null,
+      });
     } finally {
       inflightStore.delete(cacheKey);
     }
@@ -547,33 +394,22 @@ export async function getLivescoresInplayPayload() {
         return buildLivePayload({
           matches: cacheStore.payload.matches,
           rawLivescores: cacheStore.payload.rawLivescores,
-          provider: cacheStore.payload.provider,
-          source:
-            cacheStore.payload.provider === SPORTRADAR_PROVIDER_ID
-              ? "emergency_fallback_sportradar"
-              : "sportmonks_cache",
-          notice:
-            cacheStore.payload.provider === SPORTRADAR_PROVIDER_ID
-              ? "Sportmonks live non disponibile. Mostro l'ultimo fallback tecnico in cache."
-              : isRateLimitError(error)
-                ? "Rate limit Sportmonks raggiunto. Mostro l'ultimo livescore disponibile dalla cache provider."
-                : error.message || "Mostro l'ultimo livescore disponibile dalla cache provider.",
+          provider: SPORTMONKS_PROVIDER_ID,
+          source: "sportmonks_cache",
+          notice: isRateLimitError(error)
+            ? "Rate limit Sportmonks raggiunto. Mostro l'ultimo livescore disponibile dalla cache provider."
+            : error.message || "Mostro l'ultimo livescore disponibile dalla cache provider.",
           updatedAt: cacheStore.updatedAt,
         });
       }
 
-      const fallbackPayload = await getSportradarLiveFallback(error).catch(() => null);
-
-      return (
-        fallbackPayload ||
-        buildLivePayload({
-          matches: [],
-          rawLivescores: null,
-          source: "provider_unavailable",
-          notice: error.message || "Impossibile recuperare i livescores in-play.",
-          updatedAt: null,
-        })
-      );
+      return buildLivePayload({
+        matches: [],
+        rawLivescores: null,
+        source: "provider_unavailable",
+        notice: error.message || "Impossibile recuperare i livescores in-play.",
+        updatedAt: null,
+      });
     } finally {
       inflightStore.promise = null;
     }
@@ -660,36 +496,12 @@ export async function getFixturePayload(fixtureId) {
           normalizedFixture: cachedEntry.normalizedFixture,
           rawFixture: cachedEntry.rawFixture,
           provider: cachedEntry.provider,
-          source:
-            cachedEntry.provider === SPORTRADAR_PROVIDER_ID
-              ? "emergency_fallback_sportradar"
-              : "sportmonks_cache",
+          source: "sportmonks_cache",
           updatedAt: cachedEntry.updatedAt,
           notice: isRateLimitError(error)
             ? "Rate limit Sportmonks raggiunto. Mostro l'ultima fixture disponibile dalla cache provider."
             : error.message || "Fixture provider non aggiornata. Mostro l'ultima versione in cache.",
         });
-      }
-
-      if (
-        normalizedFixtureId.startsWith("sr:") &&
-        hasSportradarFallback()
-      ) {
-        try {
-          const rawFixture = await fetchSportradarSportEventBundle(normalizedFixtureId);
-          const normalizedFixture = normalizeSportradarFixture(rawFixture);
-          const updatedAt = Date.now();
-
-          return buildFixturePayload({
-            normalizedFixture,
-            rawFixture,
-            provider: SPORTRADAR_PROVIDER_ID,
-            source: "emergency_fallback_sportradar",
-            updatedAt,
-            notice:
-              "Fixture legacy risolta con fallback tecnico Sportradar. I nuovi ID canonici sono Sportmonks.",
-          });
-        } catch {}
       }
 
       return buildEmptyFixturePayload(
@@ -703,58 +515,4 @@ export async function getFixturePayload(fixtureId) {
 
   fixtureInflightStore.set(normalizedFixtureId, requestPromise);
   return requestPromise;
-}
-
-export async function getFuturesOddsPayload({
-  sportId = SPORTRADAR_DEFAULT_SOCCER_SPORT_ID,
-  competitionId = "",
-} = {}) {
-  const competitionsResponse = await fetchSportradarOddsCompetitions(sportId);
-  const competitions = (Array.isArray(competitionsResponse?.competitions)
-    ? competitionsResponse.competitions
-    : []
-  ).map(normalizeSportradarOddsCompetition);
-  const selectedCompetition = pickCompetition(competitions, competitionId);
-
-  if (!selectedCompetition) {
-    return {
-      competitions,
-      selectedCompetition: null,
-      markets: [],
-      provider: SPORTRADAR_PROVIDER_ID,
-      source: "sportradar_odds_api",
-      isFallback: false,
-      notice:
-        "Nessuna competition futures disponibile per il piano o lo sport selezionato.",
-    };
-  }
-
-  try {
-    const futuresResponse = await fetchSportradarCompetitionFutures(selectedCompetition.id);
-    const markets = (Array.isArray(futuresResponse?.markets) ? futuresResponse.markets : [])
-      .map(normalizeSportradarFuturesMarket)
-      .filter((market) => market.outcomes.length > 0);
-
-    return {
-      competitions,
-      selectedCompetition,
-      markets,
-      rawFutures: futuresResponse,
-      provider: SPORTRADAR_PROVIDER_ID,
-      source: "sportradar_odds_api",
-      isFallback: false,
-    };
-  } catch (error) {
-    return {
-      competitions,
-      selectedCompetition,
-      markets: [],
-      provider: SPORTRADAR_PROVIDER_ID,
-      source: "sportradar_odds_api",
-      isFallback: false,
-      notice:
-        error.message ||
-        "Impossibile recuperare i futures odds con il provider corrente.",
-    };
-  }
 }

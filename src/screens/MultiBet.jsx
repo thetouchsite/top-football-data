@@ -354,7 +354,8 @@ export default function MultiBet() {
               </div>
               <p className="text-xs text-muted-foreground">
                 Questo feed copre mercati outright futures. Per quote evento 1X2,
-                O/U e comparazione bookmaker match-by-match serve ancora OddsMatrix.
+                O/U e comparazione bookmaker match-by-match servono gli odds Sportmonks
+                (pre-match/live secondo il piano) e il comparatore interno quando esposto dal feed.
               </p>
             </div>
           )}

@@ -6,7 +6,7 @@ import GlassCard from "@/components/shared/GlassCard";
 import DataStatusChips from "@/components/shared/DataStatusChips";
 import LiveStatBar from "@/components/live/LiveStatBar";
 import DangerIndex from "@/components/live/DangerIndex";
-import LiveOddsMatrix from "@/components/live/LiveOddsMatrix";
+import LiveOddsGrid from "@/components/live/LiveOddsGrid";
 import LiveTimeline from "@/components/live/LiveTimeline";
 import { getLivescoresInplay } from "@/api/football";
 
@@ -314,7 +314,7 @@ export default function DatiLive() {
                       message={m.dangerMessage}
                       history={m.dangerHistory}
                     />
-                    <LiveOddsMatrix odds={m.liveOdds} oddsProvider={m.odds_provider} />
+                    <LiveOddsGrid odds={m.liveOdds} oddsProvider={m.odds_provider} />
                   </div>
                 </div>
               </>

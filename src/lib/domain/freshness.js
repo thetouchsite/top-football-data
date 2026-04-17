@@ -12,7 +12,6 @@ export function isFallbackSource(source) {
     "local_mock_data",
     "local_snapshot",
     "route_error",
-    "emergency_fallback_sportradar",
     "provider_unavailable",
   ].includes(
     String(source || "").trim().toLowerCase()

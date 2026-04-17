@@ -2,7 +2,7 @@ import React from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import GlassCard from "../shared/GlassCard";
 
-export default function LiveOddsMatrix({ odds, oddsProvider = "derived_live_model" }) {
+export default function LiveOddsGrid({ odds, oddsProvider = "derived_live_model" }) {
   const markets = [
     { label: "OVER 2.5", value: odds.over25, trend: "up" },
     { label: "GOAL", value: odds.goal, trend: "up" },
@@ -13,10 +13,10 @@ export default function LiveOddsMatrix({ odds, oddsProvider = "derived_live_mode
 
   return (
     <GlassCard>
-      <h3 className="font-semibold text-foreground mb-1 text-sm uppercase tracking-wide">Live Odds Matrix</h3>
+      <h3 className="font-semibold text-foreground mb-1 text-sm uppercase tracking-wide">Quote live</h3>
       <p className="text-xs text-muted-foreground mb-4">
         {oddsProvider === "derived_live_model"
-          ? "Quote live stimate dal modello corrente in assenza di un provider odds match-by-match dedicato."
+          ? "Quote live stimate dal modello corrente quando il feed non espone bookmaker dedicati."
           : `Provider odds: ${oddsProvider}`}
       </p>
       <div className="space-y-2">

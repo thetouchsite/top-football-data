@@ -1,6 +1,6 @@
 # Top Football Pulse
 
-Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API server-side Node.js per MongoDB e integrazione centrata su Sportradar.
+Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API server-side Node.js per MongoDB e integrazione **Sportmonks** (Football API v3) per fixture, calendario, live, odds e contesto dati.
 
 ## Stack
 
@@ -9,9 +9,7 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 - Tailwind CSS
 - API routes Node.js
 - MongoDB
-- Sportradar Soccer API per fixture, live, lineups, statistiche e database calcistico
-- Sportradar Probabilities per prediction e contesto probabilistico
-- Sportradar Odds / Odds Comparison per quote bookmaker e comparazione quote
+- Sportmonks Football API per fixture, schedule, livescores, statistiche, quote pre-match (in base al piano)
 - Calcolo value bet interno nel progetto
 
 ## Avvio locale
@@ -24,15 +22,8 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 
 - `MONGODB_URI`: stringa di connessione MongoDB
 - `MONGODB_DB`: nome del database applicativo
-- `SPORTRADAR_API_KEY`: API key per Soccer API
-- `SPORTRADAR_ACCESS_LEVEL`: livello accesso Soccer API, default `trial`
-- `SPORTRADAR_LANGUAGE_CODE`: lingua feed, default `it`
-- `SPORTRADAR_FORMAT`: formato risposta, default `json`
-- `SPORTRADAR_SCHEDULE_DAYS`: finestra calendario live/schedule, default `4`
-- `SPORTRADAR_ODDS_API_KEY`: opzionale, per feed odds/comparison se separato dalla Soccer API
-- `SPORTRADAR_PROBABILITIES_API_KEY`: opzionale, per feed probabilities se separato dalla Soccer API
-- `SPORTRADAR_SOCCER_SPORT_ID`: sport id per odds futures, default `sr:sport:1`
-- `SPORTRADAR_FUTURES_COMPETITION_ID`: opzionale, forza una competition specifica per il modulo futures
+- `SPORTMONKS_API_TOKEN` (o `SPORTMONKS_API_KEY`): token Football API v3
+- Opzionali: `SPORTMONKS_BASE_URL`, `SPORTMONKS_SCHEDULE_DAYS`, `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`, `SPORTMONKS_SCHEDULE_LEAGUE_IDS` (vedi codice in `src/lib/providers/sportmonks`)
 - `STRIPE_SECRET_KEY`: chiave segreta Stripe per checkout e billing portal
 - `STRIPE_PREMIUM_PRICE_ID`: price id Stripe del piano premium mensile
 - `NEXT_PUBLIC_APP_URL`: URL base pubblica dell'app, usata nei redirect Stripe
@@ -41,27 +32,23 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 
 - `GET /api/health`: verifica rapida runtime/configurazione
 - `POST /api/leads`: salva lead dal form landing su MongoDB
-- `GET /api/football/fixtures/[fixtureId]`: dettaglio match da Sportradar
-- `GET /api/football/livescores/inplay`: livescore in tempo reale da Sportradar
-- `GET /api/football/schedules/window?days=4`: finestra calendario pre-match da Sportradar
-- `GET /api/football/odds/futures`: futures/outrights da Sportradar Odds Comparison Futures
+- `GET /api/football/fixtures/[fixtureId]`: dettaglio match da Sportmonks
+- `GET /api/football/livescores/inplay`: livescore in tempo reale da Sportmonks
+- `GET /api/football/schedules/window?days=4`: finestra calendario pre-match da Sportmonks
+- `GET /api/football/odds/futures`: placeholder (futures/outrights da integrare su Sportmonks)
 - `POST /api/billing/checkout`: crea una Stripe Checkout Session per il piano premium
 - `GET /api/billing/session`: verifica una checkout session completata
 - `POST /api/billing/portal`: apre il Billing Portal Stripe
 
 ## Provider Strategy
 
-- Sportradar Soccer API: fixture, live, lineups, statistiche, database calcistico
-- Sportradar Probabilities: prediction e probabilita pre-match/live
-- Sportradar Odds / Odds Comparison: quote bookmaker e comparazione bookmaker
+- Sportmonks Football API v3: schedule, fixture detail, livescores, dati squadra/classifiche (in base al piano e agli include)
 - Value bet: calcolo interno usando probabilita modello e quote implied
 
 ## Stato attuale
 
-- Il repo usa gia Sportradar per live, fixture e schedule.
-- Le schermate attuali possono restare interamente su Sportradar.
-- La parte betting richiede feed Sportradar Odds e/o Probabilities oltre alla sola Soccer API standard.
-- Il billing premium ora usa Stripe Checkout e Billing Portal, ma senza auth/webhook resta una base tecnica e non un sistema subscription completo.
+- Il feed dati calcio passa da Sportmonks; nessun fallback Sportradar.
+- Il billing premium usa Stripe Checkout e Billing Portal (vedi implementazione auth/billing nel repo).
 
 ## Deploy
 
