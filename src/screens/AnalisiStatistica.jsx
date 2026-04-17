@@ -1,8 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { BarChart3, Clock, Star } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import SectionHeader from "@/components/shared/SectionHeader";
+import PageIntro from "@/components/shared/PageIntro";
+import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import FormationPitch from "@/components/stats/FormationPitch";
 import PlayerCard from "@/components/stats/PlayerCard";
 import GlassCard from "@/components/shared/GlassCard";
@@ -145,30 +152,39 @@ export default function AnalisiStatistica() {
       if (sortBy === "form") return String(left.form || "").localeCompare(String(right.form || ""));
       return 0;
     });
-  }, [fixture?.players, sortBy]);
+  }, [fixture?.players, sortBy, homeSquad, awaySquad]);
+
+  const analisiFeedSummary = useMemo(() => {
+    const p = fixture?.provider || scheduleMeta?.provider || "—";
+    const st = fixture?.freshness?.state || scheduleMeta?.freshness?.state || "—";
+    const id = selectedFixtureId ? String(selectedFixtureId).slice(0, 8) : "—";
+    return `${p} · freshness ${st} · fixture …${id}`;
+  }, [fixture, scheduleMeta, selectedFixtureId]);
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <SectionHeader
+    <div className="app-page">
+      <div className="app-content">
+        <PageIntro
           title="ANALISI STATISTICA"
           accentWord="STATISTICA"
-          subtitle="Lineup, player profiles e metadata reali del feed corrente."
+          subtitle="Lineup, profili giocatori e coverage dal feed Sportmonks. Scegli una partita, poi approfondisci nei tab."
           icon={BarChart3}
         />
 
         <div className="mb-6 space-y-3">
-          <DataStatusChips
-            provider={fixture?.provider || scheduleMeta?.provider}
-            source={fixture?.source || scheduleMeta?.source}
-            freshness={fixture?.freshness || scheduleMeta?.freshness}
-            competition={fixture?.competition}
-            predictionProvider={fixture?.prediction_provider}
-            oddsProvider={fixture?.odds_provider}
-            lineupStatus={fixture?.lineup_status}
-            notice={scheduleMeta?.notice}
-          />
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <FeedMetaPanel summary={analisiFeedSummary} label="Stato feed dati">
+            <DataStatusChips
+              provider={fixture?.provider || scheduleMeta?.provider}
+              source={fixture?.source || scheduleMeta?.source}
+              freshness={fixture?.freshness || scheduleMeta?.freshness}
+              competition={fixture?.competition}
+              predictionProvider={fixture?.prediction_provider}
+              oddsProvider={fixture?.odds_provider}
+              lineupStatus={fixture?.lineup_status}
+              notice={scheduleMeta?.notice}
+            />
+          </FeedMetaPanel>
+          <div className="scrollbar-hide flex max-w-full min-w-0 gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
             {featuredScheduleMatches.slice(0, 8).map((match) => {
               const fixtureId = match.sportEventId || match.id;
               const isActive = fixtureId === selectedFixtureId;
@@ -176,11 +192,12 @@ export default function AnalisiStatistica() {
               return (
                 <button
                   key={match.id}
+                  type="button"
                   onClick={() => setSelectedFixtureId(fixtureId)}
-                  className={`flex-shrink-0 rounded-xl border px-3 py-2 text-left transition-all ${
+                  className={`flex-shrink-0 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
                     isActive
-                      ? "border-primary/30 bg-primary/10 text-primary"
-                      : "border-border/30 bg-secondary/20 text-muted-foreground hover:text-foreground"
+                      ? "bg-primary/12 font-medium text-primary"
+                      : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
                   }`}
                 >
                   <div className="text-xs font-semibold">{match.home} vs {match.away}</div>
@@ -202,7 +219,7 @@ export default function AnalisiStatistica() {
         </div>
 
         <Tabs defaultValue="formazioni" className="w-full">
-          <TabsList className="glass mb-6 h-11 flex-wrap h-auto">
+          <TabsList className="glass mb-4 min-h-10 flex-wrap h-auto py-1">
             <TabsTrigger
               value="formazioni"
               className="text-xs font-semibold data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
@@ -224,8 +241,8 @@ export default function AnalisiStatistica() {
           </TabsList>
 
           <TabsContent value="formazioni">
-            <div className="grid lg:grid-cols-5 gap-6">
-              <div className="lg:col-span-3 space-y-4">
+            <div className="grid min-w-0 gap-6 lg:grid-cols-5">
+              <div className="min-w-0 space-y-4 lg:col-span-3">
                 <FormationPitch
                   homeLineup={fixture?.lineups?.home || { formation: "--", players: [] }}
                   awayTeam={fixture?.away || "Away"}
@@ -252,36 +269,42 @@ export default function AnalisiStatistica() {
                   </span>
                 </GlassCard>
                 {!fixture?.lineups?.home?.players?.length && (homeSquad.length > 0 || awaySquad.length > 0) && (
-                  <GlassCard>
-                    <h3 className="font-semibold text-sm text-foreground mb-3">Rose disponibili</h3>
-                    <div className="grid md:grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <div className="text-xs font-semibold text-primary">{fixture?.home || "Home"}</div>
-                        {homeSquad.slice(0, 11).map((player) => (
-                          <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
-                            <span className="text-foreground">{player.name}</span>
-                            <span className="text-muted-foreground">
-                              #{player.number || "--"} · {player.position}
-                            </span>
+                  <Accordion type="single" collapsible className="rounded-xl border border-border/40 bg-secondary/10 px-3">
+                    <AccordionItem value="rose" className="border-0">
+                      <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">
+                        Rose squadra (senza formazione ufficiale)
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="grid md:grid-cols-2 gap-3 pb-2">
+                          <div className="space-y-2">
+                            <div className="text-xs font-semibold text-primary">{fixture?.home || "Home"}</div>
+                            {homeSquad.slice(0, 11).map((player) => (
+                              <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
+                                <span className="text-foreground">{player.name}</span>
+                                <span className="text-muted-foreground">
+                                  #{player.number || "--"} · {player.position}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-xs font-semibold text-primary">{fixture?.away || "Away"}</div>
-                        {awaySquad.slice(0, 11).map((player) => (
-                          <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
-                            <span className="text-foreground">{player.name}</span>
-                            <span className="text-muted-foreground">
-                              #{player.number || "--"} · {player.position}
-                            </span>
+                          <div className="space-y-2">
+                            <div className="text-xs font-semibold text-primary">{fixture?.away || "Away"}</div>
+                            {awaySquad.slice(0, 11).map((player) => (
+                              <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
+                                <span className="text-foreground">{player.name}</span>
+                                <span className="text-muted-foreground">
+                                  #{player.number || "--"} · {player.position}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </GlassCard>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 )}
               </div>
-              <div className="lg:col-span-2">
+              <div className="min-w-0 lg:col-span-2">
                 <PlayerCard
                   player={selectedPlayer}
                   expanded
@@ -292,12 +315,12 @@ export default function AnalisiStatistica() {
           </TabsContent>
 
           <TabsContent value="player">
-            <div className="grid lg:grid-cols-5 gap-6">
-              <div className="lg:col-span-3">
+            <div className="grid min-w-0 gap-6 lg:grid-cols-5">
+              <div className="min-w-0 lg:col-span-3">
                 <GlassCard>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-sm text-foreground">Giocatori disponibili</h3>
-                    <div className="flex items-center gap-2">
+                  <div className="mb-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">Giocatori disponibili</h3>
+                    <div className="flex shrink-0 items-center gap-2">
                       <span className="text-xs text-muted-foreground">Ordina:</span>
                       <select
                         value={sortBy}
@@ -329,19 +352,19 @@ export default function AnalisiStatistica() {
                             : "bg-secondary/30 hover:bg-secondary/50"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-secondary/80 border border-border/50 flex items-center justify-center text-xs font-bold text-primary">
+                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/50 bg-secondary/80 text-xs font-bold text-primary">
                               {player.number}
                             </div>
-                            <div>
-                              <div className="text-sm font-semibold text-foreground">{player.name}</div>
-                              <div className="text-xs text-muted-foreground">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-foreground">{player.name}</div>
+                              <div className="truncate text-xs text-muted-foreground">
                                 {player.team} · {player.position || player.pos}
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-4 text-xs">
+                          <div className="flex min-w-0 flex-shrink-0 flex-wrap items-center gap-2 text-xs sm:gap-4">
                             <span className="text-muted-foreground">
                               xG: <span className="text-primary font-bold">{player.xg}</span>
                             </span>
@@ -375,7 +398,7 @@ export default function AnalisiStatistica() {
                   </div>
                 </GlassCard>
               </div>
-              <div className="lg:col-span-2">
+              <div className="min-w-0 lg:col-span-2">
                 <PlayerCard
                   player={selectedPlayer}
                   expanded

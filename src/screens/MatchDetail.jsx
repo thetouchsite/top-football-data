@@ -4,7 +4,14 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Bell, Clock, Star, TrendingUp, Crown } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GlassCard from "@/components/shared/GlassCard";
+import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import ValueBetBadge from "@/components/shared/ValueBetBadge";
 import PremiumLock from "@/components/shared/PremiumLock";
 import FormationPitch from "@/components/stats/FormationPitch";
@@ -12,6 +19,7 @@ import PlayerCard from "@/components/stats/PlayerCard";
 import OddsComparison from "@/components/match/OddsComparison";
 import { useApp } from "@/lib/AppContext";
 import { getFixture } from "@/api/football";
+import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
 
 function createUnknownMatchFallback(fixtureId) {
   return {
@@ -29,6 +37,8 @@ function createUnknownMatchFallback(fixtureId) {
     odds: { home: 0, draw: 0, away: 0 },
     ou: { over25: 0, under25: 0 },
     gg: { goal: 0, noGoal: 0 },
+    ouProb: null,
+    ggProb: null,
     xg: { home: 0, away: 0 },
     valueBet: null,
     scores: [],
@@ -129,6 +139,14 @@ export default function MatchDetail() {
   const comparisonBookmakers =
     match.odds_provider === "not_available_with_current_feed" ? [] : match.bookmakers;
   const premiumAnalysis = useMemo(() => buildPremiumAnalysis(match), [match]);
+  const valueBetInsightText = useMemo(() => {
+    if (!match?.valueBet) {
+      return "";
+    }
+    const q = getOddsDecimalForValueBet(match);
+    const qLabel = q != null && Number.isFinite(Number(q)) ? ` @ ${q}` : "";
+    return `Value bet derivato: ${match.valueBet.type}${qLabel} · edge +${match.valueBet.edge}%`;
+  }, [match]);
   const standingsRows = Array.isArray(match.standings?.rows) ? match.standings.rows : [];
   const homeCoaches = Array.isArray(match.coaches?.home) ? match.coaches.home : [];
   const awayCoaches = Array.isArray(match.coaches?.away) ? match.coaches.away : [];
@@ -141,8 +159,8 @@ export default function MatchDetail() {
   }, [availablePlayers]);
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="app-page">
+      <div className="app-content">
         <Link
           to="/modelli-predittivi"
           className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground mb-6 transition-colors"
@@ -152,42 +170,40 @@ export default function MatchDetail() {
 
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <GlassCard className={`mb-6 ${match.valueBet ? "border-primary/20" : ""}`}>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-secondary/80 border border-border/50 flex items-center justify-center text-lg font-bold mx-auto mb-1">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+              <div className="flex min-w-0 flex-1 items-center justify-center gap-2 sm:gap-4 md:justify-start">
+                <div className="min-w-0 max-w-[38%] text-center sm:max-w-none">
+                  <div className="mx-auto mb-1 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/50 bg-secondary/80 text-lg font-bold">
                     {match.homeShort}
                   </div>
-                  <span className="font-bold text-foreground text-sm">{match.home}</span>
+                  <span className="line-clamp-2 text-sm font-bold text-foreground">{match.home}</span>
                 </div>
-                <div className="text-center px-4">
+                <div className="shrink-0 px-1 text-center sm:px-4">
                   <div className="font-orbitron text-2xl font-black text-muted-foreground">
                     {match.currentScore
                       ? `${match.currentScore.home}-${match.currentScore.away}`
                       : "VS"}
                   </div>
-                  <div className="flex items-center gap-1.5 mt-1 justify-center">
-                    <Clock className="w-3 h-3 text-muted-foreground" />
+                  <div className="mt-1 flex items-center justify-center gap-1.5">
+                    <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">
                       {match.date} - {match.time}
                     </span>
                   </div>
-                  <span className="text-xs text-accent font-semibold">
+                  <span className="line-clamp-2 text-xs font-semibold text-accent">
                     {match.league}
                     {match.state?.shortName ? ` - ${match.state.shortName}` : ""}
                   </span>
                 </div>
-                <div className="text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-secondary/80 border border-border/50 flex items-center justify-center text-lg font-bold mx-auto mb-1">
+                <div className="min-w-0 max-w-[38%] text-center sm:max-w-none">
+                  <div className="mx-auto mb-1 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/50 bg-secondary/80 text-lg font-bold">
                     {match.awayShort}
                   </div>
-                  <span className="font-bold text-foreground text-sm">{match.away}</span>
+                  <span className="line-clamp-2 text-sm font-bold text-foreground">{match.away}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {match.valueBet && (
-                  <ValueBetBadge type={match.valueBet.type} edge={match.valueBet.edge} />
-                )}
+              <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:justify-end md:gap-3">
+                {match.valueBet && <ValueBetBadge match={match} />}
                 <button
                   onClick={() => toggleFollowMatch(match.id)}
                   className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-xs font-semibold ${
@@ -212,51 +228,56 @@ export default function MatchDetail() {
               </div>
             </div>
 
-            <div className="mt-4 space-y-3">
-              <DataStatusChips
-                provider={match.provider}
-                source={match.source}
-                freshness={match.freshness}
-                competition={match.competition}
-                predictionProvider={match.prediction_provider}
-                oddsProvider={match.odds_provider}
-                lineupStatus={match.lineup_status}
-              />
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                {fixtureLoading && (
-                  <span className="px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/40">
-                    Caricamento Sportmonks...
-                  </span>
-                )}
-                {!fixtureLoading && (
-                  <span className="px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/40">
-                    {formatLineupLabel(match.lineup_status)}
-                  </span>
-                )}
-                {match.venue?.name && (
-                  <span className="px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/40">
-                    {match.venue.name}
-                  </span>
-                )}
-                {fixtureError && (
-                  <span className="px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
-                    {fixtureError}
-                  </span>
-                )}
-              </div>
+            <div className="mt-4">
+              <FeedMetaPanel
+                summary={`${match.provider || "—"} · ${match.league || "—"} · ${match.lineup_status || "lineup"}`}
+                label="Stato feed dati"
+              >
+                <DataStatusChips
+                  provider={match.provider}
+                  source={match.source}
+                  freshness={match.freshness}
+                  competition={match.competition}
+                  predictionProvider={match.prediction_provider}
+                  oddsProvider={match.odds_provider}
+                  lineupStatus={match.lineup_status}
+                />
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {fixtureLoading && (
+                    <span className="px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/40">
+                      Caricamento Sportmonks...
+                    </span>
+                  )}
+                  {!fixtureLoading && (
+                    <span className="px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/40">
+                      {formatLineupLabel(match.lineup_status)}
+                    </span>
+                  )}
+                  {match.venue?.name && (
+                    <span className="px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/40">
+                      {match.venue.name}
+                    </span>
+                  )}
+                </div>
+              </FeedMetaPanel>
+              {fixtureError && (
+                <div className="mt-2 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {fixtureError}
+                </div>
+              )}
             </div>
           </GlassCard>
         </motion.div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-3">
+          <div className="min-w-0 lg:col-span-2">
             <Tabs defaultValue="panoramica">
-              <TabsList className="glass mb-5 h-10 w-full justify-start">
+              <TabsList className="mb-5 flex h-auto min-h-10 w-full flex-wrap justify-start gap-1 p-1 glass">
                 {["panoramica", "statistiche", "formazioni", "contesto", "h2h"].map((tab) => (
                   <TabsTrigger
                     key={tab}
                     value={tab}
-                    className="text-xs capitalize data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                    className="shrink-0 text-xs capitalize data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
                   >
                     {tab === "h2h" ? "Testa a Testa" : tab === "contesto" ? "Contesto" : tab}
                   </TabsTrigger>
@@ -265,46 +286,60 @@ export default function MatchDetail() {
 
               <TabsContent value="panoramica" className="space-y-4">
                 <GlassCard>
-                  <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <h3 className="font-semibold text-sm text-foreground">
-                      Probabilita modello derivato
+                      Probabilità e quote
                     </h3>
-                    {match.odds_provider === "not_available_with_current_feed" && (
-                      <span className="text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
-                        Quote stimate, non bookmaker
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {match.odds_provider === "not_available_with_current_feed" && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
+                          Quote stimate, non bookmaker
+                        </span>
+                      )}
+                      {(match.ouProb || match.ggProb) && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/30">
+                          O/U e GG: % da predizioni API, modello derivato o implicite dalle quote
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {[
                       { label: `1 - ${match.home}`, probability: match.prob.home, odds: match.odds.home },
                       { label: "X - Pareggio", probability: match.prob.draw, odds: match.odds.draw },
                       { label: `2 - ${match.away}`, probability: match.prob.away, odds: match.odds.away },
                     ].map((item) => (
-                      <div key={item.label} className="text-center p-3 rounded-xl bg-secondary/50">
-                        <div className="text-xs text-muted-foreground mb-1">{item.label}</div>
+                      <div key={item.label} className="rounded-xl bg-secondary/50 p-3 text-center">
+                        <div className="mb-1 line-clamp-2 text-xs text-muted-foreground">{item.label}</div>
                         <div className="font-bold text-xl text-foreground">{item.probability}%</div>
                         <div className="text-sm font-semibold text-accent mt-1">{item.odds}</div>
                       </div>
                     ))}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="flex justify-between p-3 rounded-lg bg-secondary/30">
-                      <span className="text-xs text-muted-foreground">Over 2.5</span>
-                      <span className="text-xs font-bold text-foreground">{match.ou.over25}</span>
-                    </div>
-                    <div className="flex justify-between p-3 rounded-lg bg-secondary/30">
-                      <span className="text-xs text-muted-foreground">Under 2.5</span>
-                      <span className="text-xs font-bold text-foreground">{match.ou.under25}</span>
-                    </div>
-                    <div className="flex justify-between p-3 rounded-lg bg-secondary/30">
-                      <span className="text-xs text-muted-foreground">Goal</span>
-                      <span className="text-xs font-bold text-foreground">{match.gg.goal}</span>
-                    </div>
-                    <div className="flex justify-between p-3 rounded-lg bg-secondary/30">
-                      <span className="text-xs text-muted-foreground">No Goal</span>
-                      <span className="text-xs font-bold text-foreground">{match.gg.noGoal}</span>
-                    </div>
+                    {[
+                      { label: "Over 2.5", odd: match.ou.over25, prob: match.ouProb?.over25 },
+                      { label: "Under 2.5", odd: match.ou.under25, prob: match.ouProb?.under25 },
+                      { label: "Goal", odd: match.gg.goal, prob: match.ggProb?.goal },
+                      { label: "No Goal", odd: match.gg.noGoal, prob: match.ggProb?.noGoal },
+                    ].map((row) => (
+                      <div
+                        key={row.label}
+                        className="flex flex-col gap-1 rounded-lg bg-secondary/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <span className="text-xs text-muted-foreground">{row.label}</span>
+                        <div className="text-right">
+                          {typeof row.prob === "number" ? (
+                            <>
+                              <div className="text-sm font-bold text-foreground">{row.prob}%</div>
+                              <div className="text-xs font-semibold text-accent">{row.odd}</div>
+                            </>
+                          ) : (
+                            <span className="text-xs font-bold text-foreground">{row.odd}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </GlassCard>
 
@@ -368,9 +403,9 @@ export default function MatchDetail() {
                   {match.scorers.length > 0 ? (
                     <div className="space-y-2">
                       {match.scorers.map((scorer, index) => (
-                        <div key={`${scorer.name}-${index}`} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-                          <span className="text-sm text-foreground">{scorer.name}</span>
-                          <div className="flex items-center gap-4">
+                        <div key={`${scorer.name}-${index}`} className="flex min-w-0 flex-col gap-2 rounded-lg bg-secondary/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="min-w-0 truncate text-sm text-foreground">{scorer.name}</span>
+                          <div className="flex min-w-0 flex-shrink-0 flex-wrap items-center gap-2 sm:gap-4">
                             <span className="text-xs text-muted-foreground">xG <span className="text-primary font-bold">{scorer.xg}</span></span>
                             <span className="text-xs font-bold text-foreground">{scorer.odds}</span>
                             <span className="text-xs text-primary font-semibold">{scorer.prob}%</span>
@@ -408,33 +443,39 @@ export default function MatchDetail() {
                       </GlassCard>
                     )}
                     {!match.lineups?.home?.players?.length && (homeSquad.length > 0 || awaySquad.length > 0) && (
-                      <GlassCard>
-                        <h3 className="font-semibold text-sm text-foreground mb-3">Rose squadra</h3>
-                        <div className="grid md:grid-cols-2 gap-3">
-                          <div className="space-y-2">
-                            <div className="text-xs font-semibold text-primary">{match.home}</div>
-                            {homeSquad.slice(0, 11).map((player) => (
-                              <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
-                                <span className="text-foreground">{player.name}</span>
-                                <span className="text-muted-foreground">
-                                  #{player.number || "--"} - {player.position}
-                                </span>
+                      <Accordion type="single" collapsible className="rounded-xl border border-border/40 bg-secondary/10 px-3">
+                        <AccordionItem value="rose-md" className="border-0">
+                          <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">
+                            Rose squadra (lista compatta)
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="grid md:grid-cols-2 gap-3 pb-2">
+                              <div className="space-y-2">
+                                <div className="text-xs font-semibold text-primary">{match.home}</div>
+                                {homeSquad.slice(0, 11).map((player) => (
+                                  <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
+                                    <span className="text-foreground">{player.name}</span>
+                                    <span className="text-muted-foreground">
+                                      #{player.number || "--"} - {player.position}
+                                    </span>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                          <div className="space-y-2">
-                            <div className="text-xs font-semibold text-primary">{match.away}</div>
-                            {awaySquad.slice(0, 11).map((player) => (
-                              <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
-                                <span className="text-foreground">{player.name}</span>
-                                <span className="text-muted-foreground">
-                                  #{player.number || "--"} - {player.position}
-                                </span>
+                              <div className="space-y-2">
+                                <div className="text-xs font-semibold text-primary">{match.away}</div>
+                                {awaySquad.slice(0, 11).map((player) => (
+                                  <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
+                                    <span className="text-foreground">{player.name}</span>
+                                    <span className="text-muted-foreground">
+                                      #{player.number || "--"} - {player.position}
+                                    </span>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      </GlassCard>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
                     )}
                   </div>
                   <PlayerCard
@@ -444,80 +485,90 @@ export default function MatchDetail() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="contesto" className="space-y-4">
-                <GlassCard>
-                  <h3 className="font-semibold text-sm text-foreground mb-4">Standings stagione</h3>
-                  {standingsRows.length > 0 ? (
-                    <div className="space-y-2">
-                      {standingsRows.slice(0, 8).map((row) => (
-                        <div
-                          key={row.id}
-                          className={`grid grid-cols-[32px_1fr_40px_40px_48px] gap-2 items-center p-2.5 rounded-lg ${
-                            row.highlighted ? "bg-primary/10 border border-primary/20" : "bg-secondary/30"
-                          }`}
-                        >
-                          <span className="text-xs font-bold text-muted-foreground">{row.position}</span>
-                          <span className="text-xs font-semibold text-foreground truncate">{row.team}</span>
-                          <span className="text-xs text-center text-muted-foreground">{row.played}</span>
-                          <span className="text-xs text-center text-muted-foreground">{row.goalDifference}</span>
-                          <span className="text-xs text-right font-bold text-primary">{row.points} pt</span>
+              <TabsContent value="contesto" className="space-y-3">
+                <Accordion type="multiple" defaultValue={["standings"]} className="space-y-2">
+                  <AccordionItem value="standings" className="rounded-xl border border-border/40 bg-secondary/10 px-3">
+                    <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline py-3">
+                      Standings stagione
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      {standingsRows.length > 0 ? (
+                        <div className="space-y-2 pb-2">
+                          {standingsRows.slice(0, 8).map((row) => (
+                            <div
+                              key={row.id}
+                              className={`grid min-w-0 grid-cols-[28px_minmax(0,1fr)_36px_36px_44px] gap-1.5 items-center rounded-lg p-2 sm:grid-cols-[32px_minmax(0,1fr)_40px_40px_48px] sm:gap-2 sm:p-2.5 ${
+                                row.highlighted ? "bg-primary/10 border border-primary/20" : "bg-secondary/30"
+                              }`}
+                            >
+                              <span className="text-xs font-bold text-muted-foreground">{row.position}</span>
+                              <span className="text-xs font-semibold text-foreground truncate">{row.team}</span>
+                              <span className="text-xs text-center text-muted-foreground">{row.played}</span>
+                              <span className="text-xs text-center text-muted-foreground">{row.goalDifference}</span>
+                              <span className="text-xs text-right font-bold text-primary">{row.points} pt</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Classifica stagione non disponibile nel feed corrente.
-                    </p>
-                  )}
-                </GlassCard>
+                      ) : (
+                        <p className="text-xs text-muted-foreground pb-2">
+                          Classifica stagione non disponibile nel feed corrente.
+                        </p>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
 
-                <GlassCard>
-                  <h3 className="font-semibold text-sm text-foreground mb-4">Officials</h3>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold text-primary">{match.home} coach</div>
-                      {homeCoaches.length > 0 ? homeCoaches.map((coach) => (
-                        <div key={coach.id} className="p-2.5 rounded-lg bg-secondary/30">
-                          <div className="text-sm font-semibold text-foreground">{coach.name}</div>
-                          {coach.dateOfBirth && (
-                            <div className="text-xs text-muted-foreground">Nato il {coach.dateOfBirth}</div>
+                  <AccordionItem value="officials" className="rounded-xl border border-border/40 bg-secondary/10 px-3">
+                    <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline py-3">
+                      Staff e arbitri
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="grid md:grid-cols-2 gap-4 pb-2">
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-primary">{match.home} coach</div>
+                          {homeCoaches.length > 0 ? homeCoaches.map((coach) => (
+                            <div key={coach.id} className="p-2.5 rounded-lg bg-secondary/30">
+                              <div className="text-sm font-semibold text-foreground">{coach.name}</div>
+                              {coach.dateOfBirth && (
+                                <div className="text-xs text-muted-foreground">Nato il {coach.dateOfBirth}</div>
+                              )}
+                            </div>
+                          )) : (
+                            <p className="text-xs text-muted-foreground">Coach non disponibile.</p>
                           )}
                         </div>
-                      )) : (
-                        <p className="text-xs text-muted-foreground">Coach non disponibile.</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold text-primary">{match.away} coach</div>
-                      {awayCoaches.length > 0 ? awayCoaches.map((coach) => (
-                        <div key={coach.id} className="p-2.5 rounded-lg bg-secondary/30">
-                          <div className="text-sm font-semibold text-foreground">{coach.name}</div>
-                          {coach.dateOfBirth && (
-                            <div className="text-xs text-muted-foreground">Nato il {coach.dateOfBirth}</div>
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-primary">{match.away} coach</div>
+                          {awayCoaches.length > 0 ? awayCoaches.map((coach) => (
+                            <div key={coach.id} className="p-2.5 rounded-lg bg-secondary/30">
+                              <div className="text-sm font-semibold text-foreground">{coach.name}</div>
+                              {coach.dateOfBirth && (
+                                <div className="text-xs text-muted-foreground">Nato il {coach.dateOfBirth}</div>
+                              )}
+                            </div>
+                          )) : (
+                            <p className="text-xs text-muted-foreground">Coach non disponibile.</p>
                           )}
                         </div>
-                      )) : (
-                        <p className="text-xs text-muted-foreground">Coach non disponibile.</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <div className="text-xs font-semibold text-primary mb-2">Referees</div>
-                    {referees.length > 0 ? (
-                      <div className="space-y-2">
-                        {referees.map((referee) => (
-                          <div key={referee.id} className="p-2.5 rounded-lg bg-secondary/30 text-sm text-foreground">
-                            {referee.name}
-                          </div>
-                        ))}
                       </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        Nessun referee assegnato nel feed corrente.
-                      </p>
-                    )}
-                  </div>
-                </GlassCard>
+                      <div className="mt-2 border-t border-border/30 pt-3">
+                        <div className="text-xs font-semibold text-primary mb-2">Referees</div>
+                        {referees.length > 0 ? (
+                          <div className="space-y-2">
+                            {referees.map((referee) => (
+                              <div key={referee.id} className="p-2.5 rounded-lg bg-secondary/30 text-sm text-foreground">
+                                {referee.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Nessun referee assegnato nel feed corrente.
+                          </p>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </TabsContent>
 
               <TabsContent value="h2h">
@@ -526,12 +577,12 @@ export default function MatchDetail() {
                   {match.h2h.length > 0 ? (
                     <div className="space-y-2">
                       {match.h2h.map((entry, index) => (
-                        <div key={`${entry.date}-${index}`} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-                          <span className="text-xs text-muted-foreground">{entry.date}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-foreground">{entry.home}</span>
-                            <span className="font-bold text-foreground">{entry.score}</span>
-                            <span className="text-xs text-foreground">{entry.away}</span>
+                        <div key={`${entry.date}-${index}`} className="flex min-w-0 flex-col gap-2 rounded-lg bg-secondary/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="shrink-0 text-xs text-muted-foreground">{entry.date}</span>
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="truncate text-xs text-foreground">{entry.home}</span>
+                            <span className="shrink-0 font-bold text-foreground">{entry.score}</span>
+                            <span className="truncate text-xs text-foreground">{entry.away}</span>
                           </div>
                         </div>
                       ))}
@@ -546,7 +597,7 @@ export default function MatchDetail() {
             </Tabs>
           </div>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <OddsComparison bookmakers={comparisonBookmakers} />
             {isPremium ? (
               <GlassCard className="border-primary/20">
@@ -561,8 +612,8 @@ export default function MatchDetail() {
                   <div className="text-xs font-semibold text-primary">Insight corrente</div>
                   <div className="text-xs text-foreground mt-1">
                     {match.valueBet
-                      ? `Value spot derivato: ${match.valueBet.type} con edge +${match.valueBet.edge}%`
-                      : "Nessun value spot derivato evidenziato per questa fixture."}
+                      ? valueBetInsightText
+                      : "Nessun value bet derivato evidenziato per questa fixture."}
                   </div>
                 </div>
               </GlassCard>

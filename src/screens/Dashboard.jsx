@@ -1,6 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "@/lib/router-compat";
-import { motion } from "framer-motion";
 import {
   TrendingUp,
   Zap,
@@ -9,10 +8,12 @@ import {
   AlertTriangle,
   Star,
   Clock,
-  Target,
+  BarChart3,
   Info,
 } from "lucide-react";
 import GlassCard from "@/components/shared/GlassCard";
+import PageIntro from "@/components/shared/PageIntro";
+import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
 import ValueBetBadge from "@/components/shared/ValueBetBadge";
 import { useApp } from "@/lib/AppContext";
@@ -23,6 +24,7 @@ import {
   sortMatchesByFeaturedPriority,
 } from "@/lib/football-filters";
 import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
+import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
 
 const QUICK_LEAGUES = [
   "Tutti",
@@ -123,7 +125,7 @@ export default function Dashboard() {
         id: `value-${match.id}`,
         icon: TrendingUp,
         color: "text-primary",
-        message: `${match.home} vs ${match.away} - value spot derivato ${match.valueBet.type}`,
+        message: `${match.home} vs ${match.away} - value bet derivato ${match.valueBet.type}`,
         time: "pre-match",
       });
     });
@@ -181,78 +183,96 @@ export default function Dashboard() {
     return cards;
   }, [today, valueBets.length, liveCount, isPremium]);
 
-  return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <h1 className="font-orbitron font-black text-2xl md:text-3xl tracking-wide mb-1">
-            TOP <span className="text-primary text-glow-green">FOOTBALL DATA</span>
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Dashboard Sportmonks-first con provenance e freshness dichiarate.
-          </p>
-          <div className="mt-3 space-y-2">
-            <DataStatusChips
-              provider={schedulePayload?.provider}
-              source={schedulePayload?.source}
-              freshness={schedulePayload?.freshness}
-              predictionProvider={feedMatches[0]?.prediction_provider}
-              oddsProvider={feedMatches[0]?.odds_provider}
-              notice={isDatiLiveFeatureEnabled() ? undefined : dashboardNotice}
-            />
-            {isDatiLiveFeatureEnabled() && (
-              <DataStatusChips
-                provider={livePayload?.provider}
-                source={livePayload?.source}
-                freshness={livePayload?.freshness}
-                predictionProvider={liveMatches[0]?.prediction_provider}
-                oddsProvider={liveMatches[0]?.odds_provider}
-                lineupStatus={liveMatches[0]?.lineup_status}
-                notice={dashboardNotice}
-              />
-            )}
-          </div>
-        </motion.div>
+  const feedSummary = useMemo(() => {
+    const p = schedulePayload?.provider || "—";
+    const st = schedulePayload?.freshness?.state || "—";
+    if (isDatiLiveFeatureEnabled() && livePayload) {
+      const n = liveMatches.length;
+      return `${p} · ${st} · live ${n} partita${n === 1 ? "" : "e"}`;
+    }
+    return `${p} · freshness ${st}`;
+  }, [
+    schedulePayload?.provider,
+    schedulePayload?.freshness?.state,
+    isDatiLiveFeatureEnabled,
+    livePayload,
+    liveMatches.length,
+  ]);
 
-        <div
-          className={`grid grid-cols-2 gap-3 mb-8 ${
-            statCards.length >= 4 ? "md:grid-cols-4" : "md:grid-cols-3"
-          }`}
-        >
-          {statCards.map((stat, index) => (
-            <motion.div
+  return (
+    <div className="app-page">
+      <div className="app-content">
+        <div className="mb-8">
+          <PageIntro
+            title="TOP FOOTBALL DATA"
+            accentWord="FOOTBALL"
+            subtitle="Calendario e match in evidenza dal feed Sportmonks. Dettagli provenance nel pannello «Stato feed dati» sotto."
+            icon={BarChart3}
+          />
+          <FeedMetaPanel summary={feedSummary} label="Stato feed dati" className="mb-0">
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Calendario (pre-match)
+              </p>
+              <DataStatusChips
+                provider={schedulePayload?.provider}
+                source={schedulePayload?.source}
+                freshness={schedulePayload?.freshness}
+                predictionProvider={feedMatches[0]?.prediction_provider}
+                oddsProvider={feedMatches[0]?.odds_provider}
+                notice={isDatiLiveFeatureEnabled() ? undefined : dashboardNotice}
+              />
+            </div>
+            {isDatiLiveFeatureEnabled() && (
+              <div className="space-y-2 pt-1 border-t border-border/20">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Livescore
+                </p>
+                <DataStatusChips
+                  provider={livePayload?.provider}
+                  source={livePayload?.source}
+                  freshness={livePayload?.freshness}
+                  predictionProvider={liveMatches[0]?.prediction_provider}
+                  oddsProvider={liveMatches[0]?.odds_provider}
+                  lineupStatus={liveMatches[0]?.lineup_status}
+                  notice={dashboardNotice}
+                />
+              </div>
+            )}
+          </FeedMetaPanel>
+        </div>
+
+        <div className="mb-8 flex flex-col divide-y divide-border/35 overflow-hidden rounded-xl border border-border/40 bg-secondary/5 sm:flex-row sm:divide-x sm:divide-y-0">
+          {statCards.map((stat) => (
+            <Link
               key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.08 }}
+              to={stat.path}
+              className="group flex min-w-0 flex-1 flex-col px-4 py-4 transition-colors hover:bg-secondary/35"
             >
-              <Link to={stat.path}>
-                <GlassCard className="group cursor-pointer hover:border-primary/20 transition-all">
-                  <div className="flex items-center justify-between mb-2">
-                    <stat.icon className={`w-4 h-4 ${stat.color}`} />
-                    <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  </div>
-                  <div className="font-orbitron font-black text-2xl text-foreground">
-                    {stat.value}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">{stat.label}</div>
-                </GlassCard>
-              </Link>
-            </motion.div>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <stat.icon className={`h-4 w-4 ${stat.color}`} />
+                <ChevronRight className="h-3 w-3 text-muted-foreground opacity-50 transition-opacity group-hover:opacity-100" />
+              </div>
+              <div className="font-orbitron text-2xl font-black tabular-nums text-foreground">
+                {stat.value}
+              </div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">{stat.label}</div>
+            </Link>
           ))}
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-3">
+          <div className="min-w-0 space-y-6 lg:col-span-2">
+            <div className="scrollbar-hide flex max-w-full min-w-0 items-center gap-1 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch]">
               {QUICK_LEAGUES.map((league) => (
                 <button
                   key={league}
+                  type="button"
                   onClick={() => setActiveLeague(league)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                  className={`flex-shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     activeLeague === league
-                      ? "bg-primary/10 border-primary/30 text-primary"
-                      : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
                   }`}
                 >
                   {league}
@@ -261,8 +281,8 @@ export default function Dashboard() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
+              <div className="mb-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <h2 className="font-semibold text-foreground">{featuredTitle}</h2>
                   {!today && nextAvailableMatch && (
                     <p className="text-xs text-muted-foreground mt-1">
@@ -273,71 +293,61 @@ export default function Dashboard() {
                 </div>
                 <Link
                   to="/modelli-predittivi"
-                  className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+                  className="flex shrink-0 items-center gap-1 text-xs text-primary hover:text-primary/80"
                 >
-                  Vedi tutti <ChevronRight className="w-3 h-3" />
+                  Vedi tutti <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
-              <div className="space-y-3">
-                {topMatches.map((match, index) => (
-                  <motion.div
+              <div className="overflow-hidden rounded-xl border border-border/40 divide-y divide-border/35 bg-secondary/5">
+                {topMatches.map((match) => (
+                  <Link
                     key={match.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.06 }}
+                    to={`/match/${match.id}`}
+                    className="group block transition-colors hover:bg-secondary/30"
                   >
-                    <Link to={`/match/${match.id}`}>
-                      <GlassCard className="group cursor-pointer hover:border-primary/20 transition-all">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className="text-center">
-                              <span className="text-xs text-accent font-semibold block">
-                                {match.league}
-                              </span>
-                              <span className="text-xs text-muted-foreground">{match.time}</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-sm text-foreground truncate">
-                                {match.home} vs {match.away}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1">
-                                {match.valueBet && (
-                                  <ValueBetBadge
-                                    type={match.valueBet.type}
-                                    edge={match.valueBet.edge}
-                                  />
-                                )}
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground">
-                                  {match.odds_provider === "not_available_with_current_feed"
-                                    ? "Quote derivate"
-                                    : "Quote provider"}
-                                </span>
-                              </div>
-                            </div>
+                    <div className="flex items-center justify-between gap-3 p-3 md:p-4">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div className="w-14 shrink-0 text-center">
+                          <span className="block truncate text-[11px] font-medium text-foreground/90">
+                            {match.league}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">{match.time}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-foreground">
+                            {match.home} vs {match.away}
                           </div>
-                          <div className="flex items-center gap-3 flex-shrink-0">
-                            <div className="text-right hidden sm:block">
-                              <div className="text-xs text-muted-foreground">1 / X / 2</div>
-                              <div className="text-xs font-bold text-foreground">
-                                {match.odds.home} / {match.odds.draw} / {match.odds.away}
-                              </div>
-                            </div>
-                            <span className="text-xs font-bold px-2 py-1 rounded-lg bg-secondary/50 text-muted-foreground">
-                              {match.confidence}%
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {match.valueBet && (
+                              <ValueBetBadge match={match} variant="compact" />
+                            )}
+                            <span className="text-[10px] text-muted-foreground">
+                              {match.odds_provider === "not_available_with_current_feed"
+                                ? "Quote derivate"
+                                : "Quote provider"}
                             </span>
-                            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                           </div>
                         </div>
-                      </GlassCard>
-                    </Link>
-                  </motion.div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                        <div className="hidden text-right sm:block">
+                          <div className="text-[10px] text-muted-foreground">1 · X · 2</div>
+                          <div className="text-xs font-semibold tabular-nums text-foreground">
+                            {match.odds.home} / {match.odds.draw} / {match.odds.away}
+                          </div>
+                        </div>
+                        <span className="rounded-md bg-secondary/60 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                          {match.confidence}%
+                        </span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                      </div>
+                    </div>
+                  </Link>
                 ))}
                 {!topMatches.length && (
-                  <GlassCard>
-                    <p className="text-xs text-muted-foreground">
-                      Nessun top match disponibile nel feed corrente.
-                    </p>
-                  </GlassCard>
+                  <div className="p-4 text-xs text-muted-foreground">
+                    Nessun top match disponibile nel feed corrente.
+                  </div>
                 )}
               </div>
             </div>
@@ -352,7 +362,7 @@ export default function Dashboard() {
                     Vedi <ChevronRight className="w-3 h-3" />
                   </Link>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex flex-wrap gap-2">
                   {favorites.matches.slice(0, 3).map((id) => {
                     const match = feedMatches.find((candidate) => String(candidate.id) === String(id));
                     if (!match) return null;
@@ -360,7 +370,7 @@ export default function Dashboard() {
                       <Link
                         key={id}
                         to={`/match/${id}`}
-                        className="text-xs px-3 py-2 glass rounded-lg text-foreground hover:border-primary/20 transition-all"
+                        className="glass max-w-full truncate rounded-lg px-3 py-2 text-xs text-foreground transition-all hover:border-primary/20"
                       >
                         {match.home} vs {match.away}
                       </Link>
@@ -371,11 +381,11 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="space-y-5">
-            <GlassCard>
-              <div className="flex items-center gap-2 mb-4">
-                <AlertTriangle className="w-4 h-4 text-destructive" />
-                <h3 className="font-semibold text-sm text-foreground">Alert Recenti</h3>
+          <div className="min-w-0 space-y-5">
+            <GlassCard variant="quiet">
+              <div className="mb-3 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <h3 className="text-sm font-semibold text-foreground">Segnali dal feed</h3>
               </div>
               <div className="space-y-3">
                 {alerts.map((alert) => (
@@ -395,42 +405,45 @@ export default function Dashboard() {
                   </p>
                 )}
               </div>
-            </GlassCard>
 
-            <GlassCard>
-              <div className="flex items-center gap-2 mb-4">
-                <Target className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm text-foreground">Value Bet Evidenziate</h3>
-              </div>
-              <div className="space-y-2">
-                {valueBets.slice(0, 3).map((match) => (
-                  <Link
-                    key={match.id}
-                    to={`/match/${match.id}`}
-                    className="flex items-center justify-between p-2.5 rounded-lg bg-primary/5 border border-primary/10 hover:border-primary/30 transition-all group"
-                  >
-                    <div>
-                      <div className="text-xs font-semibold text-foreground">
-                        {match.home} vs {match.away}
+              <div className="mt-4 border-t border-border/30 pt-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-primary" />
+                  <h4 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
+                    Value bet (derivati)
+                  </h4>
+                </div>
+                <div className="space-y-2">
+                  {valueBets.slice(0, 3).map((match) => (
+                    <Link
+                      key={match.id}
+                      to={`/match/${match.id}`}
+                      className="flex items-center justify-between p-2.5 rounded-lg bg-primary/5 border border-primary/10 hover:border-primary/30 transition-all group"
+                    >
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">
+                          {match.home} vs {match.away}
+                        </div>
+                        <div className="text-xs text-primary font-semibold">
+                          {match.valueBet.type} @
+                          {getOddsDecimalForValueBet(match) ?? "—"}
+                        </div>
                       </div>
-                      <div className="text-xs text-primary font-semibold">
-                        {match.valueBet.type} @{match.odds[match.valueBet.type === "1" ? "home" : match.valueBet.type === "2" ? "away" : "draw"]}
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold text-primary">+{match.valueBet.edge}%</span>
-                  </Link>
-                ))}
-                {!valueBets.length && (
-                  <p className="text-xs text-muted-foreground">
-                    Nessun value spot derivato disponibile oggi.
-                  </p>
-                )}
+                      <span className="text-xs font-bold text-primary">+{match.valueBet.edge}%</span>
+                    </Link>
+                  ))}
+                  {!valueBets.length && (
+                    <p className="text-xs text-muted-foreground">
+                      Nessun value bet derivato disponibile oggi.
+                    </p>
+                  )}
+                </div>
               </div>
             </GlassCard>
 
             {!isPremium ? (
-              <GlassCard className="border-accent/20 text-center">
-                <Crown className="w-8 h-8 text-accent mx-auto mb-2" />
+              <GlassCard variant="quiet" className="border-accent/25 text-center">
+                <Crown className="mx-auto mb-2 h-8 w-8 text-accent" />
                 <h3 className="font-orbitron font-bold text-sm text-accent mb-1">
                   Sblocca Premium
                 </h3>
@@ -444,9 +457,9 @@ export default function Dashboard() {
                 </Link>
               </GlassCard>
             ) : (
-              <GlassCard className="border-primary/20">
-                <div className="flex items-center gap-2 mb-3">
-                  <Crown className="w-4 h-4 text-accent" />
+              <GlassCard variant="quiet" className="border-primary/25">
+                <div className="mb-3 flex items-center gap-2">
+                  <Crown className="h-4 w-4 text-accent" />
                   <span className="font-semibold text-sm text-accent">Area Premium</span>
                 </div>
                 <div className="space-y-2">

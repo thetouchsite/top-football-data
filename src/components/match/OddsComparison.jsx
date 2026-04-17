@@ -27,21 +27,23 @@ export default function OddsComparison({ bookmakers }) {
         <TrendingUp className="w-4 h-4 text-accent" />
         <h3 className="font-semibold text-sm text-foreground">Comparatore Quote</h3>
       </div>
-      <div className="space-y-0 overflow-hidden rounded-xl border border-border/30">
-        <div className="grid grid-cols-4 gap-0 p-2.5 bg-secondary/40 border-b border-border/20">
-          <span className="text-xs text-muted-foreground font-semibold">Bookmaker</span>
-          <span className="text-xs text-muted-foreground font-semibold text-center">1</span>
-          <span className="text-xs text-muted-foreground font-semibold text-center">X</span>
-          <span className="text-xs text-muted-foreground font-semibold text-center">2</span>
-        </div>
-        {bookmakers.map((bk, i) => (
-          <div key={i} className={`grid grid-cols-4 gap-0 p-2.5 border-b border-border/10 last:border-0 hover:bg-secondary/20 transition-all ${bk.best ? "bg-primary/5" : ""}`}>
-            <span className={`text-xs font-bold ${bk.best ? "text-primary" : "text-foreground"}`}>{bk.name}</span>
-            <span className={`text-xs text-center font-semibold ${bk.home === best1 ? "text-primary" : "text-foreground"}`}>{bk.home}</span>
-            <span className={`text-xs text-center font-semibold ${bk.draw === bestX ? "text-primary" : "text-foreground"}`}>{bk.draw}</span>
-            <span className={`text-xs text-center font-semibold ${bk.away === best2 ? "text-primary" : "text-foreground"}`}>{bk.away}</span>
+      <div className="-mx-1 max-w-full overflow-x-auto sm:mx-0">
+        <div className="min-w-[280px] space-y-0 overflow-hidden rounded-xl border border-border/30">
+          <div className="grid grid-cols-4 gap-0 border-b border-border/20 bg-secondary/40 p-2.5">
+            <span className="text-xs font-semibold text-muted-foreground">Bookmaker</span>
+            <span className="text-center text-xs font-semibold text-muted-foreground">1</span>
+            <span className="text-center text-xs font-semibold text-muted-foreground">X</span>
+            <span className="text-center text-xs font-semibold text-muted-foreground">2</span>
           </div>
-        ))}
+          {bookmakers.map((bk, i) => (
+            <div key={i} className={`grid grid-cols-4 gap-0 border-b border-border/10 p-2.5 transition-all last:border-0 hover:bg-secondary/20 ${bk.best ? "bg-primary/5" : ""}`}>
+              <span className={`min-w-0 truncate text-xs font-bold ${bk.best ? "text-primary" : "text-foreground"}`}>{bk.name}</span>
+              <span className={`text-center text-xs font-semibold ${bk.home === best1 ? "text-primary" : "text-foreground"}`}>{bk.home}</span>
+              <span className={`text-center text-xs font-semibold ${bk.draw === bestX ? "text-primary" : "text-foreground"}`}>{bk.draw}</span>
+              <span className={`text-center text-xs font-semibold ${bk.away === best2 ? "text-primary" : "text-foreground"}`}>{bk.away}</span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="flex items-center gap-1.5 mt-2">
         <div className="w-2 h-2 rounded-full bg-primary" />

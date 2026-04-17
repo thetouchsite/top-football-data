@@ -63,7 +63,7 @@ export default function MatchCard({ match, compact = false }) {
           { label: "X", prob: match.prob.draw, odds: match.odds.draw, isValue: false },
           { label: "2", prob: match.prob.away, odds: match.odds.away, isValue: match.valueBet?.type === "2" },
         ].map((o) => (
-          <div key={o.label} className={`text-center p-2 rounded-lg transition-all ${o.isValue ? "bg-primary/10 border border-primary/30 glow-green-sm" : "bg-secondary/50"}`}>
+          <div key={o.label} className={`rounded-lg p-2 text-center transition-all ${o.isValue ? "border border-primary/25 bg-primary/10 ring-1 ring-primary/15" : "bg-secondary/50"}`}>
             <div className="text-xs text-muted-foreground mb-0.5">{o.label}</div>
             <div className="font-bold text-sm text-foreground">{o.prob}%</div>
             <div className="text-xs text-accent font-semibold">{o.odds}</div>
@@ -77,20 +77,48 @@ export default function MatchCard({ match, compact = false }) {
           {/* O/U + GG */}
           <div className="grid grid-cols-3 gap-2 mb-3">
             {[
-              { label: "Over 2.5", val: match.ou.over25 },
-              { label: "Under 2.5", val: match.ou.under25 },
-              { label: match.valueBet?.market === "GG/NG" ? "Goal" : "GG/NG", val: match.gg.goal },
+              {
+                label: "Over 2.5",
+                odd: match.ou.over25,
+                prob: match.ouProb?.over25,
+                highlight: match.valueBet?.type === "Over 2.5",
+              },
+              {
+                label: "Under 2.5",
+                odd: match.ou.under25,
+                prob: match.ouProb?.under25,
+                highlight: false,
+              },
+              {
+                label: match.valueBet?.market === "GG/NG" ? "Goal" : "GG/NG",
+                odd: match.gg.goal,
+                prob: match.ggProb?.goal,
+                highlight: match.valueBet?.type === "Goal",
+              },
             ].map((o) => (
-              <div key={o.label} className={`text-center p-2 rounded-lg bg-secondary/30 ${match.valueBet?.type === "Over 2.5" && o.label === "Over 2.5" ? "border border-primary/20" : ""}`}>
-                <div className="text-xs text-muted-foreground mb-0.5">{o.label}</div>
-                <div className="text-sm font-bold text-foreground">{o.val}</div>
+              <div
+                key={o.label}
+                className={`rounded-lg p-2 text-center ${
+                  o.highlight ? "border border-primary/20 bg-primary/10 ring-1 ring-primary/15" : "bg-secondary/30"
+                }`}
+              >
+                <div className="mb-0.5 text-xs text-muted-foreground">{o.label}</div>
+                {typeof o.prob === "number" ? (
+                  <>
+                    <div className="text-sm font-bold text-foreground">{o.prob}%</div>
+                    <div className="text-xs font-semibold text-accent">{o.odd}</div>
+                    <ConfBar val={o.prob} color={o.highlight ? "bg-primary" : "bg-secondary"} />
+                  </>
+                ) : (
+                  <div className="text-sm font-bold text-foreground">{o.odd}</div>
+                )}
               </div>
             ))}
           </div>
 
           {/* Value Bet + Confidence */}
           <div className="flex items-center justify-between mb-3">
-            {match.valueBet ? <ValueBetBadge type={match.valueBet.type} edge={match.valueBet.edge} /> : <div />}
+            {match.valueBet ? <ValueBetBadge match={match} variant="compact" /> : <div />}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Confidenza:</span>
               <span className={`text-xs font-bold ${match.confidence >= 75 ? "text-primary" : "text-muted-foreground"}`}>{match.confidence}%</span>

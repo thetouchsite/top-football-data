@@ -211,8 +211,8 @@ export default function Premium() {
   );
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="app-page">
+      <div className="app-content-wide">
         <div className="text-center mb-12">
           <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/30 flex items-center justify-center mx-auto mb-4">
             <Crown className="w-7 h-7 text-accent" />

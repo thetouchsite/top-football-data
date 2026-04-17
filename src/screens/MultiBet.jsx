@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Crown, Lock, Star, Cpu, Shield, Lightbulb, ChevronDown, ChevronUp, ChevronRight, TrendingUp, RefreshCw } from "lucide-react";
-import SectionHeader from "@/components/shared/SectionHeader";
+import PageIntro from "@/components/shared/PageIntro";
+import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import GlassCard from "@/components/shared/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -238,68 +239,98 @@ export default function MultiBet() {
     };
   }, [selectedCompetitionId, futuresRefreshKey]);
 
+  const futuresFeedSummary = useMemo(() => {
+    if (futuresLoading) return "Caricamento feed futures (outrights Sportmonks)…";
+    if (futuresNotice) return futuresNotice;
+    if (futuresLoaded) return "Futures / outrights · layer separato dalle quote match-by-match";
+    return "Feed futures non disponibile o in attesa";
+  }, [futuresLoading, futuresNotice, futuresLoaded]);
+
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-2">
-          <SectionHeader title="SMART MULTI-BET ENGINE" accentWord="MULTI-BET" subtitle="Strumento premium per assemblare multiple ad alto potenziale statistico" icon={Crown} />
-          <div className="flex items-center gap-2 -mt-4 mb-6">
-            <Lock className="w-3.5 h-3.5 text-accent" />
-            <span className="text-xs text-accent font-semibold">Preview premium · engine reale in integrazione</span>
-          </div>
-        </div>
+    <div className="app-page">
+      <div className="app-content">
+        <PageIntro
+          title="SMART MULTI-BET ENGINE"
+          accentWord="MULTI-BET"
+          subtitle="Strumento premium per assemblare multiple ad alto potenziale statistico. Preview locale: engine reale in integrazione."
+          icon={Crown}
+        >
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-accent/25 bg-accent/5 px-2.5 py-1.5 text-[11px] font-semibold text-accent">
+            <Lock className="w-3.5 h-3.5 shrink-0" />
+            Preview premium
+          </span>
+        </PageIntro>
 
-        <div className="glass rounded-xl p-4 mb-6 border border-accent/20 bg-accent/5">
+        <FeedMetaPanel summary={futuresFeedSummary} label="Stato feed dati" className="mb-8">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Il feed attuale copre solo futures/outrights separati dal layer principale
-            Sportmonks. Il motore multi-bet reale e la comparazione bookmaker match-by-match
-            restano `not_available_with_current_feed`.
+            Il feed attuale copre solo futures/outrights separati dal layer principale Sportmonks.
+            Il motore multi-bet reale e la comparazione bookmaker match-by-match restano{" "}
+            <code className="rounded bg-secondary/60 px-1 py-0.5 text-[10px]">not_available_with_current_feed</code>.
           </p>
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {futuresLoaded && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                Odds Comparison Futures
+              </span>
+            )}
+            {futuresLoading && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
+                Caricamento futures…
+              </span>
+            )}
+            {futuresNotice && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30 max-w-full truncate" title={futuresNotice}>
+                {futuresNotice}
+              </span>
+            )}
+          </div>
+        </FeedMetaPanel>
 
-        {/* Feature boxes */}
-        <div className="grid md:grid-cols-3 gap-4 mb-8">
-          {COMBO_TABS.map((f, i) => (
-            <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
-              <GlassCard className="border-accent/10">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
-                    <f.icon className="w-4 h-4 text-accent" />
+        <div className="mb-8">
+          <GlassCard variant="quiet" className="border-accent/20">
+            <div className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Modalità combo
+            </div>
+            <div className="grid gap-5 divide-y divide-border/35 md:grid-cols-3 md:gap-6 md:divide-x md:divide-y-0">
+              {COMBO_TABS.map((f) => (
+                <div key={f.key} className="first:pt-0 pt-5 md:px-4 md:pt-0 first:md:pl-0 last:md:pr-0">
+                  <div className="mb-2 flex items-center gap-2.5">
+                    <f.icon className="h-4 w-4 shrink-0 text-accent" />
+                    <h3 className="text-sm font-semibold text-accent">{f.label}</h3>
                   </div>
-                  <h3 className="font-semibold text-sm text-accent">{f.label}</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {f.key === "algoritmiche" && "Preview del motore combinatorio: logica e UX pronte; selezioni locali finché non arriva il feed odds dedicato."}
+                    {f.key === "safe" && "Preview conservative: le quote finali non sono ancora bookmaker match-by-match reali."}
+                    {f.key === "value" && "Preview value: il valore reale verrà calcolato con il comparatore quote attivo."}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {f.key === "algoritmiche" && "Preview del motore combinatorio: logica e UX sono pronte, ma le selezioni restano locali finche non arriva il feed odds dedicato."}
-                  {f.key === "safe" && "Preview delle selezioni conservative. Le quote finali non sono ancora bookmaker match-by-match reali."}
-                  {f.key === "value" && "Preview della value combo. Il valore reale verra calcolato quando sara attivo il comparatore quote."}
-                </p>
-              </GlassCard>
-            </motion.div>
-          ))}
+              ))}
+            </div>
+          </GlassCard>
         </div>
 
-        <div className="glass rounded-xl p-4 md:p-5 mb-8 border border-primary/10">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm text-foreground">
+        <div className="mb-8 min-w-0 rounded-xl border border-border/40 bg-secondary/5 p-4 md:p-5">
+          <div className="mb-4 flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 shrink-0 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
                   Futures Odds Comparison
                 </h3>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-pretty text-xs text-muted-foreground">
                 Feed dedicato a outrights e mercati futures, separato dalle quote
                 match-by-match.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap">
               <Select
                 value={selectedCompetitionId || "__auto__"}
                 onValueChange={(value) =>
                   setSelectedCompetitionId(value === "__auto__" ? "" : value)
                 }
               >
-                <SelectTrigger className="w-64 h-9 bg-secondary/60 border-border/50 text-xs">
+                <SelectTrigger className="h-9 w-full min-w-0 max-w-full bg-secondary/60 text-xs border-border/50 sm:w-64 sm:max-w-[16rem]">
                   <SelectValue placeholder="Seleziona competizione" />
                 </SelectTrigger>
                 <SelectContent>
@@ -321,24 +352,6 @@ export default function MultiBet() {
                 />
               </button>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap mb-4">
-            {futuresLoaded && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                Odds Comparison Futures
-              </span>
-            )}
-            {futuresLoading && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
-                Caricamento futures...
-              </span>
-            )}
-            {futuresNotice && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
-                {futuresNotice}
-              </span>
-            )}
           </div>
 
           {futuresMarkets.length > 0 ? (
@@ -363,11 +376,11 @@ export default function MultiBet() {
 
         {/* Main panel */}
         <Tabs defaultValue="algoritmiche">
-          <TabsList className="glass mb-6 h-11">
+          <TabsList className="glass mb-4 min-h-10 flex-wrap h-auto w-full justify-start gap-1 py-1">
             {COMBO_TABS.map((t) => (
               <TabsTrigger key={t.key} value={t.key}
                 className="text-xs font-semibold data-[state=active]:bg-accent/10 data-[state=active]:text-accent">
-                <t.icon className="w-3.5 h-3.5 mr-1.5" />{t.label}
+                <t.icon className="w-3.5 h-3.5 mr-1.5 shrink-0" />{t.label}
               </TabsTrigger>
             ))}
           </TabsList>

@@ -169,17 +169,17 @@ export default function Following() {
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <Bell className="w-5 h-5 text-primary" />
+    <div className="app-page">
+      <div className="app-content-narrow">
+        <div className="mb-8 flex min-w-0 items-start gap-3 sm:items-center">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+            <Bell className="h-5 w-5 text-primary" />
           </div>
-          <div>
-            <h1 className="font-orbitron font-bold text-xl text-foreground">
+          <div className="min-w-0">
+            <h1 className="font-orbitron text-xl font-bold text-foreground">
               SEGUITI
             </h1>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-pretty text-xs text-muted-foreground">
               I contenuti seguiti servono per il monitoraggio e per gli alert
               futuri. Le impostazioni notifiche sono collegate a questa area.
             </p>
@@ -187,17 +187,17 @@ export default function Following() {
         </div>
 
         <Tabs defaultValue="match">
-          <TabsList className="glass mb-5 h-10 w-full justify-start">
-            <TabsTrigger value="match" className="text-xs">
+          <TabsList className="mb-5 flex h-auto min-h-10 w-full flex-wrap justify-start gap-1 p-1 glass">
+            <TabsTrigger value="match" className="shrink-0 text-xs">
               Match ({followedMatches.length})
             </TabsTrigger>
-            <TabsTrigger value="giocatori" className="text-xs">
+            <TabsTrigger value="giocatori" className="shrink-0 text-xs">
               Giocatori ({followedPlayers.length})
             </TabsTrigger>
-            <TabsTrigger value="competizioni" className="text-xs">
-              Competizioni ({monitoredCompetitions.length})
+            <TabsTrigger value="competizioni" className="shrink-0 text-xs">
+              Comp. ({monitoredCompetitions.length})
             </TabsTrigger>
-            <TabsTrigger value="notifiche" className="text-xs">
+            <TabsTrigger value="notifiche" className="shrink-0 text-xs">
               Notifiche
             </TabsTrigger>
           </TabsList>
@@ -216,17 +216,17 @@ export default function Following() {
                   {followedMatches.map((match) => (
                     <div
                       key={`followed-match-${match.id}`}
-                      className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-all"
+                      className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-secondary/30 p-3 transition-all hover:bg-secondary/50"
                     >
-                      <div>
-                        <div className="font-semibold text-sm text-foreground">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-foreground">
                           {match.home} vs {match.away}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="truncate text-xs text-muted-foreground">
                           {match.league} - {match.date} {match.time}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         <Link to={`/match/${match.id}`}>
                           <button className="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all">
                             <ChevronRight className="w-3.5 h-3.5" />
@@ -261,17 +261,17 @@ export default function Following() {
                   {followedPlayers.map((player) => (
                     <div
                       key={`followed-player-${player.id}`}
-                      className="flex items-center justify-between p-3 rounded-xl bg-secondary/30"
+                      className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-secondary/30 p-3"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-secondary/80 border border-border/50 flex items-center justify-center text-xs font-bold text-primary">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/50 bg-secondary/80 text-xs font-bold text-primary">
                           {player.number}
                         </div>
-                        <div>
-                          <div className="font-semibold text-sm text-foreground">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-foreground">
                             {player.name}
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="truncate text-xs text-muted-foreground">
                             {player.team} - {player.pos}
                           </div>
                         </div>
@@ -330,17 +330,18 @@ export default function Following() {
                 {ACCOUNT_NOTIFICATION_OPTIONS.map((notification) => (
                   <div
                     key={notification.key}
-                    className="flex items-center justify-between p-3 rounded-xl bg-secondary/30"
+                    className="flex flex-col gap-3 rounded-xl bg-secondary/30 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                   >
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-foreground">
                         {notification.label}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-pretty text-xs text-muted-foreground">
                         {notification.desc}
                       </div>
                     </div>
                     <Switch
+                      className="shrink-0"
                       checked={Boolean(notificationsState[notification.key])}
                       onCheckedChange={(value) =>
                         handleNotificationToggle(notification.key, value)

@@ -126,7 +126,7 @@ export default function Landing() {
   const stats = useMemo(
     () => [
       { value: `+${landingMetrics.scheduleCount}`, label: "match in schedule", icon: Users },
-      { value: `+${landingMetrics.valueCount}`, label: "value spot rilevati", icon: FileText },
+      { value: `+${landingMetrics.valueCount}`, label: "value bet rilevati", icon: FileText },
       { value: `+${landingMetrics.liveCount}`, label: "partite live", icon: Heart },
     ],
     [landingMetrics]
@@ -141,16 +141,16 @@ export default function Landing() {
       />
 
       {/* Top bar */}
-      <header className="relative z-10 flex items-center justify-between px-4 sm:px-8 py-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
-            <BarChart3 className="w-4 h-4 text-primary" />
+      <header className="relative z-10 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-border/30 px-4 py-4 sm:px-8">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 ring-1 ring-primary/25">
+            <BarChart3 className="h-4 w-4 text-primary" />
           </div>
-          <span className="font-orbitron font-bold text-sm tracking-wider">
-            TOP <span className="text-primary">FOOTBALL</span> DATA
+          <span className="font-orbitron text-[11px] font-bold uppercase tracking-[0.14em] text-foreground">
+            Top <span className="text-primary">Football</span> Data
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
           <Link to="/login">
             <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
               Accedi
@@ -165,7 +165,7 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-8 pt-8 md:pt-16 pb-16">
+      <section className="relative z-10 mx-auto w-full min-w-0 max-w-7xl px-4 pb-16 pt-8 sm:px-8 md:pt-16">
         <div className="grid lg:grid-cols-2 gap-12 items-start">
           {/* Left - Form */}
           <motion.div
@@ -186,7 +186,7 @@ export default function Landing() {
             </p>
 
             {/* Lead form */}
-            <div className="glass rounded-2xl p-6 max-w-md">
+            <div className="app-panel max-w-md rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-1">
                 <Download className="w-4 h-4 text-primary" />
                 <span className="font-semibold text-sm text-foreground">Scarica GRATIS</span>
@@ -280,7 +280,7 @@ export default function Landing() {
                         {previewMatch.time || `${previewMatch.minute || 0}'`}
                       </span>
                     </div>
-                    <div className="font-semibold text-foreground mb-1">
+                    <div className="mb-1 break-words font-semibold text-foreground line-clamp-3">
                       {previewMatch.home} vs {previewMatch.away}
                     </div>
                     {"homeScore" in previewMatch ? (
@@ -310,7 +310,7 @@ export default function Landing() {
 
       {/* Telegram section */}
       <section className="relative z-10 border-y border-border/30 py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+        <div className="mx-auto w-full min-w-0 max-w-7xl px-4 sm:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div>
               <h3 className="font-orbitron font-bold text-lg md:text-xl mb-1">
@@ -318,8 +318,8 @@ export default function Landing() {
               </h3>
               <p className="text-sm text-muted-foreground">Oltre +3.000 utenti attivi</p>
             </div>
-            <Button className="bg-accent text-accent-foreground font-bold glow-gold hover:bg-accent/90">
-              <Send className="w-4 h-4 mr-2" />
+            <Button className="w-full shrink-0 bg-accent px-4 text-center text-sm font-bold text-accent-foreground glow-gold hover:bg-accent/90 sm:w-auto md:text-base">
+              <Send className="mr-2 inline h-4 w-4 shrink-0" />
               ACCEDI AL CANALE TELEGRAM
             </Button>
           </div>
@@ -336,7 +336,7 @@ export default function Landing() {
 
       {/* Stats */}
       <section className="relative z-10 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+        <div className="mx-auto w-full min-w-0 max-w-7xl px-4 sm:px-8">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
             {stats.map((stat, i) => (
               <motion.div
@@ -375,12 +375,12 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-border/30 py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col items-center justify-between gap-3 px-4 text-xs text-muted-foreground sm:px-8 md:flex-row">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-3 h-3 text-primary" />
             <span className="font-orbitron tracking-wider">TOP FOOTBALL DATA</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-center md:justify-end">
             <span>Privacy Policy</span>
             <span>Termini & Condizioni</span>
             <span>© 2026</span>

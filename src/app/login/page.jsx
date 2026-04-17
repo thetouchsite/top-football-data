@@ -186,15 +186,15 @@ export default function LoginPage() {
             </>
           )}
 
-          <div className="mt-6 flex items-center justify-between text-xs">
+          <div className="mt-6 flex flex-col gap-3 text-xs sm:flex-row sm:items-center sm:justify-between">
             <Link
               to={`/register?next=${encodeURIComponent(nextPath)}`}
               className="text-primary hover:text-primary/80"
             >
               Crea account
             </Link>
-            <Link to="/" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-              Torna alla home <ArrowRight className="w-3 h-3" />
+            <Link to="/" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+              Torna alla home <ArrowRight className="w-3 h-3 shrink-0" />
             </Link>
           </div>
 

@@ -9,10 +9,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import SectionHeader from "@/components/shared/SectionHeader";
+import PageIntro from "@/components/shared/PageIntro";
+import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
 import MatchCard from "@/components/match/MatchCard";
 import LiveMiniWidget from "@/components/match/LiveMiniWidget";
+import GlassCard from "@/components/shared/GlassCard";
 import { getLivescoresInplay, getScheduleWindow } from "@/api/football";
 import {
   getLeagueBucket,
@@ -142,59 +144,71 @@ export default function ModelliPredittivi() {
     [apiMatches]
   );
 
+  const feedSummaryLine = useMemo(() => {
+    if (scheduleLoading) return "Caricamento calendario…";
+    if (scheduleError) return "Errore feed — vedi messaggio sotto";
+    const p = scheduleMeta?.provider || "—";
+    const st = scheduleMeta?.freshness?.state || "—";
+    return `${p} · freshness ${st} · ${apiMatches.length} match in finestra`;
+  }, [scheduleLoading, scheduleError, scheduleMeta, apiMatches.length]);
+
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <SectionHeader
+    <div className="app-page">
+      <div className="app-content">
+        <PageIntro
           title="MODELLI PREDITTIVI"
           accentWord="PREDITTIVI"
-          subtitle="Analisi pre-match basata sul feed Sportmonks e su modelli derivati dichiarati."
+          subtitle="Analisi pre-match sul feed Sportmonks; modelli derivati quando il piano non espone predictions."
           icon={TrendingUp}
         />
 
-        <div className="mb-5 space-y-3">
-          <DataStatusChips
-            provider={scheduleMeta?.provider}
-            source={scheduleMeta?.source}
-            freshness={scheduleMeta?.freshness}
-            predictionProvider={scheduleMeta?.predictionProvider}
-            oddsProvider={scheduleMeta?.oddsProvider}
-            notice={scheduleMeta?.notice}
-          />
-          <div className="flex items-center gap-2 flex-wrap">
-            {scheduleMeta?.window?.from && (
-              <span className="text-xs px-2 py-1 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
-                Finestra {scheduleMeta.window.from}
-                {scheduleMeta.window.to ? ` -> ${scheduleMeta.window.to}` : ""}
-              </span>
-            )}
-            {scheduleLoading && (
-              <span className="text-xs px-2 py-1 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
-                Caricamento calendario...
-              </span>
-            )}
-            {scheduleError && (
-              <span className="text-xs px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
-                {scheduleError}
-              </span>
-            )}
-            {showValueOnly && (
-              <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                Solo Value Bet derivate
-              </span>
-            )}
+        {scheduleError && (
+          <div className="mb-3 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {scheduleError}
           </div>
+        )}
+
+        <div className="mb-8">
+          <FeedMetaPanel summary={feedSummaryLine} label="Stato feed dati">
+            <DataStatusChips
+              provider={scheduleMeta?.provider}
+              source={scheduleMeta?.source}
+              freshness={scheduleMeta?.freshness}
+              predictionProvider={scheduleMeta?.predictionProvider}
+              oddsProvider={scheduleMeta?.oddsProvider}
+              notice={scheduleMeta?.notice}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              {scheduleMeta?.window?.from && (
+                <span className="text-xs px-2 py-1 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
+                  Finestra {scheduleMeta.window.from}
+                  {scheduleMeta.window.to ? ` → ${scheduleMeta.window.to}` : ""}
+                </span>
+              )}
+              {scheduleLoading && (
+                <span className="text-xs px-2 py-1 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
+                  Caricamento…
+                </span>
+              )}
+              {showValueOnly && (
+                <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  Filtro: solo Value Bet derivate
+                </span>
+              )}
+            </div>
+          </FeedMetaPanel>
         </div>
 
-        <div className="flex items-center gap-1 mb-5 overflow-x-auto pb-1">
+        <div className="mb-6 flex flex-wrap gap-1 rounded-lg bg-muted/25 p-1">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setStatusTab(tab.key)}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex-shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 statusTab === tab.key
-                  ? "bg-primary/10 border border-primary/20 text-primary"
-                  : "text-muted-foreground hover:bg-secondary/50"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {tab.label}
@@ -202,20 +216,19 @@ export default function ModelliPredittivi() {
           ))}
         </div>
 
-        <div className="glass rounded-xl p-4 mb-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-36">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <div className="mb-6 flex min-w-0 flex-wrap items-center gap-2 border-b border-border/40 pb-4 md:gap-3">
+            <div className="relative min-w-0 flex-1 basis-[min(100%,14rem)] sm:min-w-[200px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Cerca squadra..."
-                className="w-full bg-secondary/60 border border-border/50 rounded-lg pl-8 pr-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/40 h-9"
+                className="w-full bg-secondary/60 border border-border/50 rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/40 h-8"
               />
             </div>
 
             <Select value={league} onValueChange={setLeague}>
-              <SelectTrigger className="w-40 h-9 bg-secondary/60 border-border/50 text-xs">
+              <SelectTrigger className="h-8 w-full min-w-0 shrink-0 bg-secondary/60 text-xs border-border/50 sm:w-[9.5rem]">
                 <SelectValue placeholder="Competizione" />
               </SelectTrigger>
               <SelectContent>
@@ -229,7 +242,7 @@ export default function ModelliPredittivi() {
             </Select>
 
             <Select value={sort} onValueChange={setSort}>
-              <SelectTrigger className="w-36 h-9 bg-secondary/60 border-border/50 text-xs">
+              <SelectTrigger className="h-8 w-full min-w-0 shrink-0 bg-secondary/60 text-xs border-border/50 sm:w-[8.5rem]">
                 <SelectValue placeholder="Ordina" />
               </SelectTrigger>
               <SelectContent>
@@ -241,57 +254,60 @@ export default function ModelliPredittivi() {
               </SelectContent>
             </Select>
 
-            <div className="flex items-center gap-2">
-              <Switch checked={showValueOnly} onCheckedChange={setShowValueOnly} />
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Solo Value</span>
+            <div className="flex items-center gap-1.5">
+              <Switch className="scale-90" checked={showValueOnly} onCheckedChange={setShowValueOnly} />
+              <span className="text-[11px] text-muted-foreground whitespace-nowrap">Value bet</span>
             </div>
 
-            <div className="flex items-center gap-1 ml-auto">
+            <div className="ml-auto flex items-center gap-0.5 rounded-md border border-border/35 p-0.5">
               <button
+                type="button"
+                aria-label="Vista griglia"
                 onClick={() => setView("grid")}
-                className={`p-2 rounded-lg transition-all ${
+                className={`rounded p-1.5 transition-colors ${
                   view === "grid"
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-primary/12 text-primary"
                     : "text-muted-foreground hover:bg-secondary/50"
                 }`}
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
+                <LayoutGrid className="h-3.5 w-3.5" />
               </button>
               <button
+                type="button"
+                aria-label="Vista lista"
                 onClick={() => setView("list")}
-                className={`p-2 rounded-lg transition-all ${
+                className={`rounded p-1.5 transition-colors ${
                   view === "list"
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-primary/12 text-primary"
                     : "text-muted-foreground hover:bg-secondary/50"
                 }`}
               >
-                <LayoutList className="w-3.5 h-3.5" />
+                <LayoutList className="h-3.5 w-3.5" />
               </button>
             </div>
-          </div>
         </div>
 
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-xs text-muted-foreground">
+        <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>
             {filteredMatches.length} match trovati
             {filteredMatches.length > visibleMatches.length
-              ? ` · mostro i primi ${visibleMatches.length}`
+              ? ` · primi ${visibleMatches.length} mostrati`
               : ""}
           </span>
           {scheduleMeta?.competitions?.length > 0 && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
+            <span className="text-muted-foreground/80">
               {scheduleMeta.competitions.length} competizioni nel feed
             </span>
           )}
           {filteredMatches.length > visibleMatches.length && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-              Affina filtri o ricerca per vedere il resto del palinsesto
+            <span className="text-foreground/80">
+              Affina filtri o ricerca per il resto del palinsesto
             </span>
           )}
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+        <div className="grid min-w-0 gap-6 lg:grid-cols-3">
+          <div className="min-w-0 lg:col-span-2">
             {view === "grid" ? (
               <div className="space-y-4">
                 {visibleMatches.map((match, index) => (
@@ -306,7 +322,7 @@ export default function ModelliPredittivi() {
                 ))}
               </div>
             ) : (
-              <div className="glass rounded-xl overflow-hidden">
+              <div className="overflow-hidden rounded-xl border border-border/40 divide-y divide-border/35 bg-secondary/5">
                 {visibleMatches.map((match) => (
                   <MatchCard key={match.id} match={match} compact />
                 ))}
@@ -314,8 +330,8 @@ export default function ModelliPredittivi() {
             )}
 
             {filteredMatches.length === 0 && !scheduleLoading && (
-              <div className="glass rounded-xl p-16 text-center">
-                <Filter className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
+              <div className="rounded-xl border border-border/40 bg-secondary/5 p-16 text-center">
+                <Filter className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
                 <p className="text-muted-foreground text-sm">Nessun match disponibile</p>
                 <p className="text-xs text-muted-foreground/60 mt-1">
                   {nextAvailableMatch
@@ -326,41 +342,46 @@ export default function ModelliPredittivi() {
             )}
           </div>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {liveMatch ? (
               <div className="space-y-3">
-                <DataStatusChips
-                  provider={liveMatch.provider}
-                  source={liveMatch.source}
-                  freshness={liveMatch.freshness}
-                  competition={liveMatch.competition}
-                  predictionProvider={liveMatch.prediction_provider}
-                  oddsProvider={liveMatch.odds_provider}
-                  lineupStatus={liveMatch.lineup_status}
-                />
                 <LiveMiniWidget match={liveMatch} />
+                <FeedMetaPanel
+                  summary={`${liveMatch.league || "Live"} · ${liveMatch.home} vs ${liveMatch.away}`}
+                  label="Dettaglio feed live"
+                >
+                  <DataStatusChips
+                    provider={liveMatch.provider}
+                    source={liveMatch.source}
+                    freshness={liveMatch.freshness}
+                    competition={liveMatch.competition}
+                    predictionProvider={liveMatch.prediction_provider}
+                    oddsProvider={liveMatch.odds_provider}
+                    lineupStatus={liveMatch.lineup_status}
+                  />
+                </FeedMetaPanel>
               </div>
             ) : (
-              <div className="glass rounded-xl p-4">
-                <h3 className="font-semibold text-sm text-foreground mb-2">Live center</h3>
+              <GlassCard variant="quiet">
+                <h3 className="mb-2 text-sm font-semibold text-foreground">Live center</h3>
                 <p className="text-xs text-muted-foreground">
                   Nessun match live disponibile nel feed corrente.
                 </p>
-              </div>
+              </GlassCard>
             )}
 
-            <div className="glass rounded-xl p-4">
-              <h3 className="font-semibold text-sm text-foreground mb-3">Prossimi match</h3>
-              <div className="space-y-2">
+            <GlassCard variant="quiet">
+              <h3 className="mb-3 text-sm font-semibold text-foreground">Prossimi match</h3>
+              <div className="space-y-1.5">
                 {visibleMatches.slice(0, 4).map((match) => (
                   <div
                     key={match.id}
-                    className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30"
+                    className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-secondary/25 px-2 py-1.5 text-xs"
                   >
-                    <span className="text-foreground font-medium">
+                    <span className="min-w-0 truncate font-medium text-foreground">
                       {match.home} vs {match.away}
                     </span>
-                    <span className="text-muted-foreground">{match.time}</span>
+                    <span className="shrink-0 text-muted-foreground">{match.time}</span>
                   </div>
                 ))}
                 {apiMatches.length === 0 && !scheduleLoading && (
@@ -369,7 +390,7 @@ export default function ModelliPredittivi() {
                   </p>
                 )}
               </div>
-            </div>
+            </GlassCard>
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@ TOP FOOTBALL DATA
 TODO SVILUPPO OPERATIVO
 
 Data aggiornamento: 2026-04-17
-Stato documento: allineato al codice dopo pulizia Sportradar + OddsMatrix + feature flag Dati Live
+Stato documento: allineato al codice (inclusi UI responsive, probabilita O/U-GG, value bet, toast)
 
 ====================================================================
 LINEE GUIDA (COSA E' IL PROGETTO ORA)
@@ -29,6 +29,18 @@ ARCHITETTURA RILEVANTE (PUNTATORI)
 - Priorita leghe / ranking: `src/lib/sportmonks-priority-league-ids.js`, ordinamento in service
 - Env opzionali feed: `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`, `SPORTMONKS_SCHEDULE_LEAGUE_IDS`, ecc.
 - Shell/UI: `src/app/layout.jsx`, `src/components/layout/*`, schermate in `src/screens/*`
+- Probabilita O/U e GG (schedule/match): calcolo in `src/lib/providers/sportmonks/index.js`
+  — priorita (1) predizioni API yes/no se presenti, (2) percentuali modello derivato `buildGoalMarkets`
+  (`ouProbDerived` / `ggProbDerived`, stesse formule delle quote derivate), (3) implicite da quote
+  bookmaker (`100/quota`), (4) fallback implicite sulle quote mostrate. Campi payload: `ouProb`, `ggProb`.
+- Value bet (UI): `src/components/shared/ValueBetBadge.jsx`; dato mostrato da `buildDerivedValueBet` in
+  `sportmonks/index.js` (euristica interna) — non e l'API ufficiale Sportmonks "Value bets".
+- Value bet Sportmonks ufficiale: add-on Predictions; endpoint `predictions/value-bets` e
+  `predictions/value-bets/fixtures/{id}` (fair_odd, odd, bookmaker, is_value, stake). Vedi
+  https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions/value-bet
+  — integrazione futura quando il piano cliente lo consente.
+- Toaster: `src/components/ui/toast.jsx` usa `pointer-events-none` su viewport/provider per non
+  bloccare click su navbar/header (`z` toast sopra la barra).
 - Live odds UI (griglia da props, non brand esterno): `src/components/live/LiveOddsGrid.jsx`
 - Auth/account: `src/app/api/auth`, `src/lib/auth-*.js`, API `/api/account/*`
 - Documentazione operativa sintetica: `README.md`
@@ -67,6 +79,15 @@ Aprile 2026 — roadmap step 1 (feature flag Dati Live)
   hit a `GET /api/football/livescores/inplay`. Default senza env = spento (ok anche senza variabile su Vercel).
 - Riattivazione prodotto: env `true` + redeploy su Vercel (vedi README).
 
+Aprile 2026 — probabilita O/U-GG, value bet, UX shell
+- Normalizer Sportmonks: `extractPredictionBundle` espone `ouProb`/`ggProb` da yes/no API; `buildGoalMarkets`
+  espone anche `ouProbDerived`/`ggProbDerived`; `resolveScheduleOuGgProbabilities` unifica API / derivato /
+  implicite bookmaker. Match card e match detail mostrano % quando disponibili (`MatchCard.jsx`,
+  `MatchDetail.jsx` sezione “Probabilita e quote”).
+- Badge value bet: stile chip sobrio, `aria-label`/`title` esplicativi.
+- Toast layer: fix click header intercettati da viewport toast (`pointer-events-none` + toast `pointer-events-auto`).
+- Layout globale: `overflow-x` / `max-w-full` su shell e body; Landing/login responsive; dropdown nav `100dvw`.
+
 ====================================================================
 STATO ATTUALE (VERITA' OPERATIVA)
 ====================================================================
@@ -77,8 +98,9 @@ STATO ATTUALE (VERITA' OPERATIVA)
 - Core calcio: Sportmonks reale; nessun secondo provider football nel repo.
 - Odds: pre-match Sportmonks integrate dove il piano e gli include lo consentono; live odds
   bookmaker multipli e comparatore "completo" restano da completare sullo stesso feed.
-- Value bet: ancora segnale derivato da modello / implied odds; confronto sistematico vs book
-  reali da rafforzare quando le quote sono stabili in prodotto.
+- Value bet UI: `buildDerivedValueBet` (euristica prob/xG); edge Over 2.5 spesso al tetto +10% (commento
+  in `index.js`). Per allineamento a "value" Sportmonks vero: integrare endpoint value-bets (add-on
+  Predictions) e mappare badge/filtri su quella risposta; finche assente, resta solo il segnale derivato.
 - Premium: Stripe checkout/portal presenti; gating e persistenza utente vanno consolidati
   end-to-end in produzione (Mongo stabile, webhook, entitlement).
 - MongoDB: in locale spesso TLS/SSL in health; impatta premium e dati non-auth se Atlas non e ok;
@@ -92,7 +114,8 @@ GAP APERTI (SINTESI)
 
 1. Odds e comparatore — espandere uso quote Sportmonks in UI (match-by-match, live, best odds,
    movement) in base agli include del piano; niente integrazione provider odds terzi nel repo.
-2. Value bet — allineare a quote reali e policy prodotto.
+2. Value bet — opzione A: integrare API Sportmonks `predictions/value-bets` (add-on Predictions) e UI;
+   opzione B: mantenere solo `buildDerivedValueBet` ma copy chiaro "modello interno". Decidere con cliente.
 3. Premium — entitlement server-side, Mongo produzione, webhook Stripe validati.
 4. Area utenti — middleware/guard coerenti, OAuth Google stabile in deploy, admin evoluto.
 5. Alerting — following persistito ma nessuna delivery reale (email/telegram/in-app).
@@ -105,6 +128,8 @@ INPUT NECESSARI DAL TEAM
 
 - Piano Sportmonks effettivo (trial/base/premium): quali include sono attivi.
 - Conferma su: `predictions.type`, `xGFixture`, `inplayOdds`, `lineups.xGLineup`, `statistics.type`.
+- Se si vuole il **value bet come Sportmonks**: add-on **Predictions** attivo e integrazione endpoint
+  `predictions/value-bets` (vedi doc ufficiale SM); oggi il prodotto usa solo `buildDerivedValueBet`.
 - Stringa MongoDB valida per staging/produzione; strategia TLS/certificati.
 - Webhook secret Stripe e price id definitivi.
 - Scope V1 free vs premium e messaggistica prodotto.
@@ -131,6 +156,8 @@ P0. Consolidare area utenti e permessi
 
 P1. Mappatura API Sportmonks
 - Tabella feature -> endpoint/include -> piano richiesto; cosa resta derivato in app.
+- Value bets ufficiali: `GET .../predictions/value-bets` e `.../value-bets/fixtures/{id}` (add-on Predictions) —
+  non implementati; oggi badge value = `buildDerivedValueBet`.
 
 P1. Watchlist / following E2E
 - Persistenza, edge case fuori finestra schedule, coerenza preferiti vs seguiti.
