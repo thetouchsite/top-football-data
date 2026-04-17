@@ -2,7 +2,7 @@ TOP FOOTBALL DATA
 TODO SVILUPPO OPERATIVO
 
 Data aggiornamento: 2026-04-17
-Stato documento: allineato al codice dopo pulizia Sportradar + OddsMatrix (aprile 2026)
+Stato documento: allineato al codice dopo pulizia Sportradar + OddsMatrix + feature flag Dati Live
 
 ====================================================================
 LINEE GUIDA (COSA E' IL PROGETTO ORA)
@@ -60,11 +60,20 @@ Aprile 2026 — pulizia provider
 - Rimozione stub OddsMatrix; health/catalog solo Sportmonks; UI `LiveOddsGrid` + copy MultiBet/doc
   allineati a "solo Sportmonks" per quote/comparatore.
 
+Aprile 2026 — roadmap step 1 (feature flag Dati Live)
+- Variabile `NEXT_PUBLIC_FEATURE_DATI_LIVE` (solo `true` abilita): `src/lib/feature-flags.js`.
+- `src/middleware.js`: con flag spento redirect `/dati-live` -> `/dashboard`.
+- Navbar, Dashboard, Modelli predittivi, Landing: niente `getLivescoresInplay` se flag spento; meno
+  hit a `GET /api/football/livescores/inplay`. Default senza env = spento (ok anche senza variabile su Vercel).
+- Riattivazione prodotto: env `true` + redeploy su Vercel (vedi README).
+
 ====================================================================
 STATO ATTUALE (VERITA' OPERATIVA)
 ====================================================================
 
 - Build e lint: attesi verdi su main dopo le ultime modifiche.
+- Dati Live: visibilita e fetch livescore governati dal flag (default off); su Vercel la variabile
+  e opzionale finche la funzione resta spenta.
 - Core calcio: Sportmonks reale; nessun secondo provider football nel repo.
 - Odds: pre-match Sportmonks integrate dove il piano e gli include lo consentono; live odds
   bookmaker multipli e comparatore "completo" restano da completare sullo stesso feed.

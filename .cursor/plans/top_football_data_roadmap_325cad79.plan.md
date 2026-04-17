@@ -6,8 +6,8 @@ todos:
     content: "Completato: dipendenza e codice Sportradar rimossi; futures placeholder; health/doc aggiornati"
     status: completed
   - id: flag-live
-    content: "Introdurre feature flag Dati Live: nav, redirect /dati-live, condizionare getLivescoresInplay su Dashboard/Modelli/Landing"
-    status: pending
+    content: "Completato: feature flag Dati Live (nav, middleware /dati-live, fetch condizionale)"
+    status: completed
   - id: sportmonks-matrix
     content: "Dettaglio costi/add-on: estendere sezione 5 roadmap in docs/sportmonks-matrix.md (pre-match vs + live)"
     status: pending
@@ -43,12 +43,12 @@ Ogni step primario ha un piano dedicato — indice: [`.cursor/plans/plan-00-indi
 - **Sportradar:** **nessuna dipendenza né codice** nel repo (rimosso). `GET /api/football/odds/futures` è un **placeholder** fino a integrazione outrights Sportmonks. Rimuovere eventuali `SPORTRADAR_*` rimaste solo su Vercel/env locali.
 
 - App **Next.js 16** ([`package.json`](c:\Users\ET\Downloads\Works\top-football-data\package.json)), shell comune in [`SiteShell.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\components\layout\SiteShell.jsx) (Navbar + main + Footer).
-- Navigazione privata: [`Navbar.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\components\layout\Navbar.jsx) (`NAV_ITEMS` include **Dati Live** → `/dati-live`).
-- **Dati Live**: schermo [`DatiLive.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\DatiLive.jsx), route [`(app)/dati-live/page.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\app\(app)\dati-live\page.jsx), API `GET /api/football/livescores/inplay` ([`src/app/api/football/livescores/inplay/route.js`](c:\Users\ET\Downloads\Works\top-football-data\src\app\api\football\livescores\inplay\route.js)) con logica in [`src/server/football/service.js`](c:\Users\ET\Downloads\Works\top-football-data\src\server\football\service.js).
-- **Live viene richiamato anche senza aprire la pagina**: [`Dashboard.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\Dashboard.jsx), [`ModelliPredittivi.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\ModelliPredittivi.jsx), [`Landing.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\Landing.jsx) usano `getLivescoresInplay()` — va coordinato con lo “spegnimento” lato prodotto per **non consumare quota API** inutilmente.
+- Navigazione privata: [`Navbar.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\components\layout\Navbar.jsx) — la voce **Dati Live** è visibile solo se `NEXT_PUBLIC_FEATURE_DATI_LIVE=true` ([`feature-flags.js`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\feature-flags.js)).
+- **Dati Live**: schermo [`DatiLive.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\DatiLive.jsx), route [`(app)/dati-live/page.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\app\(app)\dati-live\page.jsx), API `GET /api/football/livescores/inplay` ([`inplay/route.js`](c:\Users\ET\Downloads\Works\top-football-data\src\app\api\football\livescores\inplay\route.js)), middleware [`src/middleware.js`](c:\Users\ET\Downloads\Works\top-football-data\src\middleware.js) (redirect a `/dashboard` se flag off).
+- **Fetch livescore in background:** [`Dashboard.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\Dashboard.jsx), [`ModelliPredittivi.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\ModelliPredittivi.jsx), [`Landing.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\Landing.jsx) chiamano `getLivescoresInplay()` **solo** quando il feature flag è attivo; altrimenti nessuna hit a livescore da quelle pagine.
 - **Comparatore**: componente [`OddsComparison.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\components\match\OddsComparison.jsx); oggi è contestuale al match, mentre [`Premium.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\Premium.jsx) elenca ancora «Comparatore quote match-by-match» come **non incluso** (allineamento commerciale da definire).
 - **Multi-bet**: [`MultiBet.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\MultiBet.jsx) con logica premium e copy che rimanda al comparatore; va chiarito cosa è MVP vs post-MVP.
-- **SportMonks**: client e normalizzazione in [`src/lib/providers/sportmonks/index.js`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\providers\sportmonks\index.js); mappa concettuale provider in [`src/lib/provider-config.js`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\provider-config.js). Documentazione interna già presente: [`TOP_FOOTBALL_DATA_DOCUMENTO_OPERATIVO_FINALE.txt`](c:\Users\ET\Downloads\Works\top-football-data\TOP_FOOTBALL_DATA_DOCUMENTO_OPERATIVO_FINALE.txt), [`TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt`](c:\Users\ET\Downloads\Works\top-football-data\TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt).
+- **SportMonks**: client e normalizzazione in [`src/lib/providers/sportmonks/index.js`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\providers\sportmonks\index.js); mappa concettuale provider in [`src/lib/provider-config.js`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\provider-config.js). Documentazione interna: [`TOP_FOOTBALL_DATA_DOCUMENTO_OPERATIVO_FINALE.txt`](c:\Users\ET\Downloads\Works\top-football-data\TOP_FOOTBALL_DATA_DOCUMENTO_OPERATIVO_FINALE.txt), [`TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt`](c:\Users\ET\Downloads\Works\top-football-data\TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt), [`README.md`](c:\Users\ET\Downloads\Works\top-football-data\README.md).
 
 **Nota sui file cliente:** la cartella «Documenti del cliente» non risulta nel workspace aperto. Per allineamento testuale con Carlo, conviene **copiare i due file nel repo** (es. `docs/cliente/`) o incollarne il contenuto in un issue — così il piano operativo non dipende da percorsi locali.
 
@@ -60,14 +60,17 @@ Implementato: nessun pacchetto Sportradar, nessun fallback nel servizio football
 
 ---
 
-## 1. Nascondere «Dati Live» (futuro-proof, senza buttare il lavoro)
+## 1. Nascondere «Dati Live» — **COMPLETATO**
 
-**Obiettivo:** nessuna voce di menu / link evidente; niente dipendenze prodotto dalle API live nella fase corrente; codice e route restano per riattivazione.
+**Implementato (aprile 2026):** feature flag `NEXT_PUBLIC_FEATURE_DATI_LIVE` (abilitato solo se valore esattamente `true`; default assente = spento). Dettaglio: [`plan-01-dati-live-flag.md`](plan-01-dati-live-flag.md).
 
-- **Feature flag** (es. `NEXT_PUBLIC_FEATURE_DATI_LIVE=false`): centralizza visibilità navbar, link in Dashboard ([`Dashboard.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\Dashboard.jsx) ha CTA verso `/dati-live`), eventuali altri ingressi.
-- **Route:** con flag off, `/dati-live` può **reindirizzare** a `/dashboard` (o 404 soft) per evitare accesso diretto; opzionale middleware in [`src/middleware.js`](c:\Users\ET\Downloads\Works\top-football-data) se già presente o da aggiungere.
-- **Ridurre chiamate live:** rimuovere o condizionare `getLivescoresInplay()` da Dashboard, Modelli, Landing quando il flag è off — così **non si usano le API live** nel comportamento runtime pubblicato.
-- **Aggiornamento “automatico” del codice:** tenere branch o sezione documentata in `TODO` / README interno: «riaccendere flag + ripristinare fetch + verificare piano Sportmonks per livescores».
+- Helper: [`src/lib/feature-flags.js`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\feature-flags.js) (`isDatiLiveFeatureEnabled`).
+- **Middleware:** [`src/middleware.js`](c:\Users\ET\Downloads\Works\top-football-data\src\middleware.js) — con flag off, redirect `/dati-live` → `/dashboard`.
+- **Navbar** [`Navbar.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\components\layout\Navbar.jsx): voce Dati Live nascosta se flag off.
+- **Fetch:** [`Dashboard.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\Dashboard.jsx), [`ModelliPredittivi.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\ModelliPredittivi.jsx), [`Landing.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\Landing.jsx) non chiamano `getLivescoresInplay()` quando il flag è off; [`DatiLive.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\screens\DatiLive.jsx) non avvia polling se disabilitato.
+- **Documentazione:** [`README.md`](c:\Users\ET\Downloads\Works\top-football-data\README.md), [`TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt`](c:\Users\ET\Downloads\Works\top-football-data\TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt).
+
+**Riattivazione:** impostare `NEXT_PUBLIC_FEATURE_DATI_LIVE=true` (locale `.env.local` o Vercel) e **redeploy**; su Vercel non serve creare la variabile se la funzione resta spenta.
 
 ---
 
@@ -112,7 +115,7 @@ Riferimenti codice: [`src/lib/providers/sportmonks/index.js`](c:\Users\ET\Downlo
 |------------|------------------------|------------------|--------------------------------------|
 | `GET /api/football/schedules/window` | Dashboard, Modelli, Analisi, Navbar search, Favorites, Following, Landing | `getScheduleWindowPayload` | `GET fixtures/between/{from}/{to}` + `include` (tentativi in [`SPORTMONKS_SCHEDULE_INCLUDE_ATTEMPTS`](c:\Users\ET\Downloads\Works\top-football-data\src\lib\providers\sportmonks\index.js)); filtro leghe opzionale env `SPORTMONKS_SCHEDULE_*` |
 | `GET /api/football/fixtures/[fixtureId]` | Match detail, Analisi | `getFixturePayload` | `GET fixtures/{id}` + include; poi `GET standings/seasons/{seasonId}`; `GET squads/teams/{teamId}` per casa e trasferta |
-| `GET /api/football/livescores/inplay` | Dati Live, Dashboard, Modelli, Landing | `getLivescoresInplayPayload` | `GET livescores/inplay` (sync completo) oppure `GET livescores/latest` (delta) |
+| `GET /api/football/livescores/inplay` | Dati Live (se flag on); Dashboard/Modelli/Landing **solo se** `NEXT_PUBLIC_FEATURE_DATI_LIVE=true` | `getLivescoresInplayPayload` | `GET livescores/inplay` (sync completo) oppure `GET livescores/latest` (delta) |
 | `GET /api/football/odds/futures` | Multi-bet | nessuna integrazione | **Nessuna** — risposta placeholder [`source: not_implemented`](c:\Users\ET\Downloads\Works\top-football-data\src\app\api\football\odds\futures\route.js); servono endpoint/outrights da definire in documentazione Sportmonks e implementare |
 
 ### 5.2 Cosa chiediamo al feed (`include`)
@@ -227,7 +230,7 @@ Oggi [`src/app/page.jsx`](c:\Users\ET\Downloads\Works\top-football-data\src\app\
 ## Ordine di lavoro suggerito
 
 1. ~~**Rimozione Sportradar**~~ (fatto).
-2. Flag Dati Live + stop fetch live sulle pagine che non devono usarlo + redirect route.
+2. ~~**Flag Dati Live**~~ (fatto: `feature-flags.js`, middleware, fetch condizionale).
 3. Estendere matrice costi/add-on Sportmonks (sezione 5.6 + file `docs/sportmonks-matrix.md` se utile).
 4. Shell comparatore + env Telegram header/footer.
 5. Pass UI «density reduction» sulle schermate indicate.
