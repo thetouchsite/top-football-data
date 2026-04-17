@@ -9,6 +9,7 @@ import DangerIndex from "@/components/live/DangerIndex";
 import LiveOddsGrid from "@/components/live/LiveOddsGrid";
 import LiveTimeline from "@/components/live/LiveTimeline";
 import { getLivescoresInplay } from "@/api/football";
+import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 
 const EMPTY_STATS = {
   shots: { home: 0, away: 0 },
@@ -36,6 +37,11 @@ export default function DatiLive() {
   const [liveMeta, setLiveMeta] = useState(null);
 
   useEffect(() => {
+    if (!isDatiLiveFeatureEnabled()) {
+      setLoadingLive(false);
+      return;
+    }
+
     let isActive = true;
 
     const loadLiveMatches = async ({ silent = false } = {}) => {

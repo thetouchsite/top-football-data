@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 import { Link } from "@/lib/router-compat";
 import { motion } from "framer-motion";
 import {
@@ -29,6 +30,14 @@ const PILLARS = [
 ];
 
 export default function Landing() {
+  const pillars = useMemo(
+    () =>
+      isDatiLiveFeatureEnabled()
+        ? PILLARS
+        : PILLARS.filter((p) => p.title !== "Dati Live"),
+    []
+  );
+
   const [form, setForm] = useState({ nome: "", email: "", eta: "", telefono: "" });
   const [submitting, setSubmitting] = useState(false);
   const [landingMetrics, setLandingMetrics] = useState({
@@ -82,10 +91,10 @@ export default function Landing() {
 
     const loadLandingMetrics = async () => {
       try {
-        const [schedulePayload, livePayload] = await Promise.all([
-          getScheduleWindow(14),
-          getLivescoresInplay(),
-        ]);
+        const schedulePayload = await getScheduleWindow(14);
+        const livePayload = isDatiLiveFeatureEnabled()
+          ? await getLivescoresInplay()
+          : { matches: [] };
 
         if (!isActive) {
           return;
@@ -248,7 +257,7 @@ export default function Landing() {
               </p>
             </div>
 
-            {PILLARS.map((p, i) => (
+            {pillars.map((p, i) => (
               <div key={i} className="glass rounded-xl p-5 flex items-start gap-4 hover:border-primary/20 transition-all">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
                   <p.icon className="w-5 h-5 text-primary" />
