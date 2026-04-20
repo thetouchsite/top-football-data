@@ -4,6 +4,7 @@ import { Clock, ChevronRight, Star } from "lucide-react";
 import ValueBetBadge from "../shared/ValueBetBadge";
 import GlassCard from "../shared/GlassCard";
 import ConfidenceBar from "../shared/ConfidenceBar";
+import FootballMediaImage from "../shared/FootballMediaImage";
 import { useApp } from "@/lib/AppContext";
 
 function ConfBar({ val, max = 100, color = "bg-primary" }) {
@@ -32,6 +33,14 @@ export default function MatchCard({ match, compact = false }) {
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-3 pr-8">
+        <FootballMediaImage
+          media={match.league_media}
+          fallbackLabel={match.league}
+          alt=""
+          size="xs"
+          shape="square"
+          className="border-border/40"
+        />
         <span className="text-xs font-semibold text-accent">{match.league}</span>
         <span className="text-muted-foreground/40">·</span>
         <Clock className="w-3 h-3 text-muted-foreground" />
@@ -44,7 +53,12 @@ export default function MatchCard({ match, compact = false }) {
       {/* Teams + probs */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3 flex-1">
-          <div className="w-10 h-10 rounded-full bg-secondary/80 border border-border/50 flex items-center justify-center text-xs font-bold">{match.homeShort}</div>
+          <FootballMediaImage
+            media={match.home_media}
+            fallbackLabel={match.homeShort || match.home}
+            alt=""
+            size="md"
+          />
           <span className="font-semibold text-foreground text-sm">{match.home}</span>
         </div>
         <div className="text-center px-3">
@@ -53,7 +67,12 @@ export default function MatchCard({ match, compact = false }) {
         </div>
         <div className="flex items-center gap-3 flex-1 justify-end">
           <span className="font-semibold text-foreground text-sm">{match.away}</span>
-          <div className="w-10 h-10 rounded-full bg-secondary/80 border border-border/50 flex items-center justify-center text-xs font-bold">{match.awayShort}</div>
+          <FootballMediaImage
+            media={match.away_media}
+            fallbackLabel={match.awayShort || match.away}
+            alt=""
+            size="md"
+          />
         </div>
       </div>
 

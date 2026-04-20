@@ -7,6 +7,8 @@ import {
   toIsoDate,
 } from "@/lib/domain/freshness";
 
+const EMPTY_MEDIA = { imageUrl: null, thumbUrl: null };
+
 /**
  * @typedef {Object} FixtureDetail
  * @property {string} provider
@@ -28,6 +30,9 @@ export function createFixtureDetail(fixture, context = {}) {
 
   return {
     ...fixture,
+    home_media: fixture?.home_media ?? EMPTY_MEDIA,
+    away_media: fixture?.away_media ?? EMPTY_MEDIA,
+    league_media: fixture?.league_media ?? EMPTY_MEDIA,
     provider,
     source: context.source || "unknown",
     isFallback: isFallbackSource(context.source),

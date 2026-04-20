@@ -13,6 +13,7 @@ import {
 import FormationPitch from "@/components/stats/FormationPitch";
 import PlayerCard from "@/components/stats/PlayerCard";
 import GlassCard from "@/components/shared/GlassCard";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { useApp } from "@/lib/AppContext";
 import { getFixture, getScheduleWindow } from "@/api/football";
 import { sortMatchesByFeaturedPriority } from "@/lib/football-filters";
@@ -178,6 +179,7 @@ export default function AnalisiStatistica() {
               source={fixture?.source || scheduleMeta?.source}
               freshness={fixture?.freshness || scheduleMeta?.freshness}
               competition={fixture?.competition}
+              leagueMedia={fixture?.league_media}
               predictionProvider={fixture?.prediction_provider}
               oddsProvider={fixture?.odds_provider}
               lineupStatus={fixture?.lineup_status}
@@ -194,14 +196,37 @@ export default function AnalisiStatistica() {
                   key={match.id}
                   type="button"
                   onClick={() => setSelectedFixtureId(fixtureId)}
-                  className={`flex-shrink-0 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                  className={`flex min-w-0 flex-shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
                     isActive
                       ? "bg-primary/12 font-medium text-primary"
                       : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
                   }`}
                 >
-                  <div className="text-xs font-semibold">{match.home} vs {match.away}</div>
-                  <div className="text-[11px] opacity-80">{match.league} · {match.time}</div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <FootballMediaImage
+                      media={match.league_media}
+                      fallbackLabel={match.league}
+                      alt={match.league}
+                      size="xs"
+                      shape="square"
+                    />
+                    <FootballMediaImage
+                      media={match.home_media}
+                      fallbackLabel={match.homeShort || match.home}
+                      alt={match.home}
+                      size="xs"
+                    />
+                    <FootballMediaImage
+                      media={match.away_media}
+                      fallbackLabel={match.awayShort || match.away}
+                      alt={match.away}
+                      size="xs"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{match.home} vs {match.away}</div>
+                    <div className="truncate text-[11px] opacity-80">{match.league} · {match.time}</div>
+                  </div>
                 </button>
               );
             })}
@@ -279,9 +304,17 @@ export default function AnalisiStatistica() {
                           <div className="space-y-2">
                             <div className="text-xs font-semibold text-primary">{fixture?.home || "Home"}</div>
                             {homeSquad.slice(0, 11).map((player) => (
-                              <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
-                                <span className="text-foreground">{player.name}</span>
-                                <span className="text-muted-foreground">
+                              <div key={player.id} className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-secondary/30">
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <FootballMediaImage
+                                    media={player.media}
+                                    fallbackLabel={player.name}
+                                    alt={player.name}
+                                    size="xs"
+                                  />
+                                  <span className="truncate text-foreground">{player.name}</span>
+                                </span>
+                                <span className="shrink-0 text-muted-foreground">
                                   #{player.number || "--"} · {player.position}
                                 </span>
                               </div>
@@ -290,9 +323,17 @@ export default function AnalisiStatistica() {
                           <div className="space-y-2">
                             <div className="text-xs font-semibold text-primary">{fixture?.away || "Away"}</div>
                             {awaySquad.slice(0, 11).map((player) => (
-                              <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
-                                <span className="text-foreground">{player.name}</span>
-                                <span className="text-muted-foreground">
+                              <div key={player.id} className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-secondary/30">
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <FootballMediaImage
+                                    media={player.media}
+                                    fallbackLabel={player.name}
+                                    alt={player.name}
+                                    size="xs"
+                                  />
+                                  <span className="truncate text-foreground">{player.name}</span>
+                                </span>
+                                <span className="shrink-0 text-muted-foreground">
                                   #{player.number || "--"} · {player.position}
                                 </span>
                               </div>
@@ -354,8 +395,18 @@ export default function AnalisiStatistica() {
                       >
                         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex min-w-0 flex-1 items-center gap-3">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/50 bg-secondary/80 text-xs font-bold text-primary">
-                              {player.number}
+                            <div className="relative shrink-0">
+                              <FootballMediaImage
+                                media={player.media}
+                                fallbackLabel={player.name}
+                                alt={player.name}
+                                size="sm"
+                              />
+                              {player.number != null && String(player.number).trim() !== "" && (
+                                <span className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-border/50 bg-secondary px-0.5 text-[9px] font-bold text-primary">
+                                  {player.number}
+                                </span>
+                              )}
                             </div>
                             <div className="min-w-0">
                               <div className="truncate text-sm font-semibold text-foreground">{player.name}</div>
@@ -436,23 +487,51 @@ export default function AnalisiStatistica() {
                   <div className="text-xs font-semibold text-primary">Coaches e referees</div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <div className="text-xs text-muted-foreground mb-1">{fixture?.home || "Home"} coach</div>
-                    <div className="text-sm font-semibold text-foreground">
-                      {homeCoaches[0]?.name || "Non disponibile"}
+                    <div className="flex items-center gap-2">
+                      <FootballMediaImage
+                        media={homeCoaches[0]?.media}
+                        fallbackLabel={homeCoaches[0]?.name || "?"}
+                        alt={homeCoaches[0]?.name || ""}
+                        size="sm"
+                      />
+                      <div className="text-sm font-semibold text-foreground">
+                        {homeCoaches[0]?.name || "Non disponibile"}
+                      </div>
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <div className="text-xs text-muted-foreground mb-1">{fixture?.away || "Away"} coach</div>
-                    <div className="text-sm font-semibold text-foreground">
-                      {awayCoaches[0]?.name || "Non disponibile"}
+                    <div className="flex items-center gap-2">
+                      <FootballMediaImage
+                        media={awayCoaches[0]?.media}
+                        fallbackLabel={awayCoaches[0]?.name || "?"}
+                        alt={awayCoaches[0]?.name || ""}
+                        size="sm"
+                      />
+                      <div className="text-sm font-semibold text-foreground">
+                        {awayCoaches[0]?.name || "Non disponibile"}
+                      </div>
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-secondary/30">
                     <div className="text-xs text-muted-foreground mb-1">Referee assegnati</div>
-                    <div className="text-sm font-semibold text-foreground">
-                      {referees.length > 0
-                        ? referees.map((referee) => referee.name).join(", ")
-                        : "Non disponibili"}
-                    </div>
+                    {referees.length > 0 ? (
+                      <div className="space-y-2">
+                        {referees.map((referee) => (
+                          <div key={referee.id || referee.name} className="flex items-center gap-2">
+                            <FootballMediaImage
+                              media={referee.media}
+                              fallbackLabel={referee.name}
+                              alt={referee.name}
+                              size="sm"
+                            />
+                            <span className="text-sm font-semibold text-foreground">{referee.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm font-semibold text-foreground">Non disponibili</div>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -462,11 +541,18 @@ export default function AnalisiStatistica() {
                       {standingsRows.slice(0, 6).map((row) => (
                         <div
                           key={row.id}
-                          className={`grid grid-cols-[28px_1fr_42px_48px] gap-2 items-center p-2.5 rounded-lg ${
+                          className={`grid grid-cols-[28px_auto_1fr_42px_48px] gap-2 items-center p-2.5 rounded-lg ${
                             row.highlighted ? "bg-primary/10 border border-primary/20" : "bg-secondary/30"
                           }`}
                         >
                           <span className="text-xs font-bold text-muted-foreground">{row.position}</span>
+                          <FootballMediaImage
+                            media={row.media}
+                            fallbackLabel={row.team}
+                            alt={row.team}
+                            size="xs"
+                            shape="square"
+                          />
                           <span className="text-xs font-semibold text-foreground truncate">{row.team}</span>
                           <span className="text-xs text-center text-muted-foreground">{row.played}</span>
                           <span className="text-xs text-right font-bold text-primary">{row.points} pt</span>

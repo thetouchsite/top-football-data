@@ -6,12 +6,14 @@ import { Bell, ChevronRight, Trash2, Trophy, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import GlassCard from "@/components/shared/GlassCard";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { useApp } from "@/lib/AppContext";
 import { getScheduleWindow } from "@/api/football";
 import { LEAGUES } from "@/lib/mockData";
 import { ACCOUNT_NOTIFICATION_OPTIONS } from "@/lib/account-config";
 
 function buildFallbackMatch(id) {
+  const empty = { imageUrl: null, thumbUrl: null };
   return {
     id: String(id),
     home: "Fixture seguita",
@@ -19,6 +21,9 @@ function buildFallbackMatch(id) {
     league: "Sportmonks feed",
     date: "--",
     time: "--:--",
+    home_media: empty,
+    away_media: empty,
+    league_media: empty,
   };
 }
 
@@ -218,12 +223,35 @@ export default function Following() {
                       key={`followed-match-${match.id}`}
                       className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-secondary/30 p-3 transition-all hover:bg-secondary/50"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-foreground">
-                          {match.home} vs {match.away}
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-1">
+                          <FootballMediaImage
+                            media={match.league_media}
+                            fallbackLabel={match.league}
+                            alt={match.league}
+                            size="sm"
+                            shape="square"
+                          />
+                          <FootballMediaImage
+                            media={match.home_media}
+                            fallbackLabel={match.homeShort || match.home}
+                            alt={match.home}
+                            size="sm"
+                          />
+                          <FootballMediaImage
+                            media={match.away_media}
+                            fallbackLabel={match.awayShort || match.away}
+                            alt={match.away}
+                            size="sm"
+                          />
                         </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {match.league} - {match.date} {match.time}
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-foreground">
+                            {match.home} vs {match.away}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {match.league} - {match.date} {match.time}
+                          </div>
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
@@ -264,8 +292,18 @@ export default function Following() {
                       className="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-secondary/30 p-3"
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/50 bg-secondary/80 text-xs font-bold text-primary">
-                          {player.number}
+                        <div className="relative shrink-0">
+                          <FootballMediaImage
+                            media={player.media}
+                            fallbackLabel={player.name}
+                            alt={player.name}
+                            size="sm"
+                          />
+                          {player.number && player.number !== "--" && (
+                            <span className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-border/50 bg-secondary px-0.5 text-[9px] font-bold text-primary">
+                              {player.number}
+                            </span>
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-foreground">

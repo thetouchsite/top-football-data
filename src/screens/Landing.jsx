@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { getLivescoresInplay, getScheduleWindow } from "@/api/football";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 
 const PILLARS = [
   {
@@ -274,11 +275,35 @@ export default function Landing() {
               <div className="h-40 rounded-lg bg-gradient-to-br from-secondary/80 to-background flex items-center justify-center">
                 {previewMatch ? (
                   <div className="w-full max-w-sm text-left p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-accent font-semibold">{previewMatch.league}</span>
-                      <span className="text-xs text-muted-foreground">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <FootballMediaImage
+                          media={previewMatch.league_media}
+                          fallbackLabel={previewMatch.league}
+                          alt={previewMatch.league}
+                          size="sm"
+                          shape="square"
+                        />
+                        <span className="truncate text-xs font-semibold text-accent">{previewMatch.league}</span>
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground">
                         {previewMatch.time || `${previewMatch.minute || 0}'`}
                       </span>
+                    </div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <FootballMediaImage
+                        media={previewMatch.home_media}
+                        fallbackLabel={previewMatch.homeShort || previewMatch.home}
+                        alt={previewMatch.home}
+                        size="md"
+                      />
+                      <span className="text-xs font-bold text-muted-foreground">vs</span>
+                      <FootballMediaImage
+                        media={previewMatch.away_media}
+                        fallbackLabel={previewMatch.awayShort || previewMatch.away}
+                        alt={previewMatch.away}
+                        size="md"
+                      />
                     </div>
                     <div className="mb-1 break-words font-semibold text-foreground line-clamp-3">
                       {previewMatch.home} vs {previewMatch.away}

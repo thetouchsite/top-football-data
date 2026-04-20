@@ -16,6 +16,7 @@ import DataStatusChips from "@/components/shared/DataStatusChips";
 import MatchCard from "@/components/match/MatchCard";
 import GlassCard from "@/components/shared/GlassCard";
 import ConfidenceBar from "@/components/shared/ConfidenceBar";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { getScheduleWindow } from "@/api/football";
 import {
   getLeagueBucket,
@@ -208,6 +209,8 @@ export default function ModelliPredittivi() {
               provider={scheduleMeta?.provider}
               source={scheduleMeta?.source}
               freshness={scheduleMeta?.freshness}
+              competition={visibleMatches[0]?.competition}
+              leagueMedia={visibleMatches[0]?.league_media}
               predictionProvider={scheduleMeta?.predictionProvider}
               oddsProvider={scheduleMeta?.oddsProvider}
               notice={scheduleMeta?.notice}
@@ -388,8 +391,31 @@ export default function ModelliPredittivi() {
                       className="block rounded-lg bg-secondary/25 p-2 text-xs transition-colors hover:bg-secondary/45"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate font-semibold text-foreground">
-                          {match.home} vs {match.away}
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          <div className="flex shrink-0 items-center gap-1">
+                            <FootballMediaImage
+                              media={match.league_media}
+                              fallbackLabel={match.league}
+                              alt={match.league}
+                              size="xs"
+                              shape="square"
+                            />
+                            <FootballMediaImage
+                              media={match.home_media}
+                              fallbackLabel={match.homeShort || match.home}
+                              alt={match.home}
+                              size="xs"
+                            />
+                            <FootballMediaImage
+                              media={match.away_media}
+                              fallbackLabel={match.awayShort || match.away}
+                              alt={match.away}
+                              size="xs"
+                            />
+                          </div>
+                          <span className="min-w-0 truncate font-semibold text-foreground">
+                            {match.home} vs {match.away}
+                          </span>
                         </span>
                         <span className="shrink-0 font-bold text-primary">+{candidate.edge}%</span>
                       </div>
@@ -417,8 +443,24 @@ export default function ModelliPredittivi() {
                       to={`/match/${encodeURIComponent(match.id)}`}
                       className="block rounded-lg bg-secondary/25 p-2 transition-colors hover:bg-secondary/45"
                     >
-                      <div className="mb-1 text-xs font-semibold text-foreground truncate">
-                        {match.home} vs {match.away}
+                      <div className="mb-1 flex items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-1">
+                          <FootballMediaImage
+                            media={match.home_media}
+                            fallbackLabel={match.homeShort || match.home}
+                            alt={match.home}
+                            size="xs"
+                          />
+                          <FootballMediaImage
+                            media={match.away_media}
+                            fallbackLabel={match.awayShort || match.away}
+                            alt={match.away}
+                            size="xs"
+                          />
+                        </div>
+                        <div className="min-w-0 truncate text-xs font-semibold text-foreground">
+                          {match.home} vs {match.away}
+                        </div>
                       </div>
                       <ConfidenceBar value={match.confidence} compact />
                     </Link>
@@ -439,8 +481,24 @@ export default function ModelliPredittivi() {
                     key={match.id}
                     className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-secondary/25 px-2 py-1.5 text-xs"
                   >
-                    <span className="min-w-0 truncate font-medium text-foreground">
-                      {match.home} vs {match.away}
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-1">
+                        <FootballMediaImage
+                          media={match.home_media}
+                          fallbackLabel={match.homeShort || match.home}
+                          alt={match.home}
+                          size="xs"
+                        />
+                        <FootballMediaImage
+                          media={match.away_media}
+                          fallbackLabel={match.awayShort || match.away}
+                          alt={match.away}
+                          size="xs"
+                        />
+                      </div>
+                      <span className="min-w-0 truncate font-medium text-foreground">
+                        {match.home} vs {match.away}
+                      </span>
                     </span>
                     <span className="shrink-0 text-muted-foreground">{match.time}</span>
                   </div>

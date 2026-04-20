@@ -8,6 +8,7 @@ import LiveStatBar from "@/components/live/LiveStatBar";
 import DangerIndex from "@/components/live/DangerIndex";
 import LiveOddsGrid from "@/components/live/LiveOddsGrid";
 import LiveTimeline from "@/components/live/LiveTimeline";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { getLivescoresInplay } from "@/api/football";
 import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 
@@ -125,6 +126,7 @@ export default function DatiLive() {
             source={m?.source || liveMeta?.source}
             freshness={m?.freshness || liveMeta?.freshness}
             competition={m?.competition}
+            leagueMedia={m?.league_media}
             predictionProvider={m?.prediction_provider}
             oddsProvider={m?.odds_provider}
             lineupStatus={m?.lineup_status}
@@ -176,14 +178,37 @@ export default function DatiLive() {
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     <Radio className="h-3 w-3 shrink-0 animate-pulse text-destructive" />
                     <span className="text-xs font-bold uppercase text-destructive">Live</span>
+                    <FootballMediaImage
+                      media={liveMatch.league_media}
+                      fallbackLabel={liveMatch.league}
+                      alt={liveMatch.league}
+                      size="xs"
+                      shape="square"
+                    />
                     <span className="ml-1 truncate text-xs text-accent">{liveMatch.league}</span>
                   </div>
                   <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-                    <span className="truncate text-xs font-semibold text-foreground">{liveMatch.home}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <FootballMediaImage
+                        media={liveMatch.home_media}
+                        fallbackLabel={liveMatch.homeShort || liveMatch.home}
+                        alt={liveMatch.home}
+                        size="xs"
+                      />
+                      <span className="truncate text-xs font-semibold text-foreground">{liveMatch.home}</span>
+                    </span>
                     <span className="font-orbitron text-sm font-black text-foreground">
                       {liveMatch.homeScore}-{liveMatch.awayScore}
                     </span>
-                    <span className="truncate text-xs font-semibold text-foreground">{liveMatch.away}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-xs font-semibold text-foreground">{liveMatch.away}</span>
+                      <FootballMediaImage
+                        media={liveMatch.away_media}
+                        fallbackLabel={liveMatch.awayShort || liveMatch.away}
+                        alt={liveMatch.away}
+                        size="xs"
+                      />
+                    </span>
                     <span className="text-xs font-bold text-primary sm:ml-1">{liveMatch.minute}'</span>
                   </div>
                 </button>
@@ -201,9 +226,12 @@ export default function DatiLive() {
                     <div className="flex flex-col flex-wrap gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div className="flex min-w-0 flex-1 flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start">
                         <div className="flex min-w-0 max-w-full items-center gap-3">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border/50 bg-secondary/80 text-xs font-bold">
-                            {m.homeShort}
-                          </div>
+                          <FootballMediaImage
+                            media={m.home_media}
+                            fallbackLabel={m.homeShort || m.home}
+                            alt={m.home}
+                            size="lg"
+                          />
                           <span className="truncate text-lg font-bold text-foreground">{m.home}</span>
                         </div>
                         <div className="shrink-0 text-center">
@@ -219,15 +247,27 @@ export default function DatiLive() {
                         </div>
                         <div className="flex min-w-0 max-w-full items-center gap-3">
                           <span className="truncate text-lg font-bold text-foreground">{m.away}</span>
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border/50 bg-secondary/80 text-xs font-bold">
-                            {m.awayShort}
-                          </div>
+                          <FootballMediaImage
+                            media={m.away_media}
+                            fallbackLabel={m.awayShort || m.away}
+                            alt={m.away}
+                            size="lg"
+                          />
                         </div>
                       </div>
                       <div className="flex min-w-0 flex-col gap-1 text-left sm:text-right">
-                        <span className="text-xs text-accent">
-                          {m.league}
-                          {m.country ? ` · ${m.country}` : ""}
+                        <span className="flex items-center gap-2 text-xs text-accent">
+                          <FootballMediaImage
+                            media={m.league_media}
+                            fallbackLabel={m.league}
+                            alt={m.league}
+                            size="sm"
+                            shape="square"
+                          />
+                          <span className="truncate">
+                            {m.league}
+                            {m.country ? ` · ${m.country}` : ""}
+                          </span>
                         </span>
                         <span className="text-xs text-muted-foreground">
                           xG Live stimato: {stats.xgLive.home} - {stats.xgLive.away}
@@ -306,7 +346,13 @@ export default function DatiLive() {
                       </div>
                     </GlassCard>
 
-                    <LiveTimeline events={m.events || []} home={m.home} away={m.away} />
+                    <LiveTimeline
+                      events={m.events || []}
+                      home={m.home}
+                      away={m.away}
+                      homeMedia={m.home_media}
+                      awayMedia={m.away_media}
+                    />
                   </div>
 
                   <div className="min-w-0 space-y-5">

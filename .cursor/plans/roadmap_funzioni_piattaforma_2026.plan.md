@@ -66,6 +66,7 @@ isProject: false
 | OddsMatrix stub | Rimosso da health/catalog; quote solo Sportmonks. |
 | Feature flag Dati Live | `NEXT_PUBLIC_FEATURE_DATI_LIVE` (solo `true` abilita); [`src/lib/feature-flags.js`](../../src/lib/feature-flags.js); [`src/middleware.js`](../../src/middleware.js) redirect `/dati-live` → `/dashboard` se off; Dashboard/Modelli/Landing senza `getLivescoresInplay` se off. |
 | UI aprile 2026 | PageIntro, FeedMetaPanel, ValueBetBadge + `value-bet-display`, pass su Dashboard/MatchDetail/Modelli/Analisi/Multi-bet/Dati Live, ecc. |
+| Immagini Sportmonks (loghi/foto) | Contratto `media` + `*_media` nel provider/domain; `FootballMediaImage` su card, schermate principali, timeline live, preferiti/seguiti, navbar search; env `SPORTMONKS_MEDIA_BASE_URL` opzionale; **contrasto UI:** mat chiaro di default sulle immagini remote (tema scuro), `surface` opzionale. |
 
 **Nota Vercel:** variabili `NEXT_PUBLIC_*` richiedono **redeploy** dopo modifica env.
 

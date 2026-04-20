@@ -1,7 +1,7 @@
 TOP FOOTBALL DATA
 TODO SVILUPPO OPERATIVO
 
-Data aggiornamento: 2026-04-18
+Data aggiornamento: 2026-04-21
 Stato documento: allineato al codice e al documento cliente «Funzioni piattaforma» (vedi sotto)
 
 ====================================================================
@@ -17,6 +17,12 @@ LINEE GUIDA (COSA E' IL PROGETTO ORA)
 - `GET /api/football/odds/futures`: ancora placeholder fino a integrazione outrights Sportmonks.
 - Dati Live (pagina `/dati-live`, nav, fetch livescore su altre schermate): controllati da
   `NEXT_PUBLIC_FEATURE_DATI_LIVE=true` (vedi `src/lib/feature-flags.js` e README). Default spento.
+- Immagini Sportmonks (loghi / foto): implementate end-to-end su provider+domain+UI (`FootballMediaImage`,
+  campi `home_media` / `away_media` / `league_media` e `player.media`). Base CDN configurabile con
+  `SPORTMONKS_MEDIA_BASE_URL`. Le schermate non devono leggere oggetti raw provider per le immagini.
+  Contrasto dark mode: le immagini remote usano di default un “mat” chiaro (fondo bianco / zinc-100 in dark)
+  + padding interno, così loghi scuri o asset per sfondo chiaro restano leggibili; prop opzionale
+  `surface="none"` su `FootballMediaImage` se serve eccezione.
 
 ====================================================================
 ALLINEAMENTO DOCUMENTO CLIENTE — FUNZIONI PIATTAFORMA (2026)

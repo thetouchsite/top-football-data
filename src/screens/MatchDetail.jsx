@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/accordion";
 import ValueBetBadge from "@/components/shared/ValueBetBadge";
 import ConfidenceBar from "@/components/shared/ConfidenceBar";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import PremiumLock from "@/components/shared/PremiumLock";
 import FormationPitch from "@/components/stats/FormationPitch";
 import PlayerCard from "@/components/stats/PlayerCard";
@@ -65,6 +66,9 @@ function createUnknownMatchFallback(fixtureId) {
     prediction_provider: "derived_internal_model",
     odds_provider: "not_available_with_current_feed",
     lineup_status: "unknown",
+    home_media: { imageUrl: null, thumbUrl: null },
+    away_media: { imageUrl: null, thumbUrl: null },
+    league_media: { imageUrl: null, thumbUrl: null },
   };
 }
 
@@ -235,8 +239,14 @@ export default function MatchDetail() {
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
               <div className="flex min-w-0 flex-1 items-center justify-center gap-2 sm:gap-4 md:justify-start">
                 <div className="min-w-0 max-w-[38%] text-center sm:max-w-none">
-                  <div className="mx-auto mb-1 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/50 bg-secondary/80 text-lg font-bold">
-                    {match.homeShort}
+                  <div className="mx-auto mb-1 flex justify-center">
+                    <FootballMediaImage
+                      media={match.home_media}
+                      fallbackLabel={match.homeShort || match.home}
+                      alt=""
+                      size="xl"
+                      shape="card"
+                    />
                   </div>
                   <span className="line-clamp-2 text-sm font-bold text-foreground">{match.home}</span>
                 </div>
@@ -258,8 +268,14 @@ export default function MatchDetail() {
                   </span>
                 </div>
                 <div className="min-w-0 max-w-[38%] text-center sm:max-w-none">
-                  <div className="mx-auto mb-1 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/50 bg-secondary/80 text-lg font-bold">
-                    {match.awayShort}
+                  <div className="mx-auto mb-1 flex justify-center">
+                    <FootballMediaImage
+                      media={match.away_media}
+                      fallbackLabel={match.awayShort || match.away}
+                      alt=""
+                      size="xl"
+                      shape="card"
+                    />
                   </div>
                   <span className="line-clamp-2 text-sm font-bold text-foreground">{match.away}</span>
                 </div>
@@ -300,6 +316,7 @@ export default function MatchDetail() {
                   source={match.source}
                   freshness={match.freshness}
                   competition={match.competition}
+                  leagueMedia={match.league_media}
                   predictionProvider={match.prediction_provider}
                   oddsProvider={match.odds_provider}
                   lineupStatus={match.lineup_status}

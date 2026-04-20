@@ -4,6 +4,7 @@ import { Crown, Lock, Star, Cpu, Shield, Lightbulb, ChevronDown, ChevronUp, Chev
 import PageIntro from "@/components/shared/PageIntro";
 import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import GlassCard from "@/components/shared/GlassCard";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -137,10 +138,33 @@ function ComboCard({ combo, isPremium }) {
       {/* Preview events */}
       <div className="space-y-2">
         {combo.selections.slice(0, expanded ? undefined : 2).map((sel, i) => (
-          <div key={i} className="flex items-center justify-between p-2.5 rounded-lg bg-secondary/30">
-            <div>
-              <div className="text-xs font-semibold text-foreground">{sel.home} vs {sel.away}</div>
-              <div className="text-xs text-muted-foreground">{sel.league} · {sel.market}</div>
+          <div key={i} className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-secondary/30">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1">
+                <FootballMediaImage
+                  media={sel.league_media}
+                  fallbackLabel={sel.league}
+                  alt={sel.league}
+                  size="xs"
+                  shape="square"
+                />
+                <FootballMediaImage
+                  media={sel.home_media}
+                  fallbackLabel={sel.home}
+                  alt={sel.home}
+                  size="xs"
+                />
+                <FootballMediaImage
+                  media={sel.away_media}
+                  fallbackLabel={sel.away}
+                  alt={sel.away}
+                  size="xs"
+                />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-xs font-semibold text-foreground">{sel.home} vs {sel.away}</div>
+                <div className="truncate text-xs text-muted-foreground">{sel.league} · {sel.market}</div>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-foreground">{sel.odds}</span>

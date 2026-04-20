@@ -1,4 +1,7 @@
+"use client";
+
 import React from "react";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 
 function createChip(label, tone = "neutral") {
   const toneClassName =
@@ -75,6 +78,7 @@ export default function DataStatusChips({
   source,
   freshness,
   competition,
+  leagueMedia,
   predictionProvider,
   oddsProvider,
   lineupStatus,
@@ -148,5 +152,19 @@ export default function DataStatusChips({
     return null;
   }
 
-  return <div className="flex flex-wrap items-center gap-2">{chips}</div>;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {leagueMedia && (
+        <FootballMediaImage
+          media={leagueMedia}
+          fallbackLabel={competition?.name || "Competition"}
+          alt={competition?.name || ""}
+          size="xs"
+          shape="square"
+          className="ring-1 ring-border/30"
+        />
+      )}
+      {chips}
+    </div>
+  );
 }
