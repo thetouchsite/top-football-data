@@ -74,3 +74,33 @@ class SportmonksClient:
                 page += 1
 
         return fixtures
+
+    async def fetch_fixture_by_id(self, fixture_id: str) -> dict[str, Any] | None:
+        if not self.api_token:
+            raise RuntimeError("SPORTMONKS_API_TOKEN/SPORTMONKS_API_KEY non configurato.")
+
+        params: dict[str, Any] = {
+            "api_token": self.api_token,
+            "timezone": self.timezone,
+            "include": "league;state;participants;scores",
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{self.base_url}/fixtures/{fixture_id}",
+                params=params,
+                headers={"Accept": "application/json"},
+            )
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as error:
+                status_code = error.response.status_code
+                if status_code == 401:
+                    raise RuntimeError(
+                        "Sportmonks ha rifiutato la chiave API locale: controlla SPORTMONKS_API_TOKEN/SPORTMONKS_API_KEY."
+                    ) from None
+                raise RuntimeError(f"Sportmonks fixture request fallita con status {status_code}.") from None
+
+        payload = response.json()
+        data = payload.get("data")
+        return data if isinstance(data, dict) else None

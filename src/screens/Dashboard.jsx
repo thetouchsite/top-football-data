@@ -37,11 +37,40 @@ const QUICK_LEAGUES = [
   "Bundesliga",
 ];
 
+function formatAlertTime(value) {
+  if (!value) return "orchestrator";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "orchestrator";
+  return date.toLocaleString("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatStoredAlert(alert) {
+  if (alert?.type === "multibet") {
+    const multibet = alert.multibet || {};
+    return `Value combo +${multibet.dataEdgePercent ?? "—"}% · ${multibet.events?.length || 0} eventi · EV ${
+      multibet.totalEv ?? "—"
+    }`;
+  }
+
+  const single = alert?.single || {};
+  const teams = single.home && single.away ? `${single.home} vs ${single.away}` : "Alert value";
+  return `${teams} · ${single.market || "Mercato"} ${single.selection || ""} @ ${
+    single.bestOdd || "—"
+  }`;
+}
+
 export default function Dashboard() {
   const { isPremium, favorites } = useApp();
   const [activeLeague, setActiveLeague] = useState("Tutti");
   const [schedulePayload, setSchedulePayload] = useState(null);
   const [livePayload, setLivePayload] = useState(null);
+  const [orchestratorAlerts, setOrchestratorAlerts] = useState([]);
+  const [performanceSummary, setPerformanceSummary] = useState(null);
   const [dashboardNotice, setDashboardNotice] = useState("");
 
   useEffect(() => {
@@ -89,6 +118,41 @@ export default function Dashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadOrchestratorFeeds() {
+      try {
+        const [alertsResponse, performanceResponse] = await Promise.all([
+          fetch("/api/alerts?limit=5", { cache: "no-store" }),
+          fetch("/api/performance", { cache: "no-store" }),
+        ]);
+        const [alertsPayload, performancePayload] = await Promise.all([
+          alertsResponse.json(),
+          performanceResponse.json(),
+        ]);
+
+        if (!isActive) return;
+
+        setOrchestratorAlerts(Array.isArray(alertsPayload.alerts) ? alertsPayload.alerts : []);
+        setPerformanceSummary(performancePayload.summary || null);
+      } catch {
+        if (isActive) {
+          setOrchestratorAlerts([]);
+          setPerformanceSummary(null);
+        }
+      }
+    }
+
+    loadOrchestratorFeeds();
+    const interval = window.setInterval(loadOrchestratorFeeds, 60000);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   const feedMatches = Array.isArray(schedulePayload?.matches) ? schedulePayload.matches : [];
   const liveMatches = Array.isArray(livePayload?.matches) ? livePayload.matches : [];
 
@@ -111,6 +175,16 @@ export default function Dashboard() {
 
   const alerts = useMemo(() => {
     const items = [];
+
+    orchestratorAlerts.slice(0, 2).forEach((alert) => {
+      items.push({
+        id: `orchestrator-${alert._id}`,
+        icon: TrendingUp,
+        color: alert.status === "lost" ? "text-destructive" : "text-primary",
+        message: formatStoredAlert(alert),
+        time: alert.status === "pending" ? "in monitoraggio" : formatAlertTime(alert.settledAt),
+      });
+    });
 
     liveMatches.slice(0, 2).forEach((match) => {
       items.push({
@@ -143,7 +217,7 @@ export default function Dashboard() {
     }
 
     return items.slice(0, 3);
-  }, [dashboardNotice, liveMatches, valueBets]);
+  }, [dashboardNotice, liveMatches, orchestratorAlerts, valueBets]);
 
   const liveCount = liveMatches.length;
   const today = feedMatches.filter((match) => getMatchStatusBucket(match) === "today").length;
@@ -159,8 +233,8 @@ export default function Dashboard() {
         path: "/modelli-predittivi",
       },
       {
-        label: "Value Bet",
-        value: valueBets.length,
+        label: "Alert Value",
+        value: orchestratorAlerts.length || valueBets.length,
         icon: TrendingUp,
         color: "text-primary",
         path: "/modelli-predittivi",
@@ -183,7 +257,7 @@ export default function Dashboard() {
       path: "/multi-bet",
     });
     return cards;
-  }, [today, valueBets.length, liveCount, isPremium]);
+  }, [today, valueBets.length, orchestratorAlerts.length, liveCount, isPremium]);
 
   const feedSummary = useMemo(() => {
     const p = schedulePayload?.provider || "—";
@@ -439,6 +513,37 @@ export default function Dashboard() {
                   </h4>
                 </div>
                 <div className="space-y-2">
+                  {orchestratorAlerts.slice(0, 3).map((alert) => {
+                    const single = alert.single || {};
+                    const multibet = alert.multibet || {};
+                    const label =
+                      alert.type === "multibet"
+                        ? `Combo ${multibet.events?.length || 0} eventi`
+                        : `${single.home || "Match"} vs ${single.away || ""}`;
+                    const detail =
+                      alert.type === "multibet"
+                        ? `EV ${multibet.totalEv ?? "—"} · quota ${multibet.totalOdd ?? "—"}`
+                        : `${single.selection || "Value"} @ ${single.bestOdd || "—"}`;
+
+                    return (
+                      <div
+                        key={alert._id}
+                        className="rounded-lg border border-primary/10 bg-primary/5 p-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-semibold text-foreground">
+                              {label}
+                            </div>
+                            <div className="text-xs font-semibold text-primary">{detail}</div>
+                          </div>
+                          <span className="shrink-0 text-xs font-bold text-primary">
+                            {alert.status}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                   {valueBets.slice(0, 3).map((match) => (
                     <Link
                       key={match.id}
@@ -457,13 +562,43 @@ export default function Dashboard() {
                       <span className="text-xs font-bold text-primary">+{match.valueBet.edge}%</span>
                     </Link>
                   ))}
-                  {!valueBets.length && (
+                  {!valueBets.length && !orchestratorAlerts.length && (
                     <p className="text-xs text-muted-foreground">
                       Nessun value bet derivato disponibile oggi.
                     </p>
                   )}
                 </div>
               </div>
+              {performanceSummary && (
+                <div className="mt-4 border-t border-border/30 pt-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-accent" />
+                    <h4 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
+                      Performance storica
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-lg bg-secondary/35 p-2">
+                      <div className="text-sm font-bold text-foreground">
+                        {performanceSummary.settled || 0}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">chiuse</div>
+                    </div>
+                    <div className="rounded-lg bg-secondary/35 p-2">
+                      <div className="text-sm font-bold text-primary">
+                        {performanceSummary.roiPercent || 0}%
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">ROI</div>
+                    </div>
+                    <div className="rounded-lg bg-secondary/35 p-2">
+                      <div className="text-sm font-bold text-accent">
+                        {performanceSummary.hitRatePercent || 0}%
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">hit rate</div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </GlassCard>
 
             {!isPremium ? (

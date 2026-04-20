@@ -30,6 +30,13 @@ class FixtureMarket:
     def title(self) -> str:
         return f"{self.home} - {self.away}"
 
+    @property
+    def alert_key(self) -> str:
+        return (
+            f"single:{self.fixture_id}:{self.market}:{self.selection}:"
+            f"{self.best_bookmaker}:{self.best_odd}"
+        )
+
 
 @dataclass(frozen=True)
 class MultiBet:
@@ -42,3 +49,7 @@ class MultiBet:
     @property
     def data_edge_percent(self) -> float:
         return round((self.total_ev - 1) * 100, 1)
+
+    @property
+    def alert_key(self) -> str:
+        return "multi:" + "|".join(event.alert_key for event in self.events)

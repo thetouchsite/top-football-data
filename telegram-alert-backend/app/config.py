@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     sportmonks_timezone: str = Field(default="Europe/Rome", alias="SPORTMONKS_TIMEZONE")
     sportmonks_league_ids: str = Field(default="", alias="SPORTMONKS_SCHEDULE_LEAGUE_IDS")
 
+    mongodb_uri: str = Field(default="", alias="MONGODB_URI")
+    mongodb_db: str = Field(default="top-football-pulse", alias="MONGODB_DB")
+
     telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: str = Field(default="", alias="TELEGRAM_CHAT_ID")
 
