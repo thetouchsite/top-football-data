@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+from datetime import timezone
+
+import httpx
+
+from app.models import FixtureMarket, MultiBet
+
+
+def _pct(value: float) -> str:
+    return f"{round(value * 100, 1)}%"
+
+
+def _kickoff_label(market: FixtureMarket) -> str:
+    if not market.kickoff:
+        return "Orario non disponibile"
+    return market.kickoff.astimezone(timezone.utc).strftime("%d/%m %H:%M UTC")
+
+
+def format_single_alert(market: FixtureMarket, cta_label: str) -> str:
+    lines = [
+        f"Alert Value Bet +{round((market.edge - 1) * 100, 1)}%",
+        "",
+        f"{market.title}",
+        f"{market.league} - {_kickoff_label(market)}",
+        f"Mercato: {market.market} / {market.selection}",
+        f"Probabilita modello: {_pct(market.model_probability)}",
+        f"Quota modello: {market.model_odd}",
+        f"Migliore quota: {market.best_odd} ({market.best_bookmaker})",
+        f"EV singolo: {market.edge}",
+    ]
+
+    if market.comparator:
+        lines.extend(["", "Comparatore quote:"])
+        for odd in market.comparator:
+            suffix = f" - {cta_label}: {odd.affiliate_url}" if odd.affiliate_url else ""
+            lines.append(f"- {odd.bookmaker}: {odd.odd}{suffix}")
+
+    return "\n".join(lines)
+
+
+def format_multibet_alert(multibet: MultiBet, cta_label: str) -> str:
+    lines = [
+        f"Alert Value Combo +{multibet.data_edge_percent}%",
+        "",
+        f"Eventi: {len(multibet.events)}",
+        f"Quota totale: {multibet.total_odd}",
+        f"Probabilita statistica: {_pct(multibet.statistical_probability)}",
+        f"EV composto: {multibet.total_ev}",
+        f"Confidence Score: {multibet.confidence_score}/100",
+        "",
+        "Selezioni:",
+    ]
+
+    for index, event in enumerate(multibet.events, start=1):
+        lines.append(
+            f"{index}. {event.title} - {event.market} {event.selection} @ {event.best_odd} "
+            f"({event.best_bookmaker}, EV {event.edge})"
+        )
+
+    top_links = [
+        odd.affiliate_url
+        for event in multibet.events
+        for odd in event.comparator[:1]
+        if odd.affiliate_url
+    ]
+    if top_links:
+        lines.extend(["", f"{cta_label}:"])
+        lines.extend(f"- {link}" for link in top_links)
+
+    return "\n".join(lines)
+
+
+class TelegramClient:
+    def __init__(self, bot_token: str, chat_id: str):
+        self.bot_token = bot_token
+        self.chat_id = chat_id
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.bot_token and self.chat_id)
+
+    async def send_message(self, text: str) -> None:
+        if not self.configured:
+            raise RuntimeError("TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID non configurati.")
+
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(
+                url,
+                json={
+                    "chat_id": self.chat_id,
+                    "text": text,
+                    "disable_web_page_preview": True,
+                },
+            )
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as error:
+                status_code = error.response.status_code
+                if status_code == 404:
+                    raise RuntimeError(
+                        "Telegram ha rifiutato il bot token: controlla TELEGRAM_BOT_TOKEN completo da BotFather."
+                    ) from None
+                if status_code == 400:
+                    raise RuntimeError(
+                        "Telegram ha rifiutato la chat: controlla TELEGRAM_CHAT_ID e che il bot sia admin del canale."
+                    ) from None
+                raise RuntimeError(f"Telegram sendMessage fallito con status {status_code}.") from None
