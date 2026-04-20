@@ -342,6 +342,72 @@ function formatShortCode(participant) {
   return name.replace(/\s+/g, "").toUpperCase().slice(0, 3);
 }
 
+const SPORTMONKS_MEDIA_BASE_DEFAULT = "https://cdn.sportmonks.com";
+
+function pickRawImagePath(source) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  const nestedPlayer =
+    source.player && typeof source.player === "object" ? source.player : null;
+  const nestedTeam = source.team && typeof source.team === "object" ? source.team : null;
+  const nestedParticipant =
+    source.participant && typeof source.participant === "object" ? source.participant : null;
+
+  return (
+    source.image_path ||
+    source.imagePath ||
+    source.logo_path ||
+    source.logoPath ||
+    source.logo ||
+    source.photo ||
+    source.image ||
+    source?.meta?.image_path ||
+    nestedPlayer?.image_path ||
+    nestedPlayer?.imagePath ||
+    nestedPlayer?.photo ||
+    nestedTeam?.image_path ||
+    nestedTeam?.imagePath ||
+    nestedParticipant?.image_path ||
+    nestedParticipant?.imagePath ||
+    null
+  );
+}
+
+function resolveSportmonksMediaUrl(raw) {
+  if (raw == null) {
+    return null;
+  }
+
+  const trimmed = String(raw).trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  const base = String(
+    process.env.SPORTMONKS_MEDIA_BASE_URL || SPORTMONKS_MEDIA_BASE_DEFAULT
+  ).replace(/\/+$/g, "");
+  const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+
+  return `${base}${path}`;
+}
+
+function buildMediaBundle(source) {
+  const raw = pickRawImagePath(source);
+  const imageUrl = resolveSportmonksMediaUrl(raw);
+
+  return {
+    imageUrl,
+    thumbUrl: imageUrl,
+  };
+}
+
 function getSportmonksApiToken({ silent = false } = {}) {
   const apiToken =
     process.env.SPORTMONKS_API_TOKEN || process.env.SPORTMONKS_API_KEY || "";
@@ -1145,17 +1211,22 @@ function resolveOfficialLocation(entry, homeParticipant, awayParticipant) {
 }
 
 function normalizeOfficials(officials = []) {
-  return asArray(officials).map((entry) => ({
-    id: String(entry?.id || entry?.player_id || `${entry?.name || "official"}`),
-    name:
-      entry?.display_name ||
-      entry?.common_name ||
-      entry?.name ||
-      [entry?.firstname, entry?.lastname].filter(Boolean).join(" ") ||
-      "Official",
-    countryId: entry?.country_id || entry?.nationality_id || null,
-    image: entry?.image_path || null,
-  }));
+  return asArray(officials).map((entry) => {
+    const media = buildMediaBundle(entry);
+
+    return {
+      id: String(entry?.id || entry?.player_id || `${entry?.name || "official"}`),
+      name:
+        entry?.display_name ||
+        entry?.common_name ||
+        entry?.name ||
+        [entry?.firstname, entry?.lastname].filter(Boolean).join(" ") ||
+        "Official",
+      countryId: entry?.country_id || entry?.nationality_id || null,
+      media,
+      image: media.imageUrl,
+    };
+  });
 }
 
 function buildCoachAssignments(coaches, homeParticipant, awayParticipant) {
@@ -1213,6 +1284,7 @@ function normalizeStandingsTable(standings, stageId, homeParticipant, awayPartic
         participantId,
         team: entry?.participant?.name || "Team",
         shortCode: entry?.participant?.short_code || null,
+        media: buildMediaBundle(entry?.participant || entry),
         position: safeNumber(entry?.position, 0),
         points: safeNumber(entry?.points, 0),
         played: stats.played,
@@ -1277,6 +1349,7 @@ function normalizeSquadPlayers(teamSquadEntries = [], teamName = "") {
     scorerProb: 0,
     height: entry?.player?.height || null,
     weight: entry?.player?.weight || null,
+    media: buildMediaBundle(entry?.player || entry),
   }));
 }
 
@@ -2001,6 +2074,7 @@ function createRenderedLineupPlayers(players, lineupStatus, formationOverride = 
     return rowPlayers.map((player, playerIndex) => ({
       id: String(player?.player_id || player?.id || `${player?.team_id || "team"}:${player?.jersey_number || playerIndex}`),
       name: player?.player_name || player?.player?.display_name || player?.player?.common_name || player?.player?.name || "Giocatore",
+      media: buildMediaBundle(player?.player || player),
       number: safeNumber(player?.jersey_number, 0),
       position: formatPositionLabel(
         player?.detailedposition?.code ||
@@ -2119,6 +2193,7 @@ function buildLineupPlayerProfiles(lineups, renderedLineups, normalizedEvents, h
       return {
         id: String(lineupEntry?.player_id || lineupEntry?.id || `${name}:${lineupEntry?.team_id || "team"}`),
         name,
+        media: buildMediaBundle(lineupEntry?.player || lineupEntry),
         number: safeNumber(lineupEntry?.jersey_number, 0),
         team,
         pos: formatPositionLabel(
@@ -2158,6 +2233,7 @@ function buildImpactPlayers(playerProfiles = []) {
     .slice(0, 5)
     .map((player) => ({
       name: player.name,
+      media: player.media || buildMediaBundle(null),
       odds: player.scorerOdds,
       prob: player.scorerProb,
       xg: player.xg,
@@ -2519,6 +2595,9 @@ function normalizeScheduleLikeFixture(fixture = {}) {
       core.stateInfo.shortName !== "PRE" && (core.scores.home || core.scores.away)
         ? core.scores
         : null,
+    home_media: buildMediaBundle(core.homeParticipant),
+    away_media: buildMediaBundle(core.awayParticipant),
+    league_media: buildMediaBundle(fixture?.league),
     apiLoaded: true,
   };
 }
@@ -2687,6 +2766,9 @@ export function normalizeSportmonksLiveMatch(fixture = {}) {
     lineup_status: lineupStatus,
     lineupConfirmed: lineupStatus === "official",
     provider_ids: core.providerIds,
+    home_media: buildMediaBundle(core.homeParticipant),
+    away_media: buildMediaBundle(core.awayParticipant),
+    league_media: buildMediaBundle(fixture?.league),
     apiLoaded: true,
   };
 }

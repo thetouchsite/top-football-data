@@ -65,6 +65,17 @@ SEZIONE C — MULTIBET ORCHESTRATORE
 | Performance storiche / ROI | CALCOLO | Storico interno (DB) + formule ROI/report. |
 
 ====================================================================
+BLOCCO TRASVERSALE — IMMAGINI (CDN / MEDIA)
+====================================================================
+
+| Funzione | Tipo | Nota semplice |
+|----------|------|---------------|
+| URL logo squadra / competizione / foto giocatore | API | Path/URL derivati dai nodi inclusi nel feed Sportmonks (participant, league, player, ecc.). |
+| Normalizzazione `media.imageUrl` / `thumbUrl` | API + CALCOLO | Mapping stabile in `sportmonks/index.js` + default vuoti in domain; base CDN sovrascrivibile (`SPORTMONKS_MEDIA_BASE_URL`). |
+| Fallback UI (iniziali / placeholder) | CALCOLO | `FootballMediaImage.jsx` — nessuna immagine finta remota; solo fallback locale se URL assente o errore load. |
+| Contrasto loghi su tema scuro | CALCOLO | Stesso componente: contenitore “light mat” dietro URL remoti (default), bordo leggero; opzione `surface="none"`. |
+
+====================================================================
 BLOCCO TRASVERSALE — COME LAVORARE SENZA “FAKE DATA”
 ====================================================================
 

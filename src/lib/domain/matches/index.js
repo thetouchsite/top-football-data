@@ -6,6 +6,8 @@ import {
   toIsoDate,
 } from "@/lib/domain/freshness";
 
+const EMPTY_MEDIA = { imageUrl: null, thumbUrl: null };
+
 /**
  * @typedef {Object} PrematchMatch
  * @property {string} provider
@@ -28,6 +30,9 @@ export function createPrematchMatch(match, context = {}) {
 
   return {
     ...match,
+    home_media: match?.home_media ?? EMPTY_MEDIA,
+    away_media: match?.away_media ?? EMPTY_MEDIA,
+    league_media: match?.league_media ?? EMPTY_MEDIA,
     provider,
     source: context.source || "unknown",
     isFallback: isFallbackSource(context.source),

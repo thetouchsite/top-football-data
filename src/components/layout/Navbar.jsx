@@ -11,6 +11,7 @@ import { useApp } from "@/lib/AppContext";
 import { getScheduleWindow } from "@/api/football";
 import NotificationsPanel from "./NotificationsPanel";
 import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
@@ -192,8 +193,33 @@ export default function Navbar() {
                           onClick={() => { navigate(`/match/${m.id}`); setSearchOpen(false); setQuery(""); }}
                           className="w-full text-left px-4 py-2.5 hover:bg-secondary/40 transition-colors"
                         >
-                          <div className="text-xs font-semibold text-foreground">{m.home} vs {m.away}</div>
-                          <div className="text-xs text-muted-foreground">{m.league} - {m.date} {m.time}</div>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex shrink-0 items-center gap-1">
+                              <FootballMediaImage
+                                media={m.league_media}
+                                fallbackLabel={m.league}
+                                alt={m.league}
+                                size="xs"
+                                shape="square"
+                              />
+                              <FootballMediaImage
+                                media={m.home_media}
+                                fallbackLabel={m.homeShort || m.home}
+                                alt={m.home}
+                                size="xs"
+                              />
+                              <FootballMediaImage
+                                media={m.away_media}
+                                fallbackLabel={m.awayShort || m.away}
+                                alt={m.away}
+                                size="xs"
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-semibold text-foreground">{m.home} vs {m.away}</div>
+                              <div className="truncate text-xs text-muted-foreground">{m.league} - {m.date} {m.time}</div>
+                            </div>
+                          </div>
                         </button>
                       ))}
                     </div>

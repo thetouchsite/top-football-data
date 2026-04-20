@@ -43,6 +43,7 @@ Sotto ogni pronostico del singolo match: comparatore a **4 slot**:
 
 ### 4. Visualizzazione (frontend)
 
+- **Immagini (loghi / foto):** dove il feed espone asset per squadra, competizione o giocatore, l’interfaccia usa un contratto dati normalizzato (`media.imageUrl` opzionale `thumbUrl`, più `home_media` / `away_media` / `league_media` sul match) costruito lato integrazione Sportmonks, con **fallback su iniziali** se l’URL manca o non è caricabile — senza dipendere dal payload raw nelle pagine. In dark mode i loghi remoti sono mostrati su **fondo chiaro nel riquadro** (stesso componente condiviso) per garantire contrasto con asset pensati per sfondo chiaro.
 - **Barre di confidenza:** barre di progresso (es. verdi) per la forza del segnale.
 - **Formazioni:** integrare formazioni live (se disponibili da Sportmonks) per un **Reliability score**.
 - **Toggle** «Mostra solo Value Bet» per utenti pro.

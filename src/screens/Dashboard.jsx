@@ -17,6 +17,7 @@ import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
 import ValueBetBadge from "@/components/shared/ValueBetBadge";
 import ConfidenceBar from "@/components/shared/ConfidenceBar";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { useApp } from "@/lib/AppContext";
 import { getLivescoresInplay, getScheduleWindow } from "@/api/football";
 import {
@@ -219,6 +220,8 @@ export default function Dashboard() {
                 provider={schedulePayload?.provider}
                 source={schedulePayload?.source}
                 freshness={schedulePayload?.freshness}
+                competition={feedMatches[0]?.competition}
+                leagueMedia={feedMatches[0]?.league_media}
                 predictionProvider={feedMatches[0]?.prediction_provider}
                 oddsProvider={feedMatches[0]?.odds_provider}
                 notice={isDatiLiveFeatureEnabled() ? undefined : dashboardNotice}
@@ -233,6 +236,8 @@ export default function Dashboard() {
                   provider={livePayload?.provider}
                   source={livePayload?.source}
                   freshness={livePayload?.freshness}
+                  competition={liveMatches[0]?.competition}
+                  leagueMedia={liveMatches[0]?.league_media}
                   predictionProvider={liveMatches[0]?.prediction_provider}
                   oddsProvider={liveMatches[0]?.odds_provider}
                   lineupStatus={liveMatches[0]?.lineup_status}
@@ -308,13 +313,27 @@ export default function Dashboard() {
                   >
                     <div className="flex items-center justify-between gap-3 p-3 md:p-4">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="w-14 shrink-0 text-center">
-                          <span className="block truncate text-[11px] font-medium text-foreground/90">
+                        <div className="flex w-14 shrink-0 flex-col items-center gap-1 text-center">
+                          <FootballMediaImage
+                            media={match.league_media}
+                            fallbackLabel={match.league}
+                            alt=""
+                            size="xs"
+                            shape="square"
+                          />
+                          <span className="block max-w-full truncate text-[11px] font-medium text-foreground/90">
                             {match.league}
                           </span>
                           <span className="text-[11px] text-muted-foreground">{match.time}</span>
                         </div>
-                        <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <FootballMediaImage
+                            media={match.home_media}
+                            fallbackLabel={match.homeShort || match.home}
+                            alt=""
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-semibold text-foreground">
                             {match.home} vs {match.away}
                           </div>
@@ -328,6 +347,13 @@ export default function Dashboard() {
                                 : "Quote provider"}
                             </span>
                           </div>
+                          </div>
+                          <FootballMediaImage
+                            media={match.away_media}
+                            fallbackLabel={match.awayShort || match.away}
+                            alt=""
+                            size="sm"
+                          />
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2 sm:gap-3">

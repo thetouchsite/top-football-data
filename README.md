@@ -25,6 +25,7 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 - `MONGODB_DB`: nome del database applicativo
 - `SPORTMONKS_API_TOKEN` (o `SPORTMONKS_API_KEY`): token Football API v3
 - Opzionali: `SPORTMONKS_BASE_URL`, `SPORTMONKS_SCHEDULE_DAYS`, `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`, `SPORTMONKS_SCHEDULE_LEAGUE_IDS` (vedi codice in `src/lib/providers/sportmonks`)
+- Opzionale: `SPORTMONKS_MEDIA_BASE_URL` — override base CDN per URL immagini normalizzate (default `https://cdn.sportmonks.com`). Il payload espone `home_media`, `away_media`, `league_media` e `media` su giocatori/ufficiali (vedi normalizer Sportmonks).
 - `STRIPE_SECRET_KEY`: chiave segreta Stripe per checkout e billing portal
 - `STRIPE_PREMIUM_PRICE_ID`: price id Stripe del piano premium mensile
 - `NEXT_PUBLIC_APP_URL`: URL base pubblica dell'app, usata nei redirect Stripe
@@ -70,6 +71,7 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
 
 - Il feed dati calcio passa da Sportmonks; nessun fallback Sportradar.
 - Il billing premium usa Stripe Checkout e Billing Portal (vedi implementazione auth/billing nel repo).
+- **Immagini (loghi squadre / competizioni, foto giocatori):** contratto normalizzato `media.imageUrl` / `media.thumbUrl` lato provider + domain (`*_media` su match/fixture/live); UI tramite `FootballMediaImage` con fallback su iniziali e `loading="lazy"`. Su tema scuro, le immagini remote hanno di default sfondo chiaro nel contenitore per evitare loghi scuri invisibili; `surface="none"` per eccezioni. Evitare lettura di payload raw Sportmonks nelle schermate.
 
 ## Deploy
 

@@ -1,5 +1,6 @@
 import React from "react";
 import GlassCard from "../shared/GlassCard";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 
 export default function FormationPitch({ homeLineup, homeTeam, awayTeam: _awayTeam, onPlayerClick }) {
   return (
@@ -31,14 +32,28 @@ export default function FormationPitch({ homeLineup, homeTeam, awayTeam: _awayTe
             className="absolute transform -translate-x-1/2 -translate-y-1/2 group z-10"
             style={{ left: `${player.x}%`, top: `${player.y}%` }}
           >
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all group-hover:scale-110 ${
-              player.status === "confermato"
-                ? "bg-blue-600/80 border-blue-400/60 text-white"
-                : player.status === "probabile"
-                ? "bg-yellow-600/80 border-yellow-400/60 text-white"
-                : "bg-red-600/80 border-red-400/60 text-white"
-            }`}>
-              {player.number}
+            <div
+              className={`rounded-full p-0.5 ring-2 transition-all group-hover:scale-110 ${
+                player.status === "confermato"
+                  ? "ring-blue-400/80"
+                  : player.status === "probabile"
+                    ? "ring-yellow-400/80"
+                    : "ring-red-400/80"
+              }`}
+            >
+              <div className="relative">
+                <FootballMediaImage
+                  media={player.media}
+                  fallbackLabel={player.name || player.number}
+                  alt={player.name || ""}
+                  size="sm"
+                />
+                {player.number != null && String(player.number).trim() !== "" && (
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-black/70 px-0.5 text-[8px] font-bold text-white">
+                    {player.number}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap">
               <span className="text-xs font-medium text-white/90 bg-black/50 px-1.5 py-0.5 rounded">

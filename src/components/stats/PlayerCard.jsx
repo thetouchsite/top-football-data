@@ -1,6 +1,7 @@
 ﻿import React from "react";
 import { Bell, ChevronRight, Star } from "lucide-react";
 import GlassCard from "../shared/GlassCard";
+import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/AppContext";
 
@@ -14,8 +15,18 @@ export default function PlayerCard({ player, expanded = false, oddsAvailable = f
     <GlassCard>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-secondary/80 border border-border/50 flex items-center justify-center text-lg font-black text-primary">
-            {player.number}
+          <div className="relative shrink-0">
+            <FootballMediaImage
+              media={player.media}
+              fallbackLabel={player.name}
+              alt={player.name}
+              size="lg"
+            />
+            {player.number != null && String(player.number).trim() !== "" && (
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-border/50 bg-secondary px-0.5 text-[10px] font-black text-primary">
+                {player.number}
+              </span>
+            )}
           </div>
           <div>
             <h3 className="font-semibold text-foreground">{player.name}</h3>
