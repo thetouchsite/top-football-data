@@ -2,8 +2,10 @@ import React from "react";
 import { TrendingUp } from "lucide-react";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
 
-const VALUE_BET_TITLE =
-  "Segnale euristico dal modello interno (non garanzia di valore sul mercato). Edge stimato rispetto alle probabilità del modello.";
+const VALUE_BET_TITLE_DERIVED =
+  "Segnale fallback dal modello interno (non garanzia di valore sul mercato).";
+const VALUE_BET_TITLE_MATH =
+  "Segnale value da confronto quota modello vs miglior quota bookmaker disponibile.";
 
 /**
  * @param {object} [props]
@@ -16,6 +18,9 @@ export default function ValueBetBadge({ type, edge, match, variant = "default" }
   const vb = match?.valueBet;
   const t = type ?? vb?.type;
   const e = edge ?? vb?.edge;
+  const isMathSource = match?.valueBetSource === "sportmonks_feed_math";
+  const title = isMathSource ? VALUE_BET_TITLE_MATH : VALUE_BET_TITLE_DERIVED;
+
   if (!t) {
     return null;
   }
@@ -35,7 +40,7 @@ export default function ValueBetBadge({ type, edge, match, variant = "default" }
     return (
       <div
         role="status"
-        title={VALUE_BET_TITLE}
+        title={title}
         aria-label={aria}
         className="inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md border border-primary/25 bg-primary/8 px-2 py-1 text-primary"
       >
@@ -50,7 +55,7 @@ export default function ValueBetBadge({ type, edge, match, variant = "default" }
   return (
     <div
       role="status"
-      title={VALUE_BET_TITLE}
+      title={title}
       aria-label={aria}
       className="inline-flex max-w-full flex-col gap-1 rounded-md border border-primary/25 bg-primary/8 px-2.5 py-2 text-primary sm:min-w-[12rem]"
     >

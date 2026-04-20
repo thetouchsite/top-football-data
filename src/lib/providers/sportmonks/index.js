@@ -678,6 +678,72 @@ function probabilityToOdds(probability) {
   return roundTo(100 / probability, 2);
 }
 
+function buildModelOddsFromProbabilities(probabilities) {
+  return {
+    home: probabilityToOdds(probabilities?.home),
+    draw: probabilityToOdds(probabilities?.draw),
+    away: probabilityToOdds(probabilities?.away),
+  };
+}
+
+function computeValuePercent(modelOdd, bookOdd) {
+  if (!Number.isFinite(modelOdd) || modelOdd <= 0 || !Number.isFinite(bookOdd) || bookOdd <= 0) {
+    return null;
+  }
+  return roundTo(((bookOdd - modelOdd) / modelOdd) * 100, 1);
+}
+
+function buildOneXTwoValueMarkets(probabilities, oneXTwoBest = null) {
+  const modelOdds = buildModelOddsFromProbabilities(probabilities);
+  const byOutcome = {
+    home: {
+      modelOdd: modelOdds.home || null,
+      bestBookOdd: oneXTwoBest?.home?.value || null,
+      bestBookmaker: oneXTwoBest?.home?.bookmaker || null,
+    },
+    draw: {
+      modelOdd: modelOdds.draw || null,
+      bestBookOdd: oneXTwoBest?.draw?.value || null,
+      bestBookmaker: oneXTwoBest?.draw?.bookmaker || null,
+    },
+    away: {
+      modelOdd: modelOdds.away || null,
+      bestBookOdd: oneXTwoBest?.away?.value || null,
+      bestBookmaker: oneXTwoBest?.away?.bookmaker || null,
+    },
+  };
+
+  Object.values(byOutcome).forEach((entry) => {
+    entry.valuePct = computeValuePercent(entry.modelOdd, entry.bestBookOdd);
+    entry.hasBookmakerData = Number.isFinite(entry.bestBookOdd) && entry.bestBookOdd > 0;
+  });
+
+  const preferred = [
+    { type: "1", key: "home" },
+    { type: "X", key: "draw" },
+    { type: "2", key: "away" },
+  ]
+    .map(({ type, key }) => ({
+      type,
+      key,
+      edge: byOutcome[key].valuePct,
+      market: "1X2",
+      odds: byOutcome[key].bestBookOdd,
+      bookmaker: byOutcome[key].bestBookmaker,
+    }))
+    .filter((entry) => Number.isFinite(entry.edge))
+    .sort((left, right) => right.edge - left.edge);
+
+  const primary = preferred.find((entry) => entry.edge > 0) || null;
+
+  return {
+    modelOdds,
+    oneXTwo: byOutcome,
+    primary,
+    hasBookmakerData: Object.values(byOutcome).some((entry) => entry.hasBookmakerData),
+  };
+}
+
 function buildExpectedGoalsFromProbabilities(probabilities) {
   return {
     home: roundTo(0.75 + probabilities.home / 38, 2),
@@ -745,8 +811,77 @@ function buildLikelyScores(probabilities, xg) {
   }));
 }
 
-function buildConfidence(probabilities) {
-  return Math.min(88, Math.max(58, 58 + Math.abs(probabilities.home - probabilities.away)));
+function getValueQualityScore(valueEdge) {
+  if (!Number.isFinite(valueEdge)) return 35;
+  if (valueEdge <= 0) return 30;
+  if (valueEdge >= 14) return 95;
+  if (valueEdge >= 10) return 85;
+  if (valueEdge >= 6) return 70;
+  if (valueEdge >= 3) return 55;
+  return 45;
+}
+
+function getDataCoverageScore({ coverage, hasPredictedScores }) {
+  let score = 0;
+  if (coverage?.hasPredictions) score += 35;
+  if (coverage?.hasPreMatchOdds) score += 35;
+  if (coverage?.hasExpectedGoals) score += 15;
+  if (hasPredictedScores) score += 15;
+  return Math.max(0, Math.min(100, score));
+}
+
+function getLineupReliabilityScore(lineupStatus) {
+  if (lineupStatus === "official") return 100;
+  if (lineupStatus === "probable") return 75;
+  if (lineupStatus === "expected") return 55;
+  return 35;
+}
+
+function buildConfidence({
+  probabilities,
+  coverage,
+  lineupStatus = "unknown",
+  valueEdge = null,
+  apiConfidence = null,
+  hasPredictedScores = false,
+} = {}) {
+  const apiScore = apiPercentFromPredictionValue(apiConfidence);
+  if (apiScore !== null) {
+    return {
+      score: apiScore,
+      source: "sportmonks_api",
+      reliabilityScore: getLineupReliabilityScore(lineupStatus),
+    };
+  }
+
+  const p = {
+    home: safeNumber(probabilities?.home),
+    draw: safeNumber(probabilities?.draw),
+    away: safeNumber(probabilities?.away),
+  };
+  const ordered = [p.home, p.draw, p.away].sort((left, right) => right - left);
+  const margin = Math.max(0, (ordered[0] || 0) - (ordered[1] || 0));
+  const modelStrength = Math.max(0, Math.min(100, roundTo(40 + margin * 2.2, 1)));
+  const valueQuality = getValueQualityScore(valueEdge);
+  const dataCoverage = getDataCoverageScore({ coverage, hasPredictedScores });
+  const lineupReliability = getLineupReliabilityScore(lineupStatus);
+
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      roundTo(
+        modelStrength * 0.4 + valueQuality * 0.25 + dataCoverage * 0.2 + lineupReliability * 0.15,
+        0
+      )
+    )
+  );
+
+  return {
+    score,
+    source: "composite_internal",
+    reliabilityScore: lineupReliability,
+  };
 }
 
 function normalizeOddsOutcomeLabel(value) {
@@ -945,6 +1080,7 @@ function extractOddsBundle(oddsEntries = []) {
       goal: snapshot.btts.yes.value || 0,
       noGoal: snapshot.btts.no.value || 0,
     },
+    oneXTwoBest: snapshot.oneXTwo,
     bookmakers,
     bestOdds: bestOneXTwo ? String(bestOneXTwo.value) : null,
     bestBookmaker: bestOneXTwo?.bookmaker || null,
@@ -1269,6 +1405,7 @@ function normalizePredictionEntry(entry, homeParticipant, awayParticipant) {
     .slice(0, 3);
   const yesValue = readNamedNumeric(payload, ["yes", "over", "goal"]);
   const noValue = readNamedNumeric(payload, ["no", "under", "ngoal", "no_goal"]);
+  const confidenceValue = readNamedNumeric(payload, ["confidence", "reliability", "strength"]);
 
   const oneXTwo =
     Number.isFinite(homeValue) || Number.isFinite(drawValue) || Number.isFinite(awayValue)
@@ -1294,6 +1431,7 @@ function normalizePredictionEntry(entry, homeParticipant, awayParticipant) {
     oneXTwo,
     yesValue,
     noValue,
+    confidenceValue,
     scores: scoreCandidates,
   };
 }
@@ -1313,6 +1451,7 @@ function extractPredictionBundle(predictions, homeParticipant, awayParticipant) 
     /** Percentuali O/U e GG solo se presenti nelle predizioni API (yes/no). */
     ouProb: null,
     ggProb: null,
+    confidence: null,
     scores: [],
   };
 
@@ -1326,6 +1465,10 @@ function extractPredictionBundle(predictions, homeParticipant, awayParticipant) 
 
       if (!bundle.scores.length && entry.scores.length) {
         bundle.scores = entry.scores;
+      }
+
+      if (bundle.confidence === null) {
+        bundle.confidence = apiPercentFromPredictionValue(entry.confidenceValue);
       }
 
       if (
@@ -2196,6 +2339,21 @@ function normalizeCoreSportmonksFixture(fixture = {}) {
   const scores = pickScoreSet(fixture?.scores, homeParticipant, awayParticipant);
   const predictionProvider = coverage.hasPredictions ? "sportmonks_predictions" : "derived_internal_model";
   const oddsBundle = extractOddsBundle(fixture?.odds);
+  const valueMarkets = buildOneXTwoValueMarkets(probabilities, oddsBundle.oneXTwoBest);
+  const formationOverrides = getFormationOverrides(
+    fixture?.formations,
+    homeParticipant,
+    awayParticipant
+  );
+  const lineupStatus = buildLineupStatus(fixture, fixture?.lineups, formationOverrides);
+  const confidenceBundle = buildConfidence({
+    probabilities,
+    coverage,
+    lineupStatus,
+    valueEdge: valueMarkets.primary?.edge ?? null,
+    apiConfidence: predictionBundle.confidence,
+    hasPredictedScores: predictionBundle.scores.length > 0,
+  });
 
   return {
     fixtureId: String(fixture?.id || ""),
@@ -2221,6 +2379,10 @@ function normalizeCoreSportmonksFixture(fixture = {}) {
     scores,
     homeForm,
     awayForm,
+    confidence: confidenceBundle.score,
+    confidenceSource: confidenceBundle.source,
+    reliabilityScore: confidenceBundle.reliabilityScore,
+    lineupStatus,
     predictionProvider,
     info: getCompetitionInfo(fixture),
     venue: getVenueInfo(fixture),
@@ -2228,6 +2390,7 @@ function normalizeCoreSportmonksFixture(fixture = {}) {
     subscription: asArray(fixture?.subscription || fixture?.subscriptions),
     metadata: getFixtureMetadataEntries(fixture),
     oddsBundle,
+    valueMarkets,
     /** Probabilità O/U e GG ricavate dalle predizioni API (yes/no), quando presenti. */
     predictionMarketProbabilities: {
       ou: predictionBundle.ouProb || null,
@@ -2286,8 +2449,19 @@ function resolveScheduleOuGgProbabilities(core) {
 
 function normalizeScheduleLikeFixture(fixture = {}) {
   const core = normalizeCoreSportmonksFixture(fixture);
+  const valueMarkets = core.valueMarkets;
 
   const { ouProb, ggProb } = resolveScheduleOuGgProbabilities(core);
+  const derivedFallbackValueBet = buildDerivedValueBet(core.probabilities, core.derivedXg);
+  const primaryValueBet = valueMarkets.primary
+    ? {
+        type: valueMarkets.primary.type,
+        edge: valueMarkets.primary.edge,
+        market: "1X2",
+      }
+    : null;
+  const valueBet = primaryValueBet || derivedFallbackValueBet || null;
+  const valueSource = primaryValueBet ? "sportmonks_feed_math" : valueBet ? "fallback_derivato" : "none";
 
   return {
     id: core.fixtureId,
@@ -2319,9 +2493,14 @@ function normalizeScheduleLikeFixture(fixture = {}) {
     ouProb,
     ggProb,
     xg: core.derivedXg,
-    valueBet: buildDerivedValueBet(core.probabilities, core.derivedXg),
+    valueBet,
+    valueBetSource: valueSource,
+    valueMarkets,
+    modelOdds: valueMarkets.modelOdds,
     scores: core.predictedScores,
-    confidence: buildConfidence(core.probabilities),
+    confidence: core.confidence,
+    confidence_source: core.confidenceSource,
+    reliability_score: core.reliabilityScore,
     scorers: [],
     bookmakers: core.oddsBundle.bookmakers,
     homeForm: core.homeForm,

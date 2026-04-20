@@ -51,9 +51,20 @@ Applicazione React migrata a Next.js, pronta per deploy su Vercel e con API serv
   (stesse basi numeriche delle quote derivate), (3) probabilita implicite dalle quote bookmaker (`100/quota`)
   quando si usano decimali dal bookmaker. Dettaglio implementazione: `src/lib/providers/sportmonks/index.js`
   (`extractPredictionBundle`, `buildGoalMarkets`, `resolveScheduleOuGgProbabilities`).
+- **Confidenza match (Sezione A):** usa valore API se il feed lo espone (`confidence_source: sportmonks_api`);
+  in assenza API usa fallback composito interno (`confidence_source: composite_internal`) con pesi su
+  forza modello, qualita value, coverage dati e reliability lineup.
+- **Highlight value in UI:** nel dettaglio match l'evidenziazione segue il mercato/esito value su tutti i casi
+  supportati (`1/X/2`, `Over/Under`, `Goal/No Goal`) con la stessa grammatica visiva delle card lista.
 - Value bet (attuale): segnale **euristico interno** (`buildDerivedValueBet`), non è l’output dell’API
   **Value bets** di Sportmonks. Quando il contratto includerà l’add-on Predictions, valutare integrazione
   degli endpoint value-bets e uso in UI al posto o accanto al derivato.
+
+## Roadmap e requisiti cliente
+
+- Piano tecnico-prodotto unificato: [`.cursor/plans/roadmap_funzioni_piattaforma_2026.plan.md`](.cursor/plans/roadmap_funzioni_piattaforma_2026.plan.md) (sezioni A–D dal documento cliente, API Sportmonks, infrastruttura notifiche).
+- Requisiti testuali versionabili: [`docs/cliente/funzioni-piattaforma.md`](docs/cliente/funzioni-piattaforma.md).
+- Mappa operativa API vs calcoli interni: [`TODO_API_E_CALCOLI_FUNZIONI_PIATTAFORMA.txt`](TODO_API_E_CALCOLI_FUNZIONI_PIATTAFORMA.txt).
 
 ## Stato attuale
 

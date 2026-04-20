@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { TrendingUp, Filter, LayoutGrid, LayoutList, Search } from "lucide-react";
+import { TrendingUp, Filter, LayoutGrid, LayoutList, Search, Send, Crown } from "lucide-react";
+import { Link } from "@/lib/router-compat";
 import {
   Select,
   SelectContent,
@@ -13,16 +14,15 @@ import PageIntro from "@/components/shared/PageIntro";
 import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
 import MatchCard from "@/components/match/MatchCard";
-import LiveMiniWidget from "@/components/match/LiveMiniWidget";
 import GlassCard from "@/components/shared/GlassCard";
-import { getLivescoresInplay, getScheduleWindow } from "@/api/football";
+import ConfidenceBar from "@/components/shared/ConfidenceBar";
+import { getScheduleWindow } from "@/api/football";
 import {
   getLeagueBucket,
   getMatchStatusBucket,
   matchLeagueFilter,
   sortMatchesByCriterion,
 } from "@/lib/football-filters";
-import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 
 const STATUS_TABS = [
   { key: "all", label: "Tutti" },
@@ -38,15 +38,36 @@ const SORT_OPTIONS = [
   { value: "value", label: "Valore" },
 ];
 const MAX_VISIBLE_MATCHES = 24;
+const TELEGRAM_URL = String(process.env.NEXT_PUBLIC_TELEGRAM_URL || "").trim();
 
 function sanitizeMatches(matches) {
   return Array.isArray(matches) ? matches : [];
 }
 
+function getValueCandidate(match) {
+  if (!match) {
+    return null;
+  }
+  if (match.valueMarkets?.primary && Number.isFinite(match.valueMarkets.primary.edge)) {
+    return {
+      type: match.valueMarkets.primary.type,
+      edge: match.valueMarkets.primary.edge,
+      source: "math",
+    };
+  }
+  if (match.valueBet && Number.isFinite(match.valueBet.edge)) {
+    return {
+      type: match.valueBet.type,
+      edge: match.valueBet.edge,
+      source: "fallback",
+    };
+  }
+  return null;
+}
+
 export default function ModelliPredittivi() {
   const [apiMatches, setApiMatches] = useState([]);
   const [scheduleMeta, setScheduleMeta] = useState(null);
-  const [liveMatch, setLiveMatch] = useState(null);
   const [scheduleLoading, setScheduleLoading] = useState(true);
   const [scheduleError, setScheduleError] = useState("");
   const [league, setLeague] = useState("all");
@@ -65,9 +86,6 @@ export default function ModelliPredittivi() {
 
       try {
         const schedulePayload = await getScheduleWindow(14);
-        const livePayload = isDatiLiveFeatureEnabled()
-          ? await getLivescoresInplay().catch(() => null)
-          : null;
 
         if (!isActive) {
           return;
@@ -86,7 +104,6 @@ export default function ModelliPredittivi() {
           predictionProvider:
             schedulePayload.matches?.[0]?.prediction_provider || "derived_internal_model",
         });
-        setLiveMatch(sanitizeMatches(livePayload?.matches)[0] || null);
       } catch (error) {
         if (isActive) {
           setApiMatches([]);
@@ -143,6 +160,23 @@ export default function ModelliPredittivi() {
     () => sortMatchesByCriterion([...apiMatches], "time")[0] || null,
     [apiMatches]
   );
+  const topValueMatches = useMemo(
+    () =>
+      filteredMatches
+        .map((match) => ({ match, candidate: getValueCandidate(match) }))
+        .filter((entry) => entry.candidate)
+        .sort((left, right) => right.candidate.edge - left.candidate.edge)
+        .slice(0, 3),
+    [filteredMatches]
+  );
+  const highConfidenceMatches = useMemo(
+    () =>
+      [...filteredMatches]
+        .filter((match) => Number.isFinite(match.confidence))
+        .sort((left, right) => (right.confidence || 0) - (left.confidence || 0))
+        .slice(0, 3),
+    [filteredMatches]
+  );
 
   const feedSummaryLine = useMemo(() => {
     if (scheduleLoading) return "Caricamento calendario…";
@@ -192,7 +226,7 @@ export default function ModelliPredittivi() {
               )}
               {showValueOnly && (
                 <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                  Filtro: solo Value Bet derivate
+                  Filtro: solo Value Bet disponibili
                 </span>
               )}
             </div>
@@ -343,32 +377,59 @@ export default function ModelliPredittivi() {
           </div>
 
           <div className="min-w-0 space-y-4">
-            {liveMatch ? (
-              <div className="space-y-3">
-                <LiveMiniWidget match={liveMatch} />
-                <FeedMetaPanel
-                  summary={`${liveMatch.league || "Live"} · ${liveMatch.home} vs ${liveMatch.away}`}
-                  label="Dettaglio feed live"
-                >
-                  <DataStatusChips
-                    provider={liveMatch.provider}
-                    source={liveMatch.source}
-                    freshness={liveMatch.freshness}
-                    competition={liveMatch.competition}
-                    predictionProvider={liveMatch.prediction_provider}
-                    oddsProvider={liveMatch.odds_provider}
-                    lineupStatus={liveMatch.lineup_status}
-                  />
-                </FeedMetaPanel>
+            <GlassCard variant="quiet">
+              <h3 className="mb-3 text-sm font-semibold text-foreground">Top Value Oggi</h3>
+              <div className="space-y-2">
+                {topValueMatches.length > 0 ? (
+                  topValueMatches.map(({ match, candidate }) => (
+                    <Link
+                      key={match.id}
+                      to={`/match/${encodeURIComponent(match.id)}`}
+                      className="block rounded-lg bg-secondary/25 p-2 text-xs transition-colors hover:bg-secondary/45"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate font-semibold text-foreground">
+                          {match.home} vs {match.away}
+                        </span>
+                        <span className="shrink-0 font-bold text-primary">+{candidate.edge}%</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Esito {candidate.type}</span>
+                        <span>{candidate.source === "math" ? "feed+modello" : "fallback"}</span>
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Nessun value disponibile con i filtri correnti.
+                  </p>
+                )}
               </div>
-            ) : (
-              <GlassCard variant="quiet">
-                <h3 className="mb-2 text-sm font-semibold text-foreground">Live center</h3>
-                <p className="text-xs text-muted-foreground">
-                  Nessun match live disponibile nel feed corrente.
-                </p>
-              </GlassCard>
-            )}
+            </GlassCard>
+
+            <GlassCard variant="quiet">
+              <h3 className="mb-3 text-sm font-semibold text-foreground">Confidenza alta</h3>
+              <div className="space-y-3">
+                {highConfidenceMatches.length > 0 ? (
+                  highConfidenceMatches.map((match) => (
+                    <Link
+                      key={`confidence-${match.id}`}
+                      to={`/match/${encodeURIComponent(match.id)}`}
+                      className="block rounded-lg bg-secondary/25 p-2 transition-colors hover:bg-secondary/45"
+                    >
+                      <div className="mb-1 text-xs font-semibold text-foreground truncate">
+                        {match.home} vs {match.away}
+                      </div>
+                      <ConfidenceBar value={match.confidence} compact />
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Confidenza non disponibile con i filtri correnti.
+                  </p>
+                )}
+              </div>
+            </GlassCard>
 
             <GlassCard variant="quiet">
               <h3 className="mb-3 text-sm font-semibold text-foreground">Prossimi match</h3>
@@ -390,6 +451,44 @@ export default function ModelliPredittivi() {
                   </p>
                 )}
               </div>
+            </GlassCard>
+
+            <GlassCard variant="quiet">
+              <h3 className="mb-2 text-sm font-semibold text-foreground">Canale Telegram</h3>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Alert value e aggiornamenti rapidi direttamente sul canale ufficiale.
+              </p>
+              {TELEGRAM_URL ? (
+                <a
+                  href={TELEGRAM_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Unisciti su Telegram
+                </a>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Configura `NEXT_PUBLIC_TELEGRAM_URL` per mostrare la CTA.
+                </p>
+              )}
+            </GlassCard>
+
+            <GlassCard variant="quiet">
+              <h3 className="mb-2 text-sm font-semibold text-foreground">Premium Insights</h3>
+              <ul className="mb-3 space-y-1 text-xs text-muted-foreground">
+                <li>- Priorità sui migliori segnali value.</li>
+                <li>- Filtri avanzati su confidenza e mercati.</li>
+                <li>- Accesso esteso ai prossimi moduli pro.</li>
+              </ul>
+              <Link
+                to="/premium"
+                className="inline-flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/20"
+              >
+                <Crown className="h-3.5 w-3.5" />
+                Scopri Premium
+              </Link>
             </GlassCard>
           </div>
         </div>
