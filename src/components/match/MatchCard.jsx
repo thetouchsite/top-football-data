@@ -3,6 +3,7 @@ import { Link } from "@/lib/router-compat";
 import { Clock, ChevronRight, Star } from "lucide-react";
 import ValueBetBadge from "../shared/ValueBetBadge";
 import GlassCard from "../shared/GlassCard";
+import ConfidenceBar from "../shared/ConfidenceBar";
 import { useApp } from "@/lib/AppContext";
 
 function ConfBar({ val, max = 100, color = "bg-primary" }) {
@@ -117,13 +118,18 @@ export default function MatchCard({ match, compact = false }) {
           </div>
 
           {/* Value Bet + Confidence */}
-          <div className="flex items-center justify-between mb-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
             {match.valueBet ? <ValueBetBadge match={match} variant="compact" /> : <div />}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Confidenza:</span>
-              <span className={`text-xs font-bold ${match.confidence >= 75 ? "text-primary" : "text-muted-foreground"}`}>{match.confidence}%</span>
-            </div>
+            <ConfidenceBar value={match.confidence} compact className="w-[130px] shrink-0" />
           </div>
+
+          {match.valueBet && (
+            <div className="mb-3 text-[11px] text-muted-foreground">
+              {match.valueBetSource === "sportmonks_feed_math"
+                ? "Value da confronto quota modello vs quote bookmaker."
+                : "Value in fallback derivato (dati quote bookmaker incompleti)."}
+            </div>
+          )}
 
           {match.odds_provider === "not_available_with_current_feed" && (
             <div className="mb-3 text-xs text-muted-foreground">

@@ -12,6 +12,9 @@ export function getOddsDecimalForValueBet(match) {
   if (t === "2") {
     return match.odds?.away ?? null;
   }
+  if (t === "X") {
+    return match.odds?.draw ?? null;
+  }
   if (t === "Over 2.5") {
     return match.ou?.over25 ?? null;
   }

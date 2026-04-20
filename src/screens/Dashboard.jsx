@@ -16,6 +16,7 @@ import PageIntro from "@/components/shared/PageIntro";
 import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
 import ValueBetBadge from "@/components/shared/ValueBetBadge";
+import ConfidenceBar from "@/components/shared/ConfidenceBar";
 import { useApp } from "@/lib/AppContext";
 import { getLivescoresInplay, getScheduleWindow } from "@/api/football";
 import {
@@ -336,9 +337,7 @@ export default function Dashboard() {
                             {match.odds.home} / {match.odds.draw} / {match.odds.away}
                           </div>
                         </div>
-                        <span className="rounded-md bg-secondary/60 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
-                          {match.confidence}%
-                        </span>
+                        <ConfidenceBar value={match.confidence} compact className="w-[120px] shrink-0" />
                         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
                       </div>
                     </div>

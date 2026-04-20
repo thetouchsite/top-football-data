@@ -13,6 +13,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import ValueBetBadge from "@/components/shared/ValueBetBadge";
+import ConfidenceBar from "@/components/shared/ConfidenceBar";
 import PremiumLock from "@/components/shared/PremiumLock";
 import FormationPitch from "@/components/stats/FormationPitch";
 import PlayerCard from "@/components/stats/PlayerCard";
@@ -41,6 +42,9 @@ function createUnknownMatchFallback(fixtureId) {
     ggProb: null,
     xg: { home: 0, away: 0 },
     valueBet: null,
+    valueBetSource: "none",
+    modelOdds: { home: null, draw: null, away: null },
+    valueMarkets: null,
     scores: [],
     confidence: 0,
     scorers: [],
@@ -84,6 +88,57 @@ function buildPremiumAnalysis(match) {
   }
 
   return `Il modello derivato assegna un vantaggio principale a ${leader}, con xG stimato ${match.xg.home} - ${match.xg.away}.`;
+}
+
+function normalizeValueToken(value) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/_/g, " ");
+}
+
+function deriveValueHighlight(valueBet) {
+  const market = normalizeValueToken(valueBet?.market);
+  const type = normalizeValueToken(valueBet?.type);
+  const highlight = { oneXTwo: null, ou: null, gg: null };
+
+  if (!type) {
+    return highlight;
+  }
+
+  if (["1", "home", "casa"].includes(type)) {
+    highlight.oneXTwo = "home";
+  } else if (["x", "draw", "pareggio"].includes(type)) {
+    highlight.oneXTwo = "draw";
+  } else if (["2", "away", "trasferta"].includes(type)) {
+    highlight.oneXTwo = "away";
+  }
+
+  const isOuMarket = market.includes("o/u") || market.includes("under") || market.includes("over");
+  if (isOuMarket || type.includes("over") || type.includes("under")) {
+    if (type.includes("over")) {
+      highlight.ou = "over25";
+    } else if (type.includes("under")) {
+      highlight.ou = "under25";
+    }
+  }
+
+  const isGgMarket = market.includes("gg") || market.includes("ng") || market.includes("goal");
+  if (isGgMarket || type === "goal" || type === "no goal" || type === "gg" || type === "ng") {
+    if (
+      type === "goal" ||
+      type === "gg" ||
+      type === "yes" ||
+      type.includes("both teams to score")
+    ) {
+      highlight.gg = "goal";
+    } else if (type === "no goal" || type === "ng" || type.includes("no")) {
+      highlight.gg = "noGoal";
+    }
+  }
+
+  return highlight;
 }
 
 export default function MatchDetail() {
@@ -145,8 +200,15 @@ export default function MatchDetail() {
     }
     const q = getOddsDecimalForValueBet(match);
     const qLabel = q != null && Number.isFinite(Number(q)) ? ` @ ${q}` : "";
-    return `Value bet derivato: ${match.valueBet.type}${qLabel} · edge +${match.valueBet.edge}%`;
+    const src =
+      match.valueBetSource === "sportmonks_feed_math"
+        ? "Value API/quote"
+        : match.valueBetSource === "fallback_derivato"
+          ? "Value fallback derivato"
+          : "Value";
+    return `${src}: ${match.valueBet.type}${qLabel} · edge +${match.valueBet.edge}%`;
   }, [match]);
+  const valueHighlight = useMemo(() => deriveValueHighlight(match?.valueBet), [match?.valueBet]);
   const standingsRows = Array.isArray(match.standings?.rows) ? match.standings.rows : [];
   const homeCoaches = Array.isArray(match.coaches?.home) ? match.coaches.home : [];
   const awayCoaches = Array.isArray(match.coaches?.away) ? match.coaches.away : [];
@@ -260,6 +322,9 @@ export default function MatchDetail() {
                   )}
                 </div>
               </FeedMetaPanel>
+              <div className="mt-3 rounded-lg border border-border/40 bg-secondary/20 p-3">
+                <ConfidenceBar value={match.confidence} />
+              </div>
               {fixtureError && (
                 <div className="mt-2 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                   {fixtureError}
@@ -290,7 +355,8 @@ export default function MatchDetail() {
                     <h3 className="font-semibold text-sm text-foreground">
                       Probabilità e quote
                     </h3>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {match.valueBet && <ValueBetBadge match={match} variant="compact" />}
                       {match.odds_provider === "not_available_with_current_feed" && (
                         <span className="text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
                           Quote stimate, non bookmaker
@@ -301,67 +367,138 @@ export default function MatchDetail() {
                           O/U e GG: % da predizioni API, modello derivato o implicite dalle quote
                         </span>
                       )}
+                      {match.valueBetSource === "fallback_derivato" && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
+                          Value in fallback derivato (feed quote incompleto)
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {[
-                      { label: `1 - ${match.home}`, probability: match.prob.home, odds: match.odds.home },
-                      { label: "X - Pareggio", probability: match.prob.draw, odds: match.odds.draw },
-                      { label: `2 - ${match.away}`, probability: match.prob.away, odds: match.odds.away },
+                      { key: "home", label: `1 - ${match.home}`, probability: match.prob.home, odds: match.odds.home },
+                      { key: "draw", label: "X - Pareggio", probability: match.prob.draw, odds: match.odds.draw },
+                      { key: "away", label: `2 - ${match.away}`, probability: match.prob.away, odds: match.odds.away },
                     ].map((item) => (
-                      <div key={item.label} className="rounded-xl bg-secondary/50 p-3 text-center">
+                      <div
+                        key={item.label}
+                        className={`rounded-xl p-3 text-center ${
+                          valueHighlight.oneXTwo === item.key
+                            ? "border border-primary/25 bg-primary/12 ring-1 ring-primary/20"
+                            : "bg-secondary/50"
+                        }`}
+                      >
                         <div className="mb-1 line-clamp-2 text-xs text-muted-foreground">{item.label}</div>
-                        <div className="font-bold text-xl text-foreground">{item.probability}%</div>
+                        <div
+                          className={`font-bold text-xl ${
+                            valueHighlight.oneXTwo === item.key ? "text-primary" : "text-foreground"
+                          }`}
+                        >
+                          {item.probability}%
+                        </div>
                         <div className="text-sm font-semibold text-accent mt-1">{item.odds}</div>
+                        {Number.isFinite(match.modelOdds?.[item.key]) && (
+                          <div className="text-[11px] text-muted-foreground">
+                            Quota modello {match.modelOdds[item.key]}
+                          </div>
+                        )}
+                        {valueHighlight.oneXTwo === item.key && (
+                          <div className="mx-auto mt-2 h-1.5 w-24 max-w-full overflow-hidden rounded-full bg-primary/20">
+                            <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500" />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: "Over 2.5", odd: match.ou.over25, prob: match.ouProb?.over25 },
-                      { label: "Under 2.5", odd: match.ou.under25, prob: match.ouProb?.under25 },
-                      { label: "Goal", odd: match.gg.goal, prob: match.ggProb?.goal },
-                      { label: "No Goal", odd: match.gg.noGoal, prob: match.ggProb?.noGoal },
+                      {
+                        label: "Over 2.5",
+                        key: "over25",
+                        odd: match.ou.over25,
+                        prob: match.ouProb?.over25,
+                      },
+                      {
+                        label: "Under 2.5",
+                        key: "under25",
+                        odd: match.ou.under25,
+                        prob: match.ouProb?.under25,
+                      },
+                      {
+                        label: "Goal",
+                        key: "goal",
+                        odd: match.gg.goal,
+                        prob: match.ggProb?.goal,
+                      },
+                      {
+                        label: "No Goal",
+                        key: "noGoal",
+                        odd: match.gg.noGoal,
+                        prob: match.ggProb?.noGoal,
+                      },
                     ].map((row) => (
+                      (() => {
+                        const isHighlighted = valueHighlight.ou === row.key || valueHighlight.gg === row.key;
+                        return (
                       <div
                         key={row.label}
-                        className="flex flex-col gap-1 rounded-lg bg-secondary/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+                        className={`flex flex-col gap-1 rounded-lg p-3 sm:flex-row sm:items-center sm:justify-between ${
+                          isHighlighted
+                            ? "border border-primary/25 bg-primary/12 ring-1 ring-primary/20"
+                            : "bg-secondary/30"
+                        }`}
                       >
                         <span className="text-xs text-muted-foreground">{row.label}</span>
                         <div className="text-right">
                           {typeof row.prob === "number" ? (
                             <>
-                              <div className="text-sm font-bold text-foreground">{row.prob}%</div>
+                              <div className={`text-sm font-bold ${isHighlighted ? "text-primary" : "text-foreground"}`}>
+                                {row.prob}%
+                              </div>
                               <div className="text-xs font-semibold text-accent">{row.odd}</div>
                             </>
                           ) : (
                             <span className="text-xs font-bold text-foreground">{row.odd}</span>
                           )}
                         </div>
+                        {isHighlighted && (
+                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-primary/20 sm:col-span-2">
+                            <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500" />
+                          </div>
+                        )}
                       </div>
+                        );
+                      })()
                     ))}
                   </div>
                 </GlassCard>
 
                 <GlassCard>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <h3 className="font-semibold text-sm text-foreground mb-3">xG Pre-Match</h3>
-                      <p className="text-sm text-foreground">
-                        {match.home}: <span className="font-bold text-primary">{match.xg.home}</span>
-                      </p>
-                      <p className="text-sm text-foreground mt-1">
-                        {match.away}: <span className="font-bold">{match.xg.away}</span>
-                      </p>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-secondary/30 p-3">
+                      <h3 className="font-semibold text-sm text-foreground mb-2">xG Pre-Match</h3>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{match.home}</span>
+                          <span className="font-bold text-primary">{match.xg.home}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{match.away}</span>
+                          <span className="font-bold text-foreground">{match.xg.away}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-sm text-foreground mb-3">
+                    <div className="rounded-xl bg-secondary/30 p-3">
+                      <h3 className="font-semibold text-sm text-foreground mb-2">
                         Risultati Probabili
                       </h3>
                       {match.scores.length > 0 ? (
                         <div className="space-y-2">
                           {match.scores.map((score, index) => (
-                            <div key={`${score.score}-${index}`} className="flex items-center justify-between text-xs">
+                            <div
+                              key={`${score.score}-${index}`}
+                              className="flex items-center justify-between rounded-lg bg-secondary/40 px-2.5 py-1.5 text-xs"
+                            >
                               <span className="font-semibold text-foreground">{score.score}</span>
                               <span className="text-primary font-bold">{score.prob}%</span>
                             </div>
@@ -388,9 +525,8 @@ export default function MatchDetail() {
                     team momentum avanzato restano fuori dal feed corrente.
                   </p>
                   <div className="grid md:grid-cols-2 gap-3">
-                    <div className="flex justify-between p-3 rounded-lg bg-secondary/30">
-                      <span className="text-xs text-muted-foreground">Confidenza modello</span>
-                      <span className="text-sm font-semibold text-foreground">{match.confidence}%</span>
+                    <div className="p-3 rounded-lg bg-secondary/30">
+                      <ConfidenceBar value={match.confidence} />
                     </div>
                     <div className="flex justify-between p-3 rounded-lg bg-secondary/30">
                       <span className="text-xs text-muted-foreground">Lineup status</span>
@@ -598,7 +734,7 @@ export default function MatchDetail() {
           </div>
 
           <div className="min-w-0 space-y-4">
-            <OddsComparison bookmakers={comparisonBookmakers} />
+            <OddsComparison bookmakers={comparisonBookmakers} valueMarkets={match.valueMarkets} />
             {isPremium ? (
               <GlassCard className="border-primary/20">
                 <div className="flex items-center gap-2 mb-3">
