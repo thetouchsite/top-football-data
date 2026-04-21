@@ -385,8 +385,8 @@ export default function Dashboard() {
                     to={`/match/${match.id}`}
                     className="group block transition-colors hover:bg-secondary/30"
                   >
-                    <div className="flex items-center justify-between gap-3 p-3 md:p-4">
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="flex flex-col gap-2 p-3 md:flex-row md:items-center md:justify-between md:gap-3 md:p-4">
+                      <div className="flex min-w-0 w-full items-center gap-3 md:flex-1">
                         <div className="flex w-14 shrink-0 flex-col items-center gap-1 text-center">
                           <FootballMediaImage
                             media={match.league_media}
@@ -415,7 +415,7 @@ export default function Dashboard() {
                             {match.valueBet && (
                               <ValueBetBadge match={match} variant="compact" />
                             )}
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="hidden text-[10px] text-muted-foreground sm:inline">
                               {match.odds_provider === "not_available_with_current_feed"
                                 ? "Quote derivate"
                                 : "Quote provider"}
@@ -430,11 +430,11 @@ export default function Dashboard() {
                           />
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-                        <div className="hidden text-right sm:block">
-                          <div className="text-[10px] text-muted-foreground">1 · X · 2</div>
+                      <div className="flex w-full items-center justify-between gap-2 border-t border-border/30 pt-2 md:w-auto md:justify-end md:border-0 md:pt-0">
+                        <div className="text-right">
+                          <div className="text-[10px] text-muted-foreground">Quote 1X2</div>
                           <div className="text-xs font-semibold tabular-nums text-foreground">
-                            {match.odds.home} / {match.odds.draw} / {match.odds.away}
+                            1: {match.odds.home} · X: {match.odds.draw} · 2: {match.odds.away}
                           </div>
                         </div>
                         <ConfidenceBar value={match.confidence} compact className="w-[120px] shrink-0" />
