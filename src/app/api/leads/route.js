@@ -9,6 +9,7 @@ const leadSchema = z.object({
   email: z.string().trim().email(),
   eta: z.string().trim().optional(),
   telefono: z.string().trim().optional(),
+  source: z.string().trim().optional(),
 });
 
 export async function POST(request) {
@@ -29,7 +30,7 @@ export async function POST(request) {
 
     await db.collection("leads").insertOne({
       ...result.data,
-      source: "landing-manuale",
+      source: result.data.source || "landing-manuale",
       createdAt: new Date(),
     });
 

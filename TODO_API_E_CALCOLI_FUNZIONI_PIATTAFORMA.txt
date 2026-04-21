@@ -93,3 +93,15 @@ BLOCCO TRASVERSALE — COME LAVORARE SENZA “FAKE DATA”
 
 Riferimento ufficiale requisiti:
 - docs/cliente/funzioni-piattaforma.md
+
+Nota stato area pubblica (aprile 2026):
+- Nessun nuovo endpoint obbligatorio introdotto per la landing unica `/come-funziona`.
+- Conversion tracking CTA confermato su eventi frontend (`click_premium_cta`, `click_telegram_cta`,
+  `click_dashboard_cta`) con push su `window.dataLayer`.
+- Lead generation resta su endpoint esistente `/api/leads` (schema con campo opzionale `source`).
+
+Nota stato Legal Center (aprile 2026):
+- Nuovo endpoint `POST /api/legal/requests` (schema Zod) per richieste privacy/data subject request.
+- Persistenza prevista su collection MongoDB `legal_requests` con stato iniziale `new`.
+- Struttura cookie pronta per CMP tramite evento frontend `open-cookie-preferences` (placeholder tecnico).
+- Le basi giuridiche/categorie definitive restano da validare con consulente legale/privacy.

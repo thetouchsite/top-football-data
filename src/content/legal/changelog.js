@@ -1,0 +1,38 @@
+export const legalChangelogEntries = [
+  {
+    id: "lc-2026-04-21-privacy",
+    documentSlug: "privacy",
+    documentTitle: "Privacy Policy",
+    version: "v0.9",
+    date: "2026-04-21",
+    changeType: "review",
+    summary: "Riorganizzata la struttura per finalita, basi giuridiche e diritti utente (placeholder).",
+  },
+  {
+    id: "lc-2026-04-21-cookies",
+    documentSlug: "cookies",
+    documentTitle: "Cookie Policy",
+    version: "v0.9",
+    date: "2026-04-21",
+    changeType: "major",
+    summary: "Introdotta classificazione categorie cookie e entry point gestione preferenze.",
+  },
+  {
+    id: "lc-2026-04-21-telegram",
+    documentSlug: "telegram-bot",
+    documentTitle: "Policy Telegram Bot",
+    version: "v0.8",
+    date: "2026-04-21",
+    changeType: "minor",
+    summary: "Aggiunta bozza dedicata a bot/canale Telegram con punti da validare legalmente.",
+  },
+  {
+    id: "lc-2026-04-21-premium",
+    documentSlug: "premium",
+    documentTitle: "Premium e Abbonamenti",
+    version: "v0.8",
+    date: "2026-04-21",
+    changeType: "review",
+    summary: "Definita struttura su rinnovi, disdetta e recesso da finalizzare con consulente.",
+  },
+];

@@ -1,0 +1,13 @@
+export { default as CookiePreferencesButton } from "@/components/legal/CookiePreferencesButton";
+export { default as DocumentStatusPill } from "@/components/legal/DocumentStatusPill";
+export { default as LegalAccordion } from "@/components/legal/LegalAccordion";
+export { default as LegalBadge } from "@/components/legal/LegalBadge";
+export { default as LegalChangelogTimeline } from "@/components/legal/LegalChangelogTimeline";
+export { default as LegalDocumentCard } from "@/components/legal/LegalDocumentCard";
+export { default as LegalHero } from "@/components/legal/LegalHero";
+export { default as LegalMetaBar } from "@/components/legal/LegalMetaBar";
+export { default as LegalSection } from "@/components/legal/LegalSection";
+export { default as LegalSidebarNav } from "@/components/legal/LegalSidebarNav";
+export { default as LegalTable } from "@/components/legal/LegalTable";
+export { default as PrivacyRequestForm } from "@/components/legal/PrivacyRequestForm";
+export { default as TelegramPolicyHighlights } from "@/components/legal/TelegramPolicyHighlights";
