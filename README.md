@@ -130,6 +130,7 @@ MONGODB_URI=...
 MONGODB_DB=top-football-pulse
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=@canale_test_o_cliente
+APP_BASE_URL=https://tuo-sito.vercel.app
 POLL_INTERVAL_SECONDS=300
 CANDIDATE_EDGE_THRESHOLD=1.05
 NOTIFICATION_EV_THRESHOLD=1.25
@@ -145,6 +146,8 @@ Test Railway:
 ```powershell
 Invoke-RestMethod -Method Get -Uri "https://TUO-SERVIZIO.up.railway.app/health"
 Invoke-RestMethod -Method Post -Uri "https://TUO-SERVIZIO.up.railway.app/test-telegram"
+Invoke-RestMethod -Method Post -Uri "https://TUO-SERVIZIO.up.railway.app/demo-pronostici"
+Invoke-RestMethod -Method Get -Uri "https://TUO-SERVIZIO.up.railway.app/demo-pronostici"
 Invoke-RestMethod -Method Post -Uri "https://TUO-SERVIZIO.up.railway.app/run-once"
 ```
 

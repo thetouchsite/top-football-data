@@ -239,3 +239,16 @@ ORDINE CONSIGLIATO (DA QUI)
 3. Consolidare auth e premium su Mongo stabile; Stripe webhook end-to-end.
 4. Implementare per incrementi Sez. A -> comparatore shell -> Sez. B -> Sez. C (multipla pesante).
 5. Worker notifiche e storico ROI dopo modello dati suggerimenti definito.
+
+====================================================================
+AGGIORNAMENTO DEMO TELEGRAM SENZA PREDICTIONS/ODDS
+====================================================================
+
+- Endpoint worker: `POST /demo-pronostici`.
+- Scopo: demo cliente dell'integrazione Telegram usando i pronostici gia visibili nel sito.
+- Fonte dati: `APP_BASE_URL/api/football/schedules/window`.
+- Filtro: pronostici con probabilita modello >= `DEMO_MIN_PROBABILITY` (default `0.80`).
+- Limite invio: `DEMO_MAX_PICKS` (default `5`).
+- Non genera dati casuali e non usa fallback fake: legge il feed normalizzato del sito, inclusi i fallback gia dichiarati in UI.
+- Messaggio Telegram: elenco dei prossimi pronostici sopra soglia con partita, mercato, selezione, probabilita e quota modello.
+- Uso consigliato finche Sportmonks Predictions/Odds non sono abilitati.

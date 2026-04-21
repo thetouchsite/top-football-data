@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     mongodb_uri: str = Field(default="", alias="MONGODB_URI")
     mongodb_db: str = Field(default="top-football-pulse", alias="MONGODB_DB")
 
+    app_base_url: str = Field(default="", alias="APP_BASE_URL")
+
     telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: str = Field(default="", alias="TELEGRAM_CHAT_ID")
 
@@ -27,6 +29,9 @@ class Settings(BaseSettings):
     multibet_min_events: int = Field(default=3, alias="MULTIBET_MIN_EVENTS")
     multibet_max_events: int = Field(default=4, alias="MULTIBET_MAX_EVENTS")
     max_alerts_per_run: int = Field(default=8, alias="MAX_ALERTS_PER_RUN")
+    demo_min_probability: float = Field(default=0.8, alias="DEMO_MIN_PROBABILITY")
+    demo_max_picks: int = Field(default=5, alias="DEMO_MAX_PICKS")
+    demo_schedule_days: int = Field(default=14, alias="DEMO_SCHEDULE_DAYS")
 
     storage_path: str = Field(default=".data/telegram-alerts.json", alias="STORAGE_PATH")
     bookmaker_affiliate_links_json: str = Field(default="{}", alias="BOOKMAKER_AFFILIATE_LINKS_JSON")
@@ -56,6 +61,28 @@ class Settings(BaseSettings):
     @classmethod
     def clamp_multibet_events(cls, value: int) -> int:
         return max(2, min(value, 4))
+
+    @field_validator("app_base_url")
+    @classmethod
+    def normalize_app_base_url(cls, value: str) -> str:
+        return value.strip().rstrip("/")
+
+    @field_validator("demo_min_probability")
+    @classmethod
+    def normalize_demo_min_probability(cls, value: float) -> float:
+        if value > 1:
+            value = value / 100
+        return max(0.5, min(value, 0.99))
+
+    @field_validator("demo_max_picks")
+    @classmethod
+    def clamp_demo_max_picks(cls, value: int) -> int:
+        return max(1, min(value, 20))
+
+    @field_validator("demo_schedule_days")
+    @classmethod
+    def clamp_demo_schedule_days(cls, value: int) -> int:
+        return max(1, min(value, 14))
 
     @property
     def resolved_sportmonks_token(self) -> str:

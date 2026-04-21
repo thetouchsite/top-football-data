@@ -37,6 +37,7 @@ Il sito legge gli alert da MongoDB tramite:
 - `app/main.py`: FastAPI, worker schedulato, `/health`, `/run-once`, `/test-telegram`.
 - `app/sportmonks.py`: client Sportmonks.
 - `app/engine.py`: calcolo value bet e multibet.
+- `app/site_feed.py`: demo Telegram dai pronostici gia esposti dal sito Next.
 - `app/telegram.py`: invio Telegram.
 - `app/mongodb.py`: persistenza `betAlerts` e `betPerformance`.
 - `app/results.py`: settlement won/lost/void.
@@ -72,6 +73,7 @@ SPORTMONKS_TIMEZONE=Europe/Rome
 
 MONGODB_URI=mongodb+srv://...
 MONGODB_DB=top-football-pulse
+APP_BASE_URL=https://your-next-app.vercel.app
 
 TELEGRAM_BOT_TOKEN=123456:telegram_bot_token
 TELEGRAM_CHAT_ID=@top_football_data_test
@@ -82,6 +84,9 @@ NOTIFICATION_EV_THRESHOLD=1.25
 MULTIBET_MIN_EVENTS=3
 MULTIBET_MAX_EVENTS=4
 MAX_ALERTS_PER_RUN=8
+DEMO_MIN_PROBABILITY=0.80
+DEMO_MAX_PICKS=5
+DEMO_SCHEDULE_DAYS=14
 
 BOOKMAKER_AFFILIATE_LINKS_JSON={"Bet365":"https://example.com/bet365","Snai":"https://example.com/snai"}
 CTA_LABEL=Vedi quota
@@ -91,6 +96,7 @@ Note:
 
 - Puoi usare `SPORTMONKS_API_KEY` al posto di `SPORTMONKS_API_TOKEN`.
 - `MONGODB_URI` e `MONGODB_DB` devono essere gli stessi del sito Vercel.
+- `APP_BASE_URL` deve puntare al sito Next/Vercel. Serve per la demo Telegram che legge i pronostici gia visibili nel sito.
 - `TELEGRAM_CHAT_ID` puo essere `@username_canale` o id numerico.
 - `CTA_LABEL` evita formule legalmente sensibili come "Gioca Ora"; default consigliato: `Vedi quota`.
 
@@ -120,6 +126,15 @@ Test Telegram senza Sportmonks:
 ```text
 POST /test-telegram
 ```
+
+Demo pronostici dal feed del sito, senza Predictions/Odds:
+
+```text
+POST /demo-pronostici
+GET /demo-pronostici
+```
+
+Questo endpoint legge `APP_BASE_URL/api/football/schedules/window` su una finestra di `DEMO_SCHEDULE_DAYS`, filtra i pronostici con probabilita modello almeno `DEMO_MIN_PROBABILITY` e manda un messaggio Telegram. Usa i dati gia visibili nel sito, non genera pronostici casuali. La versione `GET` serve per richiamarlo rapidamente da browser.
 
 Scanner manuale completo:
 
@@ -173,6 +188,8 @@ In un altro terminale:
 ```powershell
 Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/health"
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/test-telegram"
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/demo-pronostici"
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/demo-pronostici"
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/run-once"
 ```
 
@@ -181,6 +198,8 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/run-once"
 ```powershell
 Invoke-RestMethod -Method Get -Uri "https://TUO-SERVIZIO.up.railway.app/health"
 Invoke-RestMethod -Method Post -Uri "https://TUO-SERVIZIO.up.railway.app/test-telegram"
+Invoke-RestMethod -Method Post -Uri "https://TUO-SERVIZIO.up.railway.app/demo-pronostici"
+Invoke-RestMethod -Method Get -Uri "https://TUO-SERVIZIO.up.railway.app/demo-pronostici"
 Invoke-RestMethod -Method Post -Uri "https://TUO-SERVIZIO.up.railway.app/run-once"
 ```
 

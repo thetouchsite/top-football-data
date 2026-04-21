@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.engine import build_fixture_markets, build_multibets, load_affiliate_links
 from app.mongodb import MongoAlertRepository
 from app.results import settle_alert_from_fixtures
+from app.site_feed import SiteFeedClient, build_high_probability_picks, format_demo_picks_message
 from app.sportmonks import SportmonksClient
 from app.storage import AlertStore
 from app.telegram import TelegramClient, format_multibet_alert, format_single_alert
@@ -29,6 +30,7 @@ class AlertWorker:
             bot_token=self.settings.telegram_bot_token,
             chat_id=self.settings.telegram_chat_id,
         )
+        self.site_feed = SiteFeedClient(app_base_url=self.settings.app_base_url)
         self.repository = MongoAlertRepository(
             uri=self.settings.mongodb_uri,
             database_name=self.settings.mongodb_db,
@@ -127,6 +129,29 @@ class AlertWorker:
 
         return self.repository.bulk_settle(settled)
 
+    async def send_demo_predictions(self) -> dict[str, object]:
+        matches = await self.site_feed.fetch_schedule_matches(
+            days=self.settings.demo_schedule_days
+        )
+        picks = build_high_probability_picks(
+            matches=matches,
+            min_probability=self.settings.demo_min_probability,
+            max_picks=self.settings.demo_max_picks,
+        )
+        message = format_demo_picks_message(picks, self.settings.demo_min_probability)
+        await self.telegram.send_message(message)
+
+        result = {
+            "status": "ok",
+            "source": "site_feed",
+            "matches": len(matches),
+            "min_probability": self.settings.demo_min_probability,
+            "picks": len(picks),
+            "sent": 1,
+        }
+        self.last_result = result
+        return result
+
     async def loop(self) -> None:
         self.running = True
         while self.running:
@@ -181,3 +206,13 @@ async def test_telegram() -> dict[str, object]:
         "Test Top Football Data: backend Telegram collegato correttamente."
     )
     return {"ok": True, "sent": 1}
+
+
+@app.post("/demo-pronostici")
+async def demo_pronostici() -> dict[str, object]:
+    return await worker.send_demo_predictions()
+
+
+@app.get("/demo-pronostici")
+async def demo_pronostici_get() -> dict[str, object]:
+    return await worker.send_demo_predictions()
