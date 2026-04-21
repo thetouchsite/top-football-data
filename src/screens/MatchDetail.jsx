@@ -19,6 +19,7 @@ import PremiumLock from "@/components/shared/PremiumLock";
 import FormationPitch from "@/components/stats/FormationPitch";
 import PlayerCard from "@/components/stats/PlayerCard";
 import OddsComparison from "@/components/match/OddsComparison";
+import PressurePreviewChart from "@/components/match/PressurePreviewChart";
 import { useApp } from "@/lib/AppContext";
 import { getFixture } from "@/api/football";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
@@ -69,6 +70,7 @@ function createUnknownMatchFallback(fixtureId) {
     home_media: { imageUrl: null, thumbUrl: null },
     away_media: { imageUrl: null, thumbUrl: null },
     league_media: { imageUrl: null, thumbUrl: null },
+    pressure_preview: null,
   };
 }
 
@@ -151,6 +153,8 @@ export default function MatchDetail() {
   const fixtureIdToLoad = String(routeId || "").trim() || null;
   const { favorites, following, toggleFavoriteMatch, toggleFollowMatch, isPremium } = useApp();
   const [apiMatch, setApiMatch] = useState(null);
+  /** Risposta completa GET /api/football/fixtures/:id (fixture normalizzata + rawFixture Sportmonks, ecc.) */
+  const [fixtureBundle, setFixtureBundle] = useState(null);
   const [fixtureLoading, setFixtureLoading] = useState(Boolean(fixtureIdToLoad));
   const [fixtureError, setFixtureError] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -167,15 +171,18 @@ export default function MatchDetail() {
     const loadFixture = async () => {
       setFixtureLoading(true);
       setFixtureError("");
+      setFixtureBundle(null);
 
       try {
         const payload = await getFixture(fixtureIdToLoad);
         if (isActive) {
+          setFixtureBundle(payload);
           setApiMatch(payload.fixture);
         }
       } catch (error) {
         if (isActive) {
           setFixtureError(error.message || "Dati fixture non disponibili.");
+          setFixtureBundle(null);
         }
       } finally {
         if (isActive) {
@@ -190,6 +197,52 @@ export default function MatchDetail() {
       isActive = false;
     };
   }, [fixtureIdToLoad]);
+
+  useEffect(() => {
+    if (!fixtureBundle?.fixture) {
+      return;
+    }
+
+    const bundle = fixtureBundle;
+    const f = bundle.fixture;
+    const raw = bundle.rawFixture;
+
+    console.log("[MatchDetail] === risposta API fixture (completa) ===", {
+      meta: {
+        provider: bundle.provider,
+        source: bundle.source,
+        notice: bundle.notice,
+        isFallback: bundle.isFallback,
+        freshness: bundle.freshness,
+        competition: bundle.competition,
+      },
+      fixture: f,
+      rawFixture: raw,
+    });
+
+    const rawLineups = Array.isArray(raw?.lineups) ? raw.lineups : [];
+    const withFormationField = rawLineups.filter((e) => String(e?.formation_field || "").trim());
+    const withFormationPosition = rawLineups.filter((e) => e?.formation_position != null);
+
+    console.log("[MatchDetail] === formazioni / lineups (diagnosi) ===", {
+      lineup_status: f?.lineup_status,
+      lineupConfirmed: f?.lineupConfirmed,
+      renderedPitch_home_players: f?.lineups?.home?.players?.length ?? 0,
+      renderedPitch_away_players: f?.lineups?.away?.players?.length ?? 0,
+      formation_home: f?.lineups?.home?.formation,
+      formation_away: f?.lineups?.away?.formation,
+      raw_lineups_count: rawLineups.length,
+      raw_with_formation_field: withFormationField.length,
+      raw_with_formation_position: withFormationPosition.length,
+      sample_raw_lineup_entry: rawLineups[0] ?? null,
+      squads_fallback_home: f?.squads?.home?.length ?? 0,
+      squads_fallback_away: f?.squads?.away?.length ?? 0,
+      players_sidebar_count: Array.isArray(f?.players) ? f.players.length : 0,
+      nota:
+        "Il campo verde legge solo righe da formation_field (formato row:col) dopo il filtro home/away. " +
+        "Se Sportmonks non invia lineups o formation_field, il pitch resta vuoto; la sidebar può mostrare giocatori dalla rosa (squad) con stat a zero.",
+    });
+  }, [fixtureBundle]);
 
   const match = apiMatch || createUnknownMatchFallback(routeId || Date.now().toString());
   const isFav = favorites.matches.includes(String(match.id));
@@ -489,6 +542,12 @@ export default function MatchDetail() {
                     ))}
                   </div>
                 </GlassCard>
+
+                {match.pressure_preview?.bars?.length > 0 && (
+                  <GlassCard>
+                    <PressurePreviewChart preview={match.pressure_preview} />
+                  </GlassCard>
+                )}
 
                 <GlassCard>
                   <div className="grid md:grid-cols-2 gap-3">

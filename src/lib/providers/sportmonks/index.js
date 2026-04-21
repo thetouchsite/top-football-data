@@ -24,36 +24,50 @@ const EVENT_TYPE_LABELS = {
   dangerous: "Occasione",
 };
 
-const SPORTMONKS_SCHEDULE_INCLUDE_ATTEMPTS = [
-  [
-    "league",
-    "season",
-    "stage",
-    "round",
-    "state",
-    "participants",
-    "venue",
-    "scores",
-    "odds.bookmaker",
-    "statistics.type",
-    "metadata",
-  ],
-  [
-    "league",
-    "season",
-    "stage",
-    "round",
-    "state",
-    "participants",
-    "venue",
-    "scores",
-    "odds.bookmaker",
-    "statistics.type",
-    "metadata",
-  ],
-  ["league", "season", "round", "state", "participants", "venue", "scores"],
+/**
+ * Include **unici** per `GET /football/fixtures/between/{start}/{end}` (Modelli predittivi + schedule window).
+ * Nessun fallback multiplo: una sola richiesta con questo elenco.
+ *
+ * Mappatura → UI (`MatchCard`, `FeedMetaPanel`, `DataStatusChips`, filtri):
+ * | Include            | Uso in pagina |
+ * |--------------------|---------------|
+ * | `league`           | Nome competizione, logo (`league_media`) |
+ * | `season`           | Contesto stagione (normalizzazione / catalogo) |
+ * | `stage`, `round`   | Contesto turno/giornata |
+ * | `state`            | Stato partita (PRE/LIVE/FT…) |
+ * | `participants`     | Nomi squadre, loghi, form abbreviata (`home`/`away`, media) |
+ * | `venue`            | Stadio (copertura / dettaglio leggero) |
+ * | `scores`           | Risultato se già disponibile |
+ * | `odds.bookmaker`   | Quote 1X2, O/U, GG, bookmaker → card, value, comparatore implicito |
+ * | `predictions.type` | Probabilità 1X2 / score modello Sportmonks |
+ * | `expected.type`    | xG attesi (riga centrale card) |
+ * | `statistics.type`  | Copertura statistiche (confidence / badge coverage) |
+ * | `metadata`         | Metadati fixture (es. prenotifiche piano / predictable) |
+ *
+ * Non inclusi qui (peso inutile sulla lista): `lineups`, `formations`, `events`, `pressure` → dettaglio match o endpoint dedicati.
+ *
+ * @see https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date-range.md
+ */
+export const SPORTMONKS_SCHEDULE_PREMATCH_INCLUDES = [
+  "league",
+  "season",
+  "stage",
+  "round",
+  "state",
+  "participants",
+  "venue",
+  "scores",
+  "odds.bookmaker",
+  "predictions.type",
+  "expected.type",
+  "statistics.type",
+  "metadata",
 ];
 
+/**
+ * Dettaglio fixture: odds + predictions + expected (xG) come bundle Sportmonks;
+ * `pressure` richiede add-on Pressure Index (dati per grafico / live).
+ */
 const SPORTMONKS_FIXTURE_INCLUDE_ATTEMPTS = [
   [
     "league",
@@ -67,8 +81,13 @@ const SPORTMONKS_FIXTURE_INCLUDE_ATTEMPTS = [
     "periods",
     "events.type",
     "statistics.type",
+    /** Serve l'entità `lineups` esplicita: solo `lineups.details.type` può non caricare le righe (formation_field). */
+    "lineups",
     "lineups.details.type",
     "odds.bookmaker",
+    "predictions.type",
+    "expected.type",
+    "pressure",
     "referees",
     "coaches",
     "formations",
@@ -86,10 +105,29 @@ const SPORTMONKS_FIXTURE_INCLUDE_ATTEMPTS = [
     "periods",
     "events.type",
     "statistics.type",
+    "lineups",
     "lineups.details.type",
     "odds.bookmaker",
+    "predictions.type",
+    "expected.type",
     "referees",
     "coaches",
+    "formations",
+    "metadata",
+  ],
+  /**
+   * Se i tentativi ricchi falliscono (depth include / piano), restano dati core + formazioni.
+   * Evita il caso “fixture ok ma lineups=[]” che svuota il campo in MatchDetail.
+   */
+  [
+    "league",
+    "season",
+    "round",
+    "state",
+    "participants",
+    "venue",
+    "scores",
+    "lineups",
     "formations",
     "metadata",
   ],
@@ -110,6 +148,9 @@ const SPORTMONKS_LIVE_INCLUDE_ATTEMPTS = [
     "events.type",
     "statistics.type",
     "lineups.details.type",
+    "predictions.type",
+    "expected.type",
+    "pressure",
     "referees",
     "coaches",
     "formations",
@@ -127,6 +168,8 @@ const SPORTMONKS_LIVE_INCLUDE_ATTEMPTS = [
     "events.type",
     "statistics.type",
     "lineups.details.type",
+    "predictions.type",
+    "expected.type",
     "referees",
     "coaches",
     "formations",
@@ -501,7 +544,11 @@ async function requestSportmonksJson(pathname, options = {}) {
 }
 
 async function requestSportmonksCollection(pathname, options = {}) {
-  const firstPayload = await requestSportmonksJson(pathname, options);
+  const { maxPages: maxPagesOption, ...requestOptions } = options;
+  /** Default 10: altri endpoint (es. odds) restano leggeri. Calendario usa `maxPages` dedicato. */
+  const maxPages = maxPagesOption ?? 10;
+
+  const firstPayload = await requestSportmonksJson(pathname, requestOptions);
   const firstData = asArray(firstPayload?.data);
   const totalPages =
     safeNumber(
@@ -515,16 +562,17 @@ async function requestSportmonksCollection(pathname, options = {}) {
     return {
       ...firstPayload,
       data: firstData,
+      collectionPagination: null,
     };
   }
 
-  const pageLimit = Math.min(totalPages, 10);
+  const pageLimit = Math.min(totalPages, maxPages);
   const remainingPages = [];
 
   for (let page = 2; page <= pageLimit; page += 1) {
     remainingPages.push(
       requestSportmonksJson(pathname, {
-        ...options,
+        ...requestOptions,
         page,
       })
     );
@@ -539,6 +587,12 @@ async function requestSportmonksCollection(pathname, options = {}) {
   return {
     ...firstPayload,
     data: allData,
+    collectionPagination: {
+      totalPages,
+      pagesFetched: pageLimit,
+      truncated: pageLimit < totalPages,
+      perPage: safeNumber(requestOptions.perPage, 50),
+    },
   };
 }
 
@@ -612,6 +666,32 @@ function resolveParticipantLocation(entry, homeParticipant, awayParticipant) {
 
   if (participantId && participantId === String(awayParticipant?.id || "")) {
     return "away";
+  }
+
+  return null;
+}
+
+/**
+ * Dove `team_id` sulla riga lineup corrisponde a `participant_id` in `formations` (location home/away),
+ * anche se `participants` non matcha il team id come nell'include ridotto.
+ */
+function resolveLineupTeamLocation(entry, homeParticipant, awayParticipant, formations = []) {
+  const fromParticipant = resolveParticipantLocation(entry, homeParticipant, awayParticipant);
+  if (fromParticipant) {
+    return fromParticipant;
+  }
+
+  const teamId = String(entry?.team_id ?? "").trim();
+  if (!teamId) {
+    return null;
+  }
+
+  const formationRow = asArray(formations).find(
+    (row) => String(row?.participant_id ?? "").trim() === teamId
+  );
+  const loc = normalizeLookupKey(formationRow?.location || "");
+  if (loc === "home" || loc === "away") {
+    return loc;
   }
 
   return null;
@@ -757,6 +837,104 @@ function computeValuePercent(modelOdd, bookOdd) {
     return null;
   }
   return roundTo(((bookOdd - modelOdd) / modelOdd) * 100, 1);
+}
+
+/**
+ * Quota modello decimale da probabilità modello in % (0–100): 1 / (p/100) = 100/p.
+ * Allineato a `probabilityToOdds` / specifica prodotto (value = (book − model) / model × 100).
+ */
+function buildModelOddsOuGgFromScheduleProbs(ouProb, ggProb) {
+  const modelOddsOu = {
+    over25: Number.isFinite(ouProb?.over25) ? probabilityToOdds(ouProb.over25) : 0,
+    under25: Number.isFinite(ouProb?.under25) ? probabilityToOdds(ouProb.under25) : 0,
+  };
+  const modelOddsGg = {
+    goal: Number.isFinite(ggProb?.goal) ? probabilityToOdds(ggProb.goal) : 0,
+    noGoal: Number.isFinite(ggProb?.noGoal) ? probabilityToOdds(ggProb.noGoal) : 0,
+  };
+  return { modelOddsOu, modelOddsGg };
+}
+
+/**
+ * Value bet = quota bookmaker > quota modello su qualsiasi esito 1X2, O/U 2.5, GG/NG.
+ * Sceglie l’esito con edge % massimo: ((book − model) / model) × 100.
+ */
+function resolveBestCrossMarketValueBet({
+  valueMarkets,
+  marketsOu,
+  marketsGg,
+  ouProb,
+  ggProb,
+  modelOddsOu,
+  modelOddsGg,
+}) {
+  const candidates = [];
+
+  const ox = valueMarkets?.oneXTwo;
+  if (ox) {
+    [
+      { type: "1", key: "home" },
+      { type: "X", key: "draw" },
+      { type: "2", key: "away" },
+    ].forEach(({ type, key }) => {
+      const e = ox[key];
+      const edge = e?.valuePct;
+      if (Number.isFinite(edge) && edge > 0) {
+        candidates.push({
+          type,
+          market: "1X2",
+          edge,
+          modelOdd: safeNumber(e?.modelOdd, 0),
+          bookOdd: safeNumber(e?.bestBookOdd, 0),
+        });
+      }
+    });
+  }
+
+  if (ouProb && modelOddsOu) {
+    [
+      { type: "Over 2.5", prob: ouProb.over25, model: modelOddsOu.over25, book: marketsOu?.over25 },
+      { type: "Under 2.5", prob: ouProb.under25, model: modelOddsOu.under25, book: marketsOu?.under25 },
+    ].forEach((row) => {
+      const book = safeNumber(row.book, Number.NaN);
+      const edge = computeValuePercent(row.model, book);
+      if (edge != null && edge > 0) {
+        candidates.push({
+          type: row.type,
+          market: "O/U 2.5",
+          edge,
+          modelOdd: row.model,
+          bookOdd: book,
+        });
+      }
+    });
+  }
+
+  if (ggProb && modelOddsGg) {
+    [
+      { type: "Goal", prob: ggProb.goal, model: modelOddsGg.goal, book: marketsGg?.goal },
+      { type: "No Goal", prob: ggProb.noGoal, model: modelOddsGg.noGoal, book: marketsGg?.noGoal },
+    ].forEach((row) => {
+      const book = safeNumber(row.book, Number.NaN);
+      const edge = computeValuePercent(row.model, book);
+      if (edge != null && edge > 0) {
+        candidates.push({
+          type: row.type,
+          market: "GG/NG",
+          edge,
+          modelOdd: row.model,
+          bookOdd: book,
+        });
+      }
+    });
+  }
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  candidates.sort((left, right) => right.edge - left.edge);
+  return candidates[0];
 }
 
 function buildOneXTwoValueMarkets(probabilities, oneXTwoBest = null) {
@@ -2277,6 +2455,7 @@ function buildCoverageSummary(fixture) {
   const events = asArray(fixture?.events);
   const predictions = asArray(fixture?.predictions);
   const expected = asArray(fixture?.expected);
+  const pressure = asArray(fixture?.pressure);
   const referees = asArray(fixture?.referees);
   const coaches = asArray(fixture?.coaches);
   const odds = asArray(fixture?.odds);
@@ -2294,6 +2473,7 @@ function buildCoverageSummary(fixture) {
     hasEvents: events.length > 0,
     hasPredictions: predictions.length > 0,
     hasExpectedGoals: expected.length > 0,
+    hasPressureIndex: pressure.length > 0,
     hasPreMatchOdds: odds.length > 0,
     hasReferees: referees.length > 0,
     hasCoaches: coaches.length > 0,
@@ -2305,6 +2485,7 @@ function buildCoverageSummary(fixture) {
       Boolean(fixture?.venue?.name),
       predictions.length > 0,
       expected.length > 0,
+      pressure.length > 0,
       odds.length > 0,
       referees.length > 0,
       coaches.length > 0,
@@ -2346,6 +2527,10 @@ function buildBadges(stateInfo, coverage, predictionProvider) {
 
   if (coverage.hasExpectedGoals) {
     badges.push("xG disponibile");
+  }
+
+  if (coverage.hasPressureIndex) {
+    badges.push("Pressure Index");
   }
 
   if (coverage.hasPreMatchOdds) {
@@ -2523,21 +2708,106 @@ function resolveScheduleOuGgProbabilities(core) {
   return { ouProb, ggProb };
 }
 
+/**
+ * Indice di pressione / lettura tattica **prevista** (pre-match) per istogramma cliente:
+ * combina probabilità 1X2, xG derivati e mercati O/U · GG senza richiedere serie storiche `pressure` API.
+ */
+function buildPrematchPressurePreview(core, ouProb, ggProb) {
+  const ph = safeNumber(core.probabilities?.home, 33);
+  const pa = safeNumber(core.probabilities?.away, 33);
+  const xgh = safeNumber(core.derivedXg?.home, 1.15);
+  const xga = safeNumber(core.derivedXg?.away, 1.1);
+  const over = safeNumber(ouProb?.over25, 50);
+  const under = safeNumber(ouProb?.under25, 50);
+  const goalPct = safeNumber(ggProb?.goal, 55);
+  const noGoalPct = Number.isFinite(ggProb?.noGoal)
+    ? safeNumber(ggProb.noGoal, Math.max(0, 100 - goalPct))
+    : Math.max(0, 100 - goalPct);
+  const sumXg = xgh + xga;
+
+  const homeAtk = Math.min(100, Math.max(0, Math.round(ph * 0.82 + (xgh / 2.85) * 38)));
+  const awayAtk = Math.min(100, Math.max(0, Math.round(pa * 0.82 + (xga / 2.85) * 38)));
+  const underTilt = Math.min(
+    100,
+    Math.max(0, Math.round(under + (sumXg < 2.55 ? 14 : 4) - over * 0.22))
+  );
+  const noGoalTilt = Math.min(
+    100,
+    Math.max(0, Math.round(noGoalPct + (sumXg < 2.25 ? 10 : 0)))
+  );
+
+  let narrative =
+    "Preview sintetica: probabilità modello, xG attesi e mercati O/U / GG-NG (pre-match).";
+  if (homeAtk >= 62 && underTilt >= 55 && over <= 52) {
+    narrative =
+      "Casa molto spinta nei numeri ma tensione verso Under/No Goal: coerente con attacco alto e conversione non altrettanto proiettata.";
+  } else if (awayAtk >= 62 && underTilt >= 55 && over <= 52) {
+    narrative =
+      "Ospite spinto nei numeri con segnale Under/No Goal: utile per value difensivi se le quote book lo premiano.";
+  } else if (over >= 58) {
+    narrative = "Proiezione offensiva alta sul modello: mercati Over / Goal restano centrali.";
+  }
+
+  return {
+    bars: [
+      { key: "home_atk", label: "Attacco casa", value: homeAtk },
+      { key: "away_atk", label: "Attacco ospite", value: awayAtk },
+      { key: "under", label: "Pressione Under", value: underTilt },
+      { key: "no_goal", label: "No Goal", value: noGoalTilt },
+    ],
+    narrative,
+  };
+}
+
 function normalizeScheduleLikeFixture(fixture = {}) {
   const core = normalizeCoreSportmonksFixture(fixture);
   const valueMarkets = core.valueMarkets;
 
   const { ouProb, ggProb } = resolveScheduleOuGgProbabilities(core);
   const derivedFallbackValueBet = buildDerivedValueBet(core.probabilities, core.derivedXg);
-  const primaryValueBet = valueMarkets.primary
+
+  const { modelOddsOu: rawModelOddsOu, modelOddsGg: rawModelOddsGg } = buildModelOddsOuGgFromScheduleProbs(
+    ouProb ?? {},
+    ggProb ?? {}
+  );
+  const modelOddsOu = ouProb != null ? rawModelOddsOu : null;
+  const modelOddsGg = ggProb != null ? rawModelOddsGg : null;
+
+  const bestCross = resolveBestCrossMarketValueBet({
+    valueMarkets,
+    marketsOu: core.markets.ou,
+    marketsGg: core.markets.gg,
+    ouProb,
+    ggProb,
+    modelOddsOu: ouProb != null ? rawModelOddsOu : null,
+    modelOddsGg: ggProb != null ? rawModelOddsGg : null,
+  });
+
+  const valueBet = bestCross
     ? {
-        type: valueMarkets.primary.type,
-        edge: valueMarkets.primary.edge,
-        market: "1X2",
+        type: bestCross.type,
+        edge: bestCross.edge,
+        market: bestCross.market,
+        modelOdd: bestCross.modelOdd,
+        bookOdd: bestCross.bookOdd,
       }
-    : null;
-  const valueBet = primaryValueBet || derivedFallbackValueBet || null;
-  const valueSource = primaryValueBet ? "sportmonks_feed_math" : valueBet ? "fallback_derivato" : "none";
+    : derivedFallbackValueBet || null;
+  const valueSource = bestCross ? "sportmonks_feed_math" : valueBet ? "fallback_derivato" : "none";
+  const pressurePreview = buildPrematchPressurePreview(core, ouProb, ggProb);
+
+  const mergedPrimary =
+    bestCross != null
+      ? {
+          type: bestCross.type,
+          edge: bestCross.edge,
+          market: bestCross.market,
+          odds: bestCross.bookOdd,
+        }
+      : valueMarkets.primary;
+  const valueMarketsMerged = {
+    ...valueMarkets,
+    primary: mergedPrimary,
+  };
 
   return {
     id: core.fixtureId,
@@ -2552,6 +2822,11 @@ function normalizeScheduleLikeFixture(fixture = {}) {
     round: core.info.round,
     date: core.kickoff.date,
     time: core.kickoff.time,
+    /** ISO 8601 per filtri data/tab (Europe/Rome coerente col provider). */
+    kickoff_at: (() => {
+      const p = parseDate(fixture?.starting_at || fixture?.startingAt || fixture?.starting_at_timestamp);
+      return p ? p.toISOString() : null;
+    })(),
     status: getRelativeStatus(fixture?.starting_at || fixture?.startingAt),
     state: core.stateInfo,
     coverage: core.coverage,
@@ -2571,8 +2846,10 @@ function normalizeScheduleLikeFixture(fixture = {}) {
     xg: core.derivedXg,
     valueBet,
     valueBetSource: valueSource,
-    valueMarkets,
-    modelOdds: valueMarkets.modelOdds,
+    valueMarkets: valueMarketsMerged,
+    modelOdds: valueMarketsMerged.modelOdds,
+    modelOddsOu,
+    modelOddsGg,
     scores: core.predictedScores,
     confidence: core.confidence,
     confidence_source: core.confidenceSource,
@@ -2598,6 +2875,7 @@ function normalizeScheduleLikeFixture(fixture = {}) {
     home_media: buildMediaBundle(core.homeParticipant),
     away_media: buildMediaBundle(core.awayParticipant),
     league_media: buildMediaBundle(fixture?.league),
+    pressure_preview: pressurePreview,
     apiLoaded: true,
   };
 }
@@ -2623,8 +2901,12 @@ export function normalizeSportmonksFixture(fixture = {}) {
     home: createRenderedLineupPlayers(
       lineups.filter(
         (entry) =>
-          resolveParticipantLocation(entry, core.homeParticipant, core.awayParticipant) ===
-          "home"
+          resolveLineupTeamLocation(
+            entry,
+            core.homeParticipant,
+            core.awayParticipant,
+            fixture?.formations
+          ) === "home"
       ),
       lineupStatus,
       formationOverrides.home
@@ -2632,8 +2914,12 @@ export function normalizeSportmonksFixture(fixture = {}) {
     away: createRenderedLineupPlayers(
       lineups.filter(
         (entry) =>
-          resolveParticipantLocation(entry, core.homeParticipant, core.awayParticipant) ===
-          "away"
+          resolveLineupTeamLocation(
+            entry,
+            core.homeParticipant,
+            core.awayParticipant,
+            fixture?.formations
+          ) === "away"
       ),
       lineupStatus,
       formationOverrides.away
@@ -2787,23 +3073,22 @@ export function mergeSportmonksLiveMatches(previousMatches = [], updatedMatches 
 
 export async function fetchSportmonksScheduleWindow(days = SPORTMONKS_DEFAULT_SCHEDULE_DAYS) {
   const safeDays = clampInteger(days, SPORTMONKS_DEFAULT_SCHEDULE_DAYS, 1, 14);
+  /** Quante pagine scaricare al massimo (50 fixture/pagina). Prima era fisso a 10 → solo 500 match: molte leghe potevano mancare. */
+  const scheduleMaxPages = clampInteger(process.env.SPORTMONKS_SCHEDULE_MAX_PAGES, 80, 1, 200);
   const fromDate = new Date();
   const toDate = new Date();
   toDate.setDate(toDate.getDate() + Math.max(0, safeDays - 1));
   const from = buildDateKey(fromDate);
   const to = buildDateKey(toDate);
   const leagueFilters = getSportmonksFixtureLeaguesFilterParam();
-  const response = await requestSportmonksWithIncludeFallback(
-    `fixtures/between/${from}/${to}`,
-    SPORTMONKS_SCHEDULE_INCLUDE_ATTEMPTS,
-    {
-      expectCollection: true,
-      timezone: ROME_TIMEZONE,
-      /** Documentazione Sportmonks: per_page massimo 50 su questo endpoint. */
-      perPage: 50,
-      filters: leagueFilters || undefined,
-    }
-  );
+  const response = await requestSportmonksCollection(`fixtures/between/${from}/${to}`, {
+    include: SPORTMONKS_SCHEDULE_PREMATCH_INCLUDES,
+    timezone: ROME_TIMEZONE,
+    /** Documentazione Sportmonks: per_page massimo 50 su questo endpoint. */
+    perPage: 50,
+    filters: leagueFilters || undefined,
+    maxPages: scheduleMaxPages,
+  });
 
   return {
     window: {
@@ -2814,7 +3099,51 @@ export async function fetchSportmonksScheduleWindow(days = SPORTMONKS_DEFAULT_SC
     fixtures: asArray(response?.data),
     raw: response,
     scheduleLeagueFilter: leagueFilters || null,
+    schedulePagination: response?.collectionPagination ?? null,
   };
+}
+
+/**
+ * Quote pre-match dal feed dedicato Sportmonks (non solo include su `fixtures`).
+ * @see https://api.sportmonks.com/v3/football/odds/pre-match/fixtures/{fixtureId}
+ */
+async function fetchSportmonksPrematchOddsForFixture(fixtureId) {
+  const id = String(fixtureId || "").trim();
+  if (!id) {
+    return [];
+  }
+
+  try {
+    const response = await requestSportmonksCollection(`odds/pre-match/fixtures/${encodeURIComponent(id)}`, {
+      include: ["bookmaker"],
+      perPage: 100,
+    });
+    return asArray(response?.data);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Se `fixtures/{id}` non espone odds 1X2 utili, integra la risposta di `odds/pre-match/fixtures/{id}`.
+ */
+async function mergePrematchOddsIntoFixture(fixture) {
+  if (!fixture?.id) {
+    return fixture;
+  }
+
+  const existing = asArray(fixture.odds);
+  const bundle = extractOddsBundle(existing);
+  if (bundle.available && bundle.bookmakers.length > 0) {
+    return fixture;
+  }
+
+  const extra = await fetchSportmonksPrematchOddsForFixture(String(fixture.id));
+  if (!extra.length) {
+    return fixture;
+  }
+
+  return { ...fixture, odds: [...existing, ...extra] };
 }
 
 export async function fetchSportmonksFixtureById(fixtureId) {
@@ -2833,7 +3162,12 @@ export async function fetchSportmonksFixtureById(fixtureId) {
     }
   );
 
-  return response?.data || null;
+  const raw = response?.data || null;
+  if (!raw) {
+    return null;
+  }
+
+  return mergePrematchOddsIntoFixture(raw);
 }
 
 export async function fetchSportmonksSeasonStandings(seasonId) {

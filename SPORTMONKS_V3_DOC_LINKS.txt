@@ -1,0 +1,299 @@
+================================================================================
+  Sportmonks Football API v3 — documentazione (.md) per portale completo
+  Indice: hub, request options, fixtures, live, odds, predictions, xG,
+  leghe/stagioni, squadre/giocatori, classifiche, news, TV, trasferimenti, ecc.
+  Base API: https://api.sportmonks.com/v3/football/...
+================================================================================
+
+--- Hub principale (tutti gli endpoint raggruppati) ---
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints.md
+
+--- Request options (include, filters, select, sort, pagination) ---
+https://docs.sportmonks.com/v3/api/request-options
+https://docs.sportmonks.com/v3/api/request-options/filtering
+https://docs.sportmonks.com/v3/api/request-options/ordering-and-sorting
+
+--- Entities (modelli dati) ---
+https://docs.sportmonks.com/v3/endpoints-and-entities/entities
+
+--- Tutorial navigazione API ---
+https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/api-structure-and-navigation
+https://docs.sportmonks.com/v3/welcome/most-important-docs-pages
+
+
+================================================================================
+  LIVESCORES
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/livescores/get-inplay-livescores.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/livescores/get-all-livescores.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/livescores/get-latest-updated-livescores.md
+
+
+================================================================================
+  FIXTURES
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-all-fixtures.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixture-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-multiple-ids.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date-range.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date-range-for-team.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-head-to-head.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-search-by-name.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-upcoming-fixtures-by-market-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-upcoming-fixtures-by-tv-station-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-past-fixtures-by-tv-station-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-latest-updated-fixtures.md
+
+
+================================================================================
+  STATES / TYPES
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/states/get-all-states.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/states/get-state-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/types/get-all-types.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/types/get-type-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/types/get-type-by-entity.md
+
+
+================================================================================
+  LEAGUES / SEASONS / STAGES / ROUNDS / SCHEDULES
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/leagues/get-all-leagues.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/leagues/get-leagues-by-live.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/leagues/get-leagues-by-fixture-date.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/leagues/get-leagues-by-country-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/leagues/get-leagues-search-by-name.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/leagues/get-all-leagues-by-team-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/leagues/get-current-leagues-by-team-id.md
+
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/seasons/get-all-seasons.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/seasons/get-seasons-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/seasons/get-seasons-by-team-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/seasons/get-seasons-by-search-by-name.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/schedules/get-schedules-by-season-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/schedules/get-schedules-by-team-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/schedules/get-schedules-by-season-id-and-team-id.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/stages/get-all-stages.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/stages/get-stage-by-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/stages/get-stages-by-season-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/stages/get-stages-by-search-by-name.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/rounds/get-all-rounds.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/rounds/get-round-by-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/rounds/get-rounds-by-season-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/rounds/get-rounds-by-search-by-name.md
+
+
+================================================================================
+  STATISTICS / STANDINGS / TOPSCORERS
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/statistics/get-season-statistics-by-participant.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/statistics/get-stage-statistics-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/statistics/get-round-statistics-by-id.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/standings/get-all-standings.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/standings/get-standings-by-season-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/standings/get-standings-by-round-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/standings/get-standing-correction-by-season-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/standings/get-live-standings-by-league-id.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/topscorers/get-topscorers-by-season-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/topscorers/get-topscorers-by-stage-id.md
+
+
+================================================================================
+  TEAMS / PLAYERS / SQUADS / COACHES / REFEREES
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/teams/get-all-teams.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/teams/get-team-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/teams/get-teams-by-country-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/teams/get-teams-by-season-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/teams/get-teams-by-search-by-name.md
+
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/players/get-all-players.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/players/get-player-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/players/get-players-by-country-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/players/get-players-by-search-by-name.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/players/get-last-updated-players.md
+
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/team-squads/get-team-squad-by-team-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/team-squads/get-extended-team-squad-by-team-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/team-squads/get-team-squad-by-team-and-season-id.md
+
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/coaches/get-all-coaches.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/coaches/get-coach-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/coaches/get-coaches-by-country-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/coaches/get-coaches-search-by-name.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/coaches/get-last-updated-coaches.md
+
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/referees/get-all-referees.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/referees/get-referee-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/referees/get-referees-by-country-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/referees/get-referees-by-season-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/referees/get-referees-search-by-name.md
+
+
+================================================================================
+  VENUES / TV STATIONS
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/venues/get-all-venues.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/venues/get-venue-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/venues/get-venues-by-season-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/venues/get-venues-by-search-by-name.md
+
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/tv-stations/get-all-tv-stations.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/tv-stations/get-tv-station-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/tv-stations/get-tv-stations-by-fixture-id.md
+
+
+================================================================================
+  EXPECTED (xG) / PREMIUM LINEUPS
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/expected-xg/get-expected-by-team.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/expected-xg/get-expected-by-player.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/entities/expected
+
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-expected-lineups/get-expected-lineup-by-team.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-expected-lineups/get-expected-lineups-by-player.md
+
+
+================================================================================
+  PREDICTIONS
+================================================================================
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/predictions/get-probabilities.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/predictions/get-predictability-by-league-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/predictions/get-probabilities-by-fixture-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/predictions/get-value-bets.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/predictions/get-value-bets-by-fixture-id.md
+
+
+================================================================================
+  ODDS — Standard Pre-match
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/pre-match-odds/get-all-odds.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/pre-match-odds/get-odds-by-fixture-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/pre-match-odds/get-odds-by-fixture-id-and-bookmaker-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/pre-match-odds/get-odds-by-fixture-id-and-market-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/pre-match-odds/get-last-updated-odds.md
+
+
+================================================================================
+  ODDS — Standard In-play
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/inplay-odds/get-all-inplay-odds.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/inplay-odds/get-inplay-odds-by-fixture-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/inplay-odds/get-inplay-odds-by-fixture-id-and-bookmaker-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/inplay-odds/get-inplay-odds-by-fixture-id-and-market-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/standard-odds-feed/inplay-odds/get-last-updated-inplay-odds.md
+
+
+================================================================================
+  ODDS — Premium Pre-match (se piano / add-on)
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-odds-feed/premium-pre-match-odds/get-all-premium-odds.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-odds-feed/premium-pre-match-odds/get-premium-odds-by-fixture-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-odds-feed/premium-pre-match-odds/get-premium-odds-by-fixture-id-and-bookmaker-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-odds-feed/premium-pre-match-odds/get-premium-odds-by-fixture-id-and-market-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-odds-feed/premium-pre-match-odds/get-updated-premium-odds-between-time-range.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-odds-feed/premium-pre-match-odds/get-updated-historical-odds-between-time-range.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-odds-feed/premium-pre-match-odds/get-all-historical-odds.md
+
+
+================================================================================
+  MARKETS / BOOKMAKERS
+================================================================================
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/markets/get-all-markets.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/markets/get-all-premium-markets.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/markets/get-market-by-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/markets/get-market-by-search.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/bookmakers/get-all-bookmakers.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/bookmakers/get-all-premium-bookmakers.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/bookmakers/get-bookmaker-by-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/bookmakers/get-bookmaker-by-search.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/bookmakers/get-bookmaker-by-fixture-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/bookmakers/get-bookmaker-match-id-mappings-by-fixture-id.md
+
+
+================================================================================
+  NEWS / COMMENTARIES / RIVALS
+================================================================================
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/news/get-pre-match-news.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/news/get-pre-match-news-by-season-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/news/get-pre-match-news-for-upcoming-fixtures.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/news/get-post-match-news.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/news/get-post-match-news-by-season-id.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/commentaries/get-all-commentaries.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/commentaries/get-commentaries-by-fixture-id.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/rivals/get-all-rivals.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/rivals/get-rivals-by-team-id.md
+
+
+================================================================================
+  TRANSFERS / RUMOURS
+================================================================================
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfers/get-all-transfers.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfers/get-transfer-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfers/get-latest-transfers.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfers/get-transfers-between-date-range.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfers/get-transfers-by-team-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfers/get-transfers-by-player-id.md
+
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfer-rumours/get-all-transfer-rumours.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfer-rumours/get-transfer-rumours-by-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfer-rumours/get-transfer-rumours-between-date-range.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfer-rumours/get-transfer-rumours-by-team-id.md
+https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/transfer-rumours/get-transfer-rumours-by-player-id.md
+
+
+================================================================================
+  BETA: Match facts / Team rankings / TOTW
+================================================================================
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/match-facts-beta/get-all-available-match-facts.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/match-facts-beta/get-match-facts-by-fixture-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/match-facts-beta/get-match-facts-by-date-range.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/match-facts-beta/get-match-facts-by-league-id.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/team-rankings-beta/get-all-team-rankings.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/team-rankings-beta/get-team-rankings-by-team-id.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/team-rankings-beta/get-team-rankings-by-date.md
+
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/team-of-the-week-totw-beta/get-all-available-totws.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/team-of-the-week-totw-beta/get-totw-per-round.md
+https://docs.sportmonks.com/football/endpoints-and-entities/endpoints/team-of-the-week-totw-beta/get-latest-totw.md
+
+
+================================================================================
+  INCLUDE / TUTORIAL (Pressure, ecc.)
+================================================================================
+https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/includes/pressure-index
+https://docs.sportmonks.com/v3/entities/fixture#fixture
+https://docs.sportmonks.com/v3/entities/odd-and-prediction#odd
+https://docs.sportmonks.com/v3/entities/odd-and-prediction#prediction-valuebet
+
+
+================================================================================
+  Discovery filtri (chiamata API)
+================================================================================
+https://api.sportmonks.com/v3/my/filters/entity?api_token=YOUR_TOKEN
+
+
+================================================================================
+  Postman
+================================================================================
+https://app.getpostman.com/run-collection/11949411-c7a3a0a0-b5c5-4109-9bf6-f430fec65316
+
+
+================================================================================
+  Note
+================================================================================
+- Path effettivi e query: tab "Base URL" su ogni pagina endpoint.
+- Alcuni link usano /v3/... altri /football/...: GitBook può reindirizzare.
+- Premium odds / premium markets / beta: dipendono da piano e add-on.
+- Per portale: combinare fixture (include) + route dedicate odds/predictions
+  dove serve meno payload o aggiornamenti mirati.

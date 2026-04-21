@@ -155,6 +155,10 @@ export default function OddsComparison({ bookmakers, valueMarkets }) {
         <div className="w-2 h-2 rounded-full bg-primary" />
         <span className="text-xs text-muted-foreground">Top value + 3 bookmaker di riferimento</span>
       </div>
+      <p className="mt-2 text-[10px] leading-snug text-muted-foreground/90">
+        CTA con link affiliazione configurabile (`NEXT_PUBLIC_ODDS_CTA_LABEL` / `NEXT_PUBLIC_AFFILIATE_BASE_URL`).
+        Evitare copy non conforme (es. &quot;Gioca ora&quot;) se richiesto dal legale.
+      </p>
     </GlassCard>
   );
 }

@@ -15,9 +15,24 @@ function ConfBar({ val, max = 100, color = "bg-primary" }) {
   );
 }
 
+function isOutcomeValue(match, label) {
+  const vb = match?.valueBet;
+  const p = match?.valueMarkets?.primary;
+  const t = vb?.type ?? p?.type;
+  const m = vb?.market ?? p?.market;
+  const is1x2 = m === "1X2" || (!m && (t === "1" || t === "X" || t === "2"));
+  if (label === "1") return is1x2 && t === "1";
+  if (label === "X") return is1x2 && t === "X";
+  if (label === "2") return is1x2 && t === "2";
+  return false;
+}
+
 export default function MatchCard({ match, compact = false }) {
   const { favorites, toggleFavoriteMatch } = useApp();
   const isFav = favorites.matches.includes(String(match.id));
+  const modelOdds = match.modelOdds || {};
+  const modelOddsOu = match.modelOddsOu || {};
+  const modelOddsGg = match.modelOddsGg || {};
 
   return (
     <GlassCard glow={!!match.valueBet} className="group relative">
@@ -79,41 +94,57 @@ export default function MatchCard({ match, compact = false }) {
       {/* 1X2 */}
       <div className="grid grid-cols-3 gap-2 mb-3">
         {[
-          { label: "1", prob: match.prob.home, odds: match.odds.home, isValue: match.valueBet?.type === "1" },
-          { label: "X", prob: match.prob.draw, odds: match.odds.draw, isValue: false },
-          { label: "2", prob: match.prob.away, odds: match.odds.away, isValue: match.valueBet?.type === "2" },
-        ].map((o) => (
-          <div key={o.label} className={`rounded-lg p-2 text-center transition-all ${o.isValue ? "border border-primary/25 bg-primary/10 ring-1 ring-primary/15" : "bg-secondary/50"}`}>
+          { label: "1", prob: match.prob.home, odds: match.odds.home, mo: modelOdds.home },
+          { label: "X", prob: match.prob.draw, odds: match.odds.draw, mo: modelOdds.draw },
+          { label: "2", prob: match.prob.away, odds: match.odds.away, mo: modelOdds.away },
+        ].map((o) => {
+          const isValue = isOutcomeValue(match, o.label);
+          return (
+          <div key={o.label} className={`rounded-lg p-2 text-center transition-all ${isValue ? "border border-primary/25 bg-primary/10 ring-1 ring-primary/15" : "bg-secondary/50"}`}>
             <div className="text-xs text-muted-foreground mb-0.5">{o.label}</div>
             <div className="font-bold text-sm text-foreground">{o.prob}%</div>
             <div className="text-xs text-accent font-semibold">{o.odds}</div>
-            <ConfBar val={o.prob} color={o.isValue ? "bg-primary" : "bg-secondary"} />
+            {Number.isFinite(o.mo) && o.mo > 0 ? (
+              <div className="text-[10px] text-muted-foreground mt-0.5">Qm {o.mo}</div>
+            ) : null}
+            <ConfBar val={o.prob} color={isValue ? "bg-primary" : "bg-secondary"} />
           </div>
-        ))}
+        );
+        })}
       </div>
 
       {!compact && (
         <>
           {/* O/U + GG */}
-          <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
             {[
               {
                 label: "Over 2.5",
                 odd: match.ou.over25,
                 prob: match.ouProb?.over25,
+                mo: modelOddsOu.over25,
                 highlight: match.valueBet?.type === "Over 2.5",
               },
               {
                 label: "Under 2.5",
                 odd: match.ou.under25,
                 prob: match.ouProb?.under25,
-                highlight: false,
+                mo: modelOddsOu.under25,
+                highlight: match.valueBet?.type === "Under 2.5",
               },
               {
-                label: match.valueBet?.market === "GG/NG" ? "Goal" : "GG/NG",
+                label: "Goal",
                 odd: match.gg.goal,
                 prob: match.ggProb?.goal,
+                mo: modelOddsGg.goal,
                 highlight: match.valueBet?.type === "Goal",
+              },
+              {
+                label: "No Goal",
+                odd: match.gg.noGoal,
+                prob: match.ggProb?.noGoal,
+                mo: modelOddsGg.noGoal,
+                highlight: match.valueBet?.type === "No Goal",
               },
             ].map((o) => (
               <div
@@ -127,6 +158,9 @@ export default function MatchCard({ match, compact = false }) {
                   <>
                     <div className="text-sm font-bold text-foreground">{o.prob}%</div>
                     <div className="text-xs font-semibold text-accent">{o.odd}</div>
+                    {Number.isFinite(o.mo) && o.mo > 0 ? (
+                      <div className="text-[10px] text-muted-foreground mt-0.5">Qm {o.mo}</div>
+                    ) : null}
                     <ConfBar val={o.prob} color={o.highlight ? "bg-primary" : "bg-secondary"} />
                   </>
                 ) : (

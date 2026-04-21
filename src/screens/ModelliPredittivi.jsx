@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { TrendingUp, Filter, LayoutGrid, LayoutList, Search, Send, Crown } from "lucide-react";
+import { TrendingUp, Filter, LayoutGrid, LayoutList, Search, Send, Crown, ChevronsUpDown, Check } from "lucide-react";
 import { Link } from "@/lib/router-compat";
 import {
   Select,
@@ -9,7 +9,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { getCompetitionConfig, getSupportedCompetitionOptions } from "@/lib/competitions/catalog";
 import PageIntro from "@/components/shared/PageIntro";
 import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
@@ -19,11 +31,11 @@ import ConfidenceBar from "@/components/shared/ConfidenceBar";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { getScheduleWindow } from "@/api/football";
 import {
-  getLeagueBucket,
   getMatchStatusBucket,
   matchLeagueFilter,
   sortMatchesByCriterion,
 } from "@/lib/football-filters";
+import { getMatchValueCandidate, matchHasValueBetSignal } from "@/lib/match-value";
 
 const STATUS_TABS = [
   { key: "all", label: "Tutti" },
@@ -33,37 +45,21 @@ const STATUS_TABS = [
 ];
 
 const SORT_OPTIONS = [
-  { value: "time", label: "Orario" },
+  { value: "featured", label: "Piano leghe" },
+  { value: "time", label: "Data e orario" },
   { value: "confidence", label: "Confidenza" },
-  { value: "odds", label: "Quota" },
-  { value: "value", label: "Valore" },
+  { value: "value", label: "Value (edge %)" },
+  { value: "xg", label: "xG totali" },
+  { value: "odds", label: "Quota 1 (casa)" },
+  { value: "odds_away", label: "Quota 2 (trasferta)" },
+  { value: "league_az", label: "Competizione A→Z" },
+  { value: "league_za", label: "Competizione Z→A" },
 ];
-const MAX_VISIBLE_MATCHES = 24;
+const MATCHES_PER_PAGE = 12;
 const TELEGRAM_URL = String(process.env.NEXT_PUBLIC_TELEGRAM_URL || "").trim();
 
 function sanitizeMatches(matches) {
   return Array.isArray(matches) ? matches : [];
-}
-
-function getValueCandidate(match) {
-  if (!match) {
-    return null;
-  }
-  if (match.valueMarkets?.primary && Number.isFinite(match.valueMarkets.primary.edge)) {
-    return {
-      type: match.valueMarkets.primary.type,
-      edge: match.valueMarkets.primary.edge,
-      source: "math",
-    };
-  }
-  if (match.valueBet && Number.isFinite(match.valueBet.edge)) {
-    return {
-      type: match.valueBet.type,
-      edge: match.valueBet.edge,
-      source: "fallback",
-    };
-  }
-  return null;
 }
 
 export default function ModelliPredittivi() {
@@ -73,10 +69,12 @@ export default function ModelliPredittivi() {
   const [scheduleError, setScheduleError] = useState("");
   const [league, setLeague] = useState("all");
   const [showValueOnly, setShowValueOnly] = useState(false);
-  const [sort, setSort] = useState("time");
+  const [sort, setSort] = useState("featured");
   const [view, setView] = useState("grid");
   const [statusTab, setStatusTab] = useState("all");
-  const [search, setSearch] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
+  const [leagueOpen, setLeagueOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let isActive = true;
@@ -105,6 +103,23 @@ export default function ModelliPredittivi() {
           predictionProvider:
             schedulePayload.matches?.[0]?.prediction_provider || "derived_internal_model",
         });
+        if (process.env.NODE_ENV === "development") {
+          const list = sanitizeMatches(schedulePayload.matches);
+          const rawFirst = schedulePayload.rawSchedules?.fixtures?.[0];
+          console.log("[ModelliPredittivi] schedule caricato", {
+            window: schedulePayload.window,
+            provider: schedulePayload.provider,
+            source: schedulePayload.source,
+            matchCount: list.length,
+            competitions: (schedulePayload.competitions || []).length,
+            notice: schedulePayload.notice || null,
+            hasRawSchedules: Boolean(schedulePayload.rawSchedules),
+          });
+          /** Match dopo normalizzazione (quello che usa MatchCard). */
+          console.log("[ModelliPredittivi] match normalizzato (primo)", list[0] ?? null);
+          /** Fixture così come arriva da Sportmonks `fixtures/between` (include nel provider). */
+          console.log("[ModelliPredittivi] fixture API Sportmonks raw (primo)", rawFirst ?? null);
+        }
       } catch (error) {
         if (isActive) {
           setApiMatches([]);
@@ -124,26 +139,35 @@ export default function ModelliPredittivi() {
     };
   }, []);
 
-  const availableLeagues = useMemo(
-    () =>
-      Array.from(
-        new Set(apiMatches.map((match) => getLeagueBucket(match.league)).filter(Boolean))
-      ).sort(),
-    [apiMatches]
-  );
+  /** Catalogo piattaforma + competizioni presenti nel feed (etichette allineate a `matchLeagueFilter`). */
+  const leagueOptionNames = useMemo(() => {
+    const set = new Set();
+    getSupportedCompetitionOptions().forEach((o) => set.add(o.name));
+    apiMatches.forEach((match) => {
+      const cfg = getCompetitionConfig(match?.league);
+      const label =
+        cfg?.name && cfg.name !== "Competizione non supportata" ? cfg.name : String(match?.league || "").trim();
+      if (label) {
+        set.add(label);
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" }));
+  }, [apiMatches]);
 
   const filteredMatches = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const q = teamSearch.trim().toLowerCase();
 
     return sortMatchesByCriterion(
       apiMatches.filter((match) => {
         if (!matchLeagueFilter(match, league)) return false;
-        if (showValueOnly && !match.valueBet) return false;
+        if (showValueOnly && !matchHasValueBetSignal(match)) return false;
         if (statusTab !== "all" && getMatchStatusBucket(match) !== statusTab) return false;
         if (
-          normalizedSearch &&
-          !match.home.toLowerCase().includes(normalizedSearch) &&
-          !match.away.toLowerCase().includes(normalizedSearch)
+          q &&
+          !match.home.toLowerCase().includes(q) &&
+          !match.away.toLowerCase().includes(q) &&
+          !(match.homeShort && match.homeShort.toLowerCase().includes(q)) &&
+          !(match.awayShort && match.awayShort.toLowerCase().includes(q))
         ) {
           return false;
         }
@@ -151,11 +175,22 @@ export default function ModelliPredittivi() {
       }),
       sort
     );
-  }, [apiMatches, league, search, showValueOnly, sort, statusTab]);
+  }, [apiMatches, league, teamSearch, showValueOnly, sort, statusTab]);
 
-  const visibleMatches = useMemo(
-    () => filteredMatches.slice(0, MAX_VISIBLE_MATCHES),
-    [filteredMatches]
+  const totalPages = Math.max(1, Math.ceil(filteredMatches.length / MATCHES_PER_PAGE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [league, teamSearch, showValueOnly, sort, statusTab]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(Math.max(1, current), totalPages));
+  }, [totalPages]);
+
+  const pagedMatches = useMemo(
+    () =>
+      filteredMatches.slice((page - 1) * MATCHES_PER_PAGE, page * MATCHES_PER_PAGE),
+    [filteredMatches, page]
   );
   const nextAvailableMatch = useMemo(
     () => sortMatchesByCriterion([...apiMatches], "time")[0] || null,
@@ -164,7 +199,7 @@ export default function ModelliPredittivi() {
   const topValueMatches = useMemo(
     () =>
       filteredMatches
-        .map((match) => ({ match, candidate: getValueCandidate(match) }))
+        .map((match) => ({ match, candidate: getMatchValueCandidate(match) }))
         .filter((entry) => entry.candidate)
         .sort((left, right) => right.candidate.edge - left.candidate.edge)
         .slice(0, 3),
@@ -193,7 +228,7 @@ export default function ModelliPredittivi() {
         <PageIntro
           title="MODELLI PREDITTIVI"
           accentWord="PREDITTIVI"
-          subtitle="Analisi pre-match sul feed Sportmonks; modelli derivati quando il piano non espone predictions."
+          subtitle="Prediction Sportmonks incrociate con quote pre-match: probabilità, quota modello, value e preview pressione (fallback solo se un mercato non è nel feed)."
           icon={TrendingUp}
         />
 
@@ -209,8 +244,8 @@ export default function ModelliPredittivi() {
               provider={scheduleMeta?.provider}
               source={scheduleMeta?.source}
               freshness={scheduleMeta?.freshness}
-              competition={visibleMatches[0]?.competition}
-              leagueMedia={visibleMatches[0]?.league_media}
+              competition={filteredMatches[0]?.competition}
+              leagueMedia={filteredMatches[0]?.league_media}
               predictionProvider={scheduleMeta?.predictionProvider}
               oddsProvider={scheduleMeta?.oddsProvider}
               notice={scheduleMeta?.notice}
@@ -254,29 +289,66 @@ export default function ModelliPredittivi() {
         </div>
 
         <div className="mb-6 flex min-w-0 flex-wrap items-center gap-2 border-b border-border/40 pb-4 md:gap-3">
-            <div className="relative min-w-0 flex-1 basis-[min(100%,14rem)] sm:min-w-[200px]">
+            <div className="relative min-w-0 flex-1 basis-[min(100%,14rem)] sm:min-w-[180px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Cerca squadra..."
+                value={teamSearch}
+                onChange={(event) => setTeamSearch(event.target.value)}
+                placeholder="Cerca squadra (nome o sigla)…"
                 className="w-full bg-secondary/60 border border-border/50 rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/40 h-8"
+                autoComplete="off"
               />
             </div>
 
-            <Select value={league} onValueChange={setLeague}>
-              <SelectTrigger className="h-8 w-full min-w-0 shrink-0 bg-secondary/60 text-xs border-border/50 sm:w-[9.5rem]">
-                <SelectValue placeholder="Competizione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutte le competizioni</SelectItem>
-                {availableLeagues.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={leagueOpen} onOpenChange={setLeagueOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={leagueOpen}
+                  className="h-8 w-full min-w-0 shrink-0 justify-between border-border/50 bg-secondary/60 px-2 text-xs font-normal sm:w-[min(100%,16rem)]"
+                >
+                  <span className="truncate">{league === "all" ? "Tutte le competizioni" : league}</span>
+                  <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[min(100vw-2rem,18rem)] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Cerca campionato…" className="h-9" />
+                  <CommandList>
+                    <CommandEmpty>Nessuna competizione.</CommandEmpty>
+                    <CommandGroup heading="Competizioni">
+                      <CommandItem
+                        value="all-tutte"
+                        onSelect={() => {
+                          setLeague("all");
+                          setLeagueOpen(false);
+                        }}
+                      >
+                        <Check className={cn("mr-2 h-3.5 w-3.5", league === "all" ? "opacity-100" : "opacity-0")} />
+                        Tutte le competizioni
+                      </CommandItem>
+                      {leagueOptionNames.map((name) => (
+                        <CommandItem
+                          key={name}
+                          value={`${name} ${name.toLowerCase()}`}
+                          onSelect={() => {
+                            setLeague(name);
+                            setLeagueOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn("mr-2 h-3.5 w-3.5 shrink-0", league === name ? "opacity-100" : "opacity-0")}
+                          />
+                          <span className="truncate">{name}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
 
             <Select value={sort} onValueChange={setSort}>
               <SelectTrigger className="h-8 w-full min-w-0 shrink-0 bg-secondary/60 text-xs border-border/50 sm:w-[8.5rem]">
@@ -291,9 +363,11 @@ export default function ModelliPredittivi() {
               </SelectContent>
             </Select>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <Switch className="scale-90" checked={showValueOnly} onCheckedChange={setShowValueOnly} />
-              <span className="text-[11px] text-muted-foreground whitespace-nowrap">Value bet</span>
+              <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
+                Mostra solo Value Bet
+              </span>
             </div>
 
             <div className="ml-auto flex items-center gap-0.5 rounded-md border border-border/35 p-0.5">
@@ -327,18 +401,16 @@ export default function ModelliPredittivi() {
         <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>
             {filteredMatches.length} match trovati
-            {filteredMatches.length > visibleMatches.length
-              ? ` · primi ${visibleMatches.length} mostrati`
-              : ""}
+            {filteredMatches.length > 0 ? (
+              <>
+                {" "}
+                · pagina {page}/{totalPages} · {MATCHES_PER_PAGE} per pagina
+              </>
+            ) : null}
           </span>
           {scheduleMeta?.competitions?.length > 0 && (
             <span className="text-muted-foreground/80">
               {scheduleMeta.competitions.length} competizioni nel feed
-            </span>
-          )}
-          {filteredMatches.length > visibleMatches.length && (
-            <span className="text-foreground/80">
-              Affina filtri o ricerca per il resto del palinsesto
             </span>
           )}
         </div>
@@ -347,7 +419,7 @@ export default function ModelliPredittivi() {
           <div className="min-w-0 lg:col-span-2">
             {view === "grid" ? (
               <div className="space-y-4">
-                {visibleMatches.map((match, index) => (
+                {pagedMatches.map((match, index) => (
                   <motion.div
                     key={match.id}
                     initial={{ opacity: 0, y: 15 }}
@@ -360,10 +432,43 @@ export default function ModelliPredittivi() {
               </div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-border/40 divide-y divide-border/35 bg-secondary/5">
-                {visibleMatches.map((match) => (
+                {pagedMatches.map((match) => (
                   <MatchCard key={match.id} match={match} compact />
                 ))}
               </div>
+            )}
+
+            {totalPages > 1 && filteredMatches.length > 0 && (
+              <nav
+                className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center"
+                aria-label="Paginazione elenco match"
+              >
+                <div className="text-xs text-muted-foreground">
+                  Mostrati {(page - 1) * MATCHES_PER_PAGE + 1}–
+                  {Math.min(page * MATCHES_PER_PAGE, filteredMatches.length)} di {filteredMatches.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1 || scheduleLoading}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="rounded-md border border-border/50 bg-secondary/40 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary/70 disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    Indietro
+                  </button>
+                  <span className="min-w-[5.5rem] text-center text-xs tabular-nums text-muted-foreground">
+                    {page} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages || scheduleLoading}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="rounded-md border border-border/50 bg-secondary/40 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary/70 disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    Avanti
+                  </button>
+                </div>
+              </nav>
             )}
 
             {filteredMatches.length === 0 && !scheduleLoading && (
@@ -476,7 +581,7 @@ export default function ModelliPredittivi() {
             <GlassCard variant="quiet">
               <h3 className="mb-3 text-sm font-semibold text-foreground">Prossimi match</h3>
               <div className="space-y-1.5">
-                {visibleMatches.slice(0, 4).map((match) => (
+                {filteredMatches.slice(0, 4).map((match) => (
                   <div
                     key={match.id}
                     className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-secondary/25 px-2 py-1.5 text-xs"

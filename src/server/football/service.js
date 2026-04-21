@@ -239,12 +239,25 @@ function getLiveNoticeFromMatches(matches) {
     : "Probabilities live non presenti nel feed corrente. Le live odds restano derivate dal contesto match.";
 }
 
+function subscriptionHasPaidExtras(subscription) {
+  if (!subscription || typeof subscription !== "object") {
+    return false;
+  }
+  const nonempty = (value) => Array.isArray(value) && value.length > 0;
+  /** Meta API Sportmonks: add-on, bundle (Odds & Predictions, Pressure & xG), widgets. */
+  return (
+    nonempty(subscription.add_ons) ||
+    nonempty(subscription.bundles) ||
+    nonempty(subscription.widgets)
+  );
+}
+
 function buildSportmonksPlanNotice(rawPayload, matches = []) {
   const subscription = rawPayload?.raw?.subscription?.[0] || rawPayload?.subscription?.[0] || null;
   const planNames = Array.isArray(subscription?.plans)
     ? subscription.plans.map((plan) => plan?.plan).filter(Boolean)
     : [];
-  const hasAddOns = Array.isArray(subscription?.add_ons) && subscription.add_ons.length > 0;
+  const hasPaidExtras = subscriptionHasPaidExtras(subscription);
   const hasProviderPredictions = matches.some(
     (match) =>
       match?.prediction_provider === "sportmonks_predictions" ||
@@ -257,7 +270,7 @@ function buildSportmonksPlanNotice(rawPayload, matches = []) {
     (match) => match?.odds_provider === "sportmonks_pre_match_odds"
   );
 
-  if (!planNames.length || hasAddOns || (hasProviderPredictions && hasProviderXg)) {
+  if (!planNames.length || hasPaidExtras || hasProviderPredictions || hasProviderXg) {
     return "";
   }
 
@@ -286,6 +299,10 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
   const requestPromise = (async () => {
     try {
       const rawSchedules = await fetchSportmonksScheduleWindow(safeDays);
+      if (process.env.NODE_ENV === "development") {
+        const firstRaw = rawSchedules?.fixtures?.[0];
+        console.log("[getScheduleWindowPayload] Sportmonks fixtures/between — primo elemento raw", firstRaw ?? null);
+      }
       const normalizedMatches = sortMatchesByFeaturedPriority(
         rawSchedules.fixtures.map(normalizeSportmonksScheduleMatch)
       );
@@ -293,12 +310,17 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
       const scheduleFilterHint = rawSchedules?.scheduleLeagueFilter
         ? " Calendario ristretto dal filtro API leghe (SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT)."
         : "";
+      const pag = rawSchedules?.schedulePagination;
+      const paginationHint =
+        pag?.truncated && pag.totalPages != null && pag.pagesFetched != null
+          ? ` Risposta fixtures/between troncata: scaricate ${pag.pagesFetched}/${pag.totalPages} pagine (max configurabile: SPORTMONKS_SCHEDULE_MAX_PAGES). Alcune competizioni possono mancare.`
+          : "";
       const payload = buildSchedulePayload({
         matches: normalizedMatches,
         window: rawSchedules.window,
         rawSchedules,
         source: "sportmonks_api",
-        notice: `${buildSportmonksPlanNotice(rawSchedules, normalizedMatches) || ""}${scheduleFilterHint}`.trim(),
+        notice: `${buildSportmonksPlanNotice(rawSchedules, normalizedMatches) || ""}${scheduleFilterHint}${paginationHint}`.trim(),
         updatedAt,
       });
 

@@ -18,8 +18,14 @@ export function getOddsDecimalForValueBet(match) {
   if (t === "Over 2.5") {
     return match.ou?.over25 ?? null;
   }
+  if (t === "Under 2.5") {
+    return match.ou?.under25 ?? null;
+  }
   if (t === "Goal") {
     return match.gg?.goal ?? null;
+  }
+  if (t === "No Goal") {
+    return match.gg?.noGoal ?? null;
   }
   return null;
 }

@@ -1,4 +1,17 @@
+import { getCompetitionConfig } from "@/lib/competitions/catalog";
 import { SPORTMONKS_PRIORITY_LEAGUE_IDS } from "@/lib/sportmonks-priority-league-ids";
+import { getMatchValueCandidate } from "@/lib/match-value";
+
+const ROME_TZ = "Europe/Rome";
+
+function buildDateKeyRome(date) {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: ROME_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
 
 const LEAGUE_BUCKETS = [
   { label: "Serie A", keywords: ["serie a"] },
@@ -42,6 +55,11 @@ export function matchLeagueFilter(match, selectedLeague) {
     return true;
   }
 
+  const catalogName = getCompetitionConfig(match?.league).name;
+  if (catalogName === selectedLeague) {
+    return true;
+  }
+
   return getLeagueBucket(match?.league) === selectedLeague;
 }
 
@@ -50,6 +68,36 @@ export function getMatchStatusBucket(match) {
 
   if (STATUS_BUCKETS.has(explicitStatus)) {
     return explicitStatus;
+  }
+
+  const iso = match?.kickoff_at;
+  if (iso) {
+    const eventDate = new Date(iso);
+    if (!Number.isNaN(eventDate.getTime())) {
+      const eventKey = buildDateKeyRome(eventDate);
+      const now = new Date();
+      const todayKey = buildDateKeyRome(now);
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowKey = buildDateKeyRome(tomorrow);
+
+      if (eventKey === todayKey) {
+        return "today";
+      }
+      if (eventKey === tomorrowKey) {
+        return "tomorrow";
+      }
+
+      const weekday = new Intl.DateTimeFormat("en-US", {
+        timeZone: ROME_TZ,
+        weekday: "short",
+      }).format(eventDate);
+      if (weekday === "Sat" || weekday === "Sun") {
+        return "weekend";
+      }
+
+      return "upcoming";
+    }
   }
 
   const normalizedDate = normalizeText(match?.date);
@@ -116,8 +164,34 @@ function getCoveragePriority(match) {
   return Number(match?.coverage?.coverageScore || 0);
 }
 
+function competitionNameSortKey(match) {
+  return getCompetitionConfig(match?.league).name || "";
+}
+
+function totalXg(match) {
+  const h = Number(match?.xg?.home);
+  const a = Number(match?.xg?.away);
+  const sum = (Number.isFinite(h) ? h : 0) + (Number.isFinite(a) ? a : 0);
+  return sum;
+}
+
+function kickoffTimeMs(match) {
+  const iso = match?.kickoff_at;
+  if (iso) {
+    const t = new Date(iso).getTime();
+    if (!Number.isNaN(t)) {
+      return t;
+    }
+  }
+  return getTimeRank(match?.time);
+}
+
 export function sortMatchesByCriterion(matches, criterion) {
   const safeMatches = Array.isArray(matches) ? [...matches] : [];
+
+  if (criterion === "featured") {
+    return sortMatchesByFeaturedPriority(safeMatches);
+  }
 
   if (criterion === "confidence") {
     return safeMatches.sort((left, right) => (right.confidence || 0) - (left.confidence || 0));
@@ -127,9 +201,31 @@ export function sortMatchesByCriterion(matches, criterion) {
     return safeMatches.sort((left, right) => (right.odds?.home || 0) - (left.odds?.home || 0));
   }
 
+  if (criterion === "odds_away") {
+    return safeMatches.sort((left, right) => (right.odds?.away || 0) - (left.odds?.away || 0));
+  }
+
+  if (criterion === "xg") {
+    return safeMatches.sort((left, right) => totalXg(right) - totalXg(left));
+  }
+
   if (criterion === "value") {
-    return safeMatches.sort(
-      (left, right) => (right.valueBet?.edge || 0) - (left.valueBet?.edge || 0)
+    return safeMatches.sort((left, right) => {
+      const re = getMatchValueCandidate(right)?.edge ?? 0;
+      const le = getMatchValueCandidate(left)?.edge ?? 0;
+      return re - le;
+    });
+  }
+
+  if (criterion === "league_az") {
+    return safeMatches.sort((left, right) =>
+      competitionNameSortKey(left).localeCompare(competitionNameSortKey(right), "it", { sensitivity: "base" })
+    );
+  }
+
+  if (criterion === "league_za") {
+    return safeMatches.sort((left, right) =>
+      competitionNameSortKey(right).localeCompare(competitionNameSortKey(left), "it", { sensitivity: "base" })
     );
   }
 
@@ -139,6 +235,12 @@ export function sortMatchesByCriterion(matches, criterion) {
 
     if (statusDifference !== 0) {
       return statusDifference;
+    }
+
+    const timeA = kickoffTimeMs(left);
+    const timeB = kickoffTimeMs(right);
+    if (timeA !== timeB) {
+      return timeA - timeB;
     }
 
     return getTimeRank(left.time) - getTimeRank(right.time);
