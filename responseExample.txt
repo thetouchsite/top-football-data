@@ -1,0 +1,434 @@
+{
+  "data": {
+    "id": 19686602,
+    "sport_id": 1,
+    "league_id": 271,
+    "season_id": 25536,
+    "stage_id": 77480926,
+    "group_id": null,
+    "aggregate_id": null,
+    "round_id": 403915,
+    "state_id": 1,
+    "venue_id": 5655,
+    "name": "FC København vs Odense BK",
+    "starting_at": "2026-04-22 16:00:00",
+    "result_info": null,
+    "leg": "1/1",
+    "details": null,
+    "length": 90,
+    "placeholder": false,
+    "has_odds": true,
+    "has_premium_odds": true,
+    "starting_at_timestamp": 1776873600,
+    "formations": [
+      {
+        "id": 8744165,
+        "fixture_id": 19686602,
+        "participant_id": 1789,
+        "formation": "4-4-2",
+        "location": "away"
+      },
+      {
+        "id": 8744164,
+        "fixture_id": 19686602,
+        "participant_id": 85,
+        "formation": "4-4-1-1",
+        "location": "home"
+      }
+    ],
+    "lineups": [
+      {
+        "id": 14673480088,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 540162,
+        "team_id": 85,
+        "position_id": 24,
+        "formation_field": "1:1",
+        "type_id": 11,
+        "formation_position": 1,
+        "player_name": "Dominik Kotarski",
+        "jersey_number": 1
+      },
+      {
+        "id": 14673480090,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 26719,
+        "team_id": 85,
+        "position_id": 25,
+        "formation_field": "2:2",
+        "type_id": 11,
+        "formation_position": 3,
+        "player_name": "Pantelis Hatzidiakos",
+        "jersey_number": 6
+      },
+      {
+        "id": 14673480097,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 172250,
+        "team_id": 85,
+        "position_id": 26,
+        "formation_field": "4:1",
+        "type_id": 11,
+        "formation_position": 10,
+        "player_name": "Viktor Claesson",
+        "jersey_number": 7
+      },
+      {
+        "id": 14673480096,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 150759,
+        "team_id": 85,
+        "position_id": 26,
+        "formation_field": "3:4",
+        "type_id": 11,
+        "formation_position": 9,
+        "player_name": "Mohamed Elyounoussi",
+        "jersey_number": 10
+      },
+      {
+        "id": 14673480093,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 26867,
+        "team_id": 85,
+        "position_id": 26,
+        "formation_field": "3:1",
+        "type_id": 11,
+        "formation_position": 6,
+        "player_name": "Jordan Larsson",
+        "jersey_number": 11
+      },
+      {
+        "id": 14673480098,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 4088,
+        "team_id": 85,
+        "position_id": 27,
+        "formation_field": "5:1",
+        "type_id": 11,
+        "formation_position": 11,
+        "player_name": "Andreas Cornelius",
+        "jersey_number": 14
+      },
+      {
+        "id": 14673480092,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 259454,
+        "team_id": 85,
+        "position_id": 25,
+        "formation_field": "2:4",
+        "type_id": 11,
+        "formation_position": 5,
+        "player_name": "Marcos López",
+        "jersey_number": 15
+      },
+      {
+        "id": 14673480089,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 37616318,
+        "team_id": 85,
+        "position_id": 25,
+        "formation_field": "2:1",
+        "type_id": 11,
+        "formation_position": 2,
+        "player_name": "Junnosuke Suzuki",
+        "jersey_number": 20
+      },
+      {
+        "id": 14673480094,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 84602,
+        "team_id": 85,
+        "position_id": 26,
+        "formation_field": "3:2",
+        "type_id": 11,
+        "formation_position": 7,
+        "player_name": "M. Madsen",
+        "jersey_number": 21
+      },
+      {
+        "id": 14673480091,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 24613,
+        "team_id": 85,
+        "position_id": 25,
+        "formation_field": "2:3",
+        "type_id": 11,
+        "formation_position": 4,
+        "player_name": "Zanka",
+        "jersey_number": 25
+      },
+      {
+        "id": 14673480095,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 37609216,
+        "team_id": 85,
+        "position_id": 26,
+        "formation_field": "3:3",
+        "type_id": 11,
+        "formation_position": 8,
+        "player_name": "William Clem",
+        "jersey_number": 36
+      },
+      {
+        "id": 14673480101,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 197982,
+        "team_id": 1789,
+        "position_id": 25,
+        "formation_field": "2:3",
+        "type_id": 11,
+        "formation_position": 3,
+        "player_name": "Nicolas Bürgy",
+        "jersey_number": 5
+      },
+      {
+        "id": 14673480107,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 2538544,
+        "team_id": 1789,
+        "position_id": 26,
+        "formation_field": "3:1",
+        "type_id": 11,
+        "formation_position": 9,
+        "player_name": "Fiete Arp",
+        "jersey_number": 7
+      },
+      {
+        "id": 14673480105,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 83721,
+        "team_id": 1789,
+        "position_id": 26,
+        "formation_field": "3:3",
+        "type_id": 11,
+        "formation_position": 7,
+        "player_name": "Rasmus Falk",
+        "jersey_number": 8
+      },
+      {
+        "id": 14673480109,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 37581800,
+        "team_id": 1789,
+        "position_id": 27,
+        "formation_field": "4:1",
+        "type_id": 11,
+        "formation_position": 11,
+        "player_name": "Jona Niemiec",
+        "jersey_number": 11
+      },
+      {
+        "id": 14673480102,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 37688552,
+        "team_id": 1789,
+        "position_id": 25,
+        "formation_field": "2:2",
+        "type_id": 11,
+        "formation_position": 4,
+        "player_name": "Julius Berthel Askou",
+        "jersey_number": 13
+      },
+      {
+        "id": 14673480103,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 37649860,
+        "team_id": 1789,
+        "position_id": 25,
+        "formation_field": "2:1",
+        "type_id": 11,
+        "formation_position": 5,
+        "player_name": "Marcus McCoy",
+        "jersey_number": 15
+      },
+      {
+        "id": 14673480099,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 151444,
+        "team_id": 1789,
+        "position_id": 24,
+        "formation_field": "1:1",
+        "type_id": 11,
+        "formation_position": 1,
+        "player_name": "Viljar Myhra",
+        "jersey_number": 16
+      },
+      {
+        "id": 14673480108,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 27066734,
+        "team_id": 1789,
+        "position_id": 27,
+        "formation_field": "4:2",
+        "type_id": 11,
+        "formation_position": 10,
+        "player_name": "Noah Ganaus",
+        "jersey_number": 17
+      },
+      {
+        "id": 14673480104,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 37625601,
+        "team_id": 1789,
+        "position_id": 26,
+        "formation_field": "3:4",
+        "type_id": 11,
+        "formation_position": 6,
+        "player_name": "Max Ejdum",
+        "jersey_number": 18
+      },
+      {
+        "id": 14673480100,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 25792,
+        "team_id": 1789,
+        "position_id": 25,
+        "formation_field": "2:4",
+        "type_id": 11,
+        "formation_position": 2,
+        "player_name": "Leeroy Owusu",
+        "jersey_number": 20
+      },
+      {
+        "id": 14673480106,
+        "sport_id": 1,
+        "fixture_id": 19686602,
+        "player_id": 37553526,
+        "team_id": 1789,
+        "position_id": 26,
+        "formation_field": "3:2",
+        "type_id": 11,
+        "formation_position": 8,
+        "player_name": "Ismahila Ouédraogo",
+        "jersey_number": 22
+      }
+    ],
+    "metadata": [
+      {
+        "id": 9592320,
+        "metadatable_id": 19686602,
+        "type_id": 35,
+        "value_type": "object",
+        "values": {
+          "neutral": false
+        }
+      },
+      {
+        "id": 9790528,
+        "metadatable_id": 19686602,
+        "type_id": 36,
+        "value_type": "object",
+        "values": {
+          "kickOff": "home"
+        }
+      },
+      {
+        "id": 9796892,
+        "metadatable_id": 19686602,
+        "type_id": 159,
+        "value_type": "object",
+        "values": {
+          "home": "4-4-1-1",
+          "away": "4-4-2"
+        }
+      },
+      {
+        "id": 9773223,
+        "metadatable_id": 19686602,
+        "type_id": 572,
+        "value_type": "object",
+        "values": {
+          "confirmed": false
+        }
+      },
+      {
+        "id": 9793349,
+        "metadatable_id": 19686602,
+        "type_id": 613,
+        "value_type": "string",
+        "values": "#COPODE"
+      },
+      {
+        "id": 9709107,
+        "metadatable_id": 19686602,
+        "type_id": 2838,
+        "value_type": "object",
+        "values": {
+          "extra_time": false
+        }
+      },
+      {
+        "id": 9714591,
+        "metadatable_id": 19686602,
+        "type_id": 37072,
+        "value_type": "object",
+        "values": {
+          "predictable": true
+        }
+      }
+    ]
+  },
+  "subscription": [
+    {
+      "meta": {
+        "current_timestamp": 1776809617,
+        "next_billing_cycle": "2026-05-05T21:50:25 UTC"
+      },
+      "plans": [
+        {
+          "plan": "Growth - Trialing until 2026-05-05 21:50:25",
+          "sport": "Football",
+          "category": "Advanced"
+        },
+        {
+          "plan": "Euro Club Tournaments",
+          "sport": "Football",
+          "category": "Advanced"
+        }
+      ],
+      "add_ons": [],
+      "widgets": [],
+      "bundles": [
+        {
+          "bundle": "Odds & Predictions - Trialing until 2026-05-05 21:50:25",
+          "sport": "Football",
+          "category": "Odds - Predictions"
+        },
+        {
+          "bundle": "Pressure Index & xG - Trialing until 2026-05-05 21:50:25",
+          "sport": "Football",
+          "category": "Pressure - Expected"
+        }
+      ]
+    }
+  ],
+  "rate_limit": {
+    "resets_in_seconds": 2713,
+    "remaining": 2489,
+    "requested_entity": "Fixture"
+  },
+  "timezone": "UTC"
+}
+
+https://api.sportmonks.com/v3/football/fixtures/19686602?api_token=YOUR_TOKEN&include=lineups;metadata;formations
