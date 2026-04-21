@@ -14,7 +14,7 @@ export default function NotificationsPanel({ onClose: _onClose }) {
   const { notifications, markAllRead, markRead, unreadCount } = useApp();
 
   return (
-    <div className="absolute right-0 top-10 z-50 w-[min(20rem,calc(100dvw-1rem))] max-w-[calc(100dvw-1rem)] overflow-hidden rounded-xl border border-border/50 glass-strong shadow-2xl">
+    <div className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-50 max-h-[min(70vh,calc(100dvh-4rem))] overflow-hidden rounded-xl border border-border/50 glass-strong shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-10 sm:w-[20rem] sm:max-h-none">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
         <div className="flex items-center gap-2">
           <Bell className="w-4 h-4 text-foreground" />

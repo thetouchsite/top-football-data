@@ -177,7 +177,7 @@ export default function Navbar() {
                 <Search className="w-4 h-4" />
               </button>
               {searchOpen && (
-                <div className="absolute right-0 top-10 z-50 w-[min(20rem,calc(100dvw-1.5rem))] max-w-[calc(100dvw-1rem)] glass-strong rounded-xl border border-border/50 shadow-xl">
+                <div className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-50 max-h-[min(70vh,calc(100dvh-4rem))] overflow-auto glass-strong rounded-xl border border-border/50 shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-10 sm:w-[20rem] sm:max-h-none">
                   <div className="p-3">
                     <input ref={searchInputRef} value={query} onChange={(e) => setQuery(e.target.value)}
                       placeholder="Cerca partita, squadra, campionato..."
@@ -288,7 +288,7 @@ export default function Navbar() {
                 )}
               </button>
               {userOpen && (
-                <div className="absolute right-0 top-10 z-50 w-[min(14rem,calc(100dvw-1rem))] max-w-[calc(100dvw-1rem)] glass-strong rounded-xl border border-border/50 p-2 shadow-xl">
+                <div className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-50 max-h-[min(70vh,calc(100dvh-4rem))] overflow-auto glass-strong rounded-xl border border-border/50 p-2 shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-10 sm:w-[14rem] sm:max-h-none">
                   <div className="px-3 py-2 mb-1 border-b border-border/30">
                     <div className="font-semibold text-xs text-foreground">{user.name}</div>
                     <div className="text-xs text-muted-foreground">{user.email || "Non autenticato"}</div>
