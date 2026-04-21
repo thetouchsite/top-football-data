@@ -23,6 +23,17 @@ LINEE GUIDA (COSA E' IL PROGETTO ORA)
   Contrasto dark mode: le immagini remote usano di default un “mat” chiaro (fondo bianco / zinc-100 in dark)
   + padding interno, così loghi scuri o asset per sfondo chiaro restano leggibili; prop opzionale
   `surface="none"` su `FootballMediaImage` se serve eccezione.
+- Area pubblica marketing (aprile 2026): completata con landing unica `/come-funziona` come hub principale
+  (sezioni Funzioni, Vantaggi, Premium, Telegram, FAQ) e menu ad anchor interni sticky. Rimosse le pagine
+  separate `/premium-offerta`, `/faq`, `/telegram`; copy commerciale semplificato lato cliente; card hero
+  match resa compatta/minimal con etichetta esplicita `Quote 1X2`. Footer policy legali mantenuto attivo.
+- Legal Center / Trust Center (aprile 2026): introdotto hub `/legal` con documenti modulari versionati
+  (`src/content/legal/*`), sottoroute canoniche (`/legal/privacy`, `/legal/cookies`, `/legal/terms`,
+  `/legal/premium`, `/legal/telegram-bot`, `/legal/processors`, `/legal/disclaimer`, `/legal/contact`,
+  `/legal/changelog`), componenti riusabili (`src/components/legal/*`), API richieste privacy
+  `/api/legal/requests`, entry point "Gestisci cookie" e changelog legale dinamico. Route legacy
+  (`/privacy`, `/cookie`, `/termini`, `/disclaimer`, `/abbonamenti-rimborsi`, `/telegram-policy`)
+  mantenute via redirect verso `/legal/*`.
 
 ====================================================================
 ALLINEAMENTO DOCUMENTO CLIENTE — FUNZIONI PIATTAFORMA (2026)
