@@ -11,7 +11,13 @@ from app.results import settle_alert_from_fixtures
 from app.site_feed import SiteFeedClient, build_high_probability_picks, format_demo_picks_message
 from app.sportmonks import SportmonksClient
 from app.storage import AlertStore
-from app.telegram import TelegramClient, format_multibet_alert, format_performance_summary, format_single_alert
+from app.telegram import (
+    TelegramClient,
+    format_multibet_alert,
+    format_performance_summary,
+    format_settlement_alert,
+    format_single_alert,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("telegram-alert-backend")
@@ -179,6 +185,12 @@ class AlertWorker:
 
         settled_count = self.repository.bulk_settle(settled)
         if settled_count:
+            for alert, status, legs in settled:
+                try:
+                    await self.telegram.send_message(format_settlement_alert(alert, status, legs))
+                except Exception as error:
+                    logger.warning("Settlement Telegram alert failed: %s", error)
+
             summary = self.repository.get_performance_summary()
             if summary:
                 try:

@@ -97,6 +97,85 @@ def format_performance_summary(summary: dict, settled_count: int) -> str:
     return "\n".join(lines)
 
 
+def format_settlement_alert(alert: dict, status: str, legs: list[dict]) -> str:
+    result = _settlement_result_label(status)
+    profit_units = _settlement_profit_units(alert, status)
+    alert_type = "Singola" if alert.get("type") == "single" else "Multipla"
+    title = _settlement_title(alert)
+    stake_units = float(alert.get("stakeUnits") or 1)
+    decimal_odd = _settlement_decimal_odd(alert)
+
+    lines = [
+        f"Alert {result}",
+        "",
+        f"{alert_type}: {title}",
+        f"Quota: {decimal_odd}",
+        f"Stake: {stake_units:g}u",
+        f"Profitto: {_signed_units(profit_units)}",
+    ]
+
+    if legs:
+        lines.extend(["", "Esito selezioni:"])
+        for index, leg in enumerate(legs, start=1):
+            selection = leg.get("selection") or "Selezione"
+            score = _leg_score_label(leg)
+            leg_status = _settlement_result_label(leg.get("status")).lower()
+            lines.append(f"{index}. {selection} - {leg_status}{score}")
+
+    return "\n".join(lines)
+
+
+def _settlement_result_label(status: str | None) -> str:
+    if status == "won":
+        return "vinto"
+    if status == "lost":
+        return "perso"
+    if status == "void":
+        return "void"
+    return "chiuso"
+
+
+def _settlement_title(alert: dict) -> str:
+    if alert.get("type") == "single":
+        single = alert.get("single") or {}
+        home = single.get("home") or "Home"
+        away = single.get("away") or "Away"
+        market = single.get("market") or "Mercato"
+        selection = single.get("selection") or ""
+        return f"{home} - {away}, {market} {selection}".strip()
+
+    events = (alert.get("multibet") or {}).get("events") or []
+    return f"{len(events)} eventi"
+
+
+def _settlement_decimal_odd(alert: dict) -> float:
+    if alert.get("type") == "single":
+        return float((alert.get("single") or {}).get("bestOdd") or 1)
+    return float((alert.get("multibet") or {}).get("totalOdd") or 1)
+
+
+def _settlement_profit_units(alert: dict, status: str) -> float:
+    stake_units = float(alert.get("stakeUnits") or 1)
+    if status == "won":
+        return round((_settlement_decimal_odd(alert) - 1) * stake_units, 2)
+    if status == "lost":
+        return -stake_units
+    return 0
+
+
+def _signed_units(value: float) -> str:
+    prefix = "+" if value > 0 else ""
+    return f"{prefix}{value:g}u"
+
+
+def _leg_score_label(leg: dict) -> str:
+    home_score = leg.get("homeScore")
+    away_score = leg.get("awayScore")
+    if home_score is None or away_score is None:
+        return ""
+    return f" ({home_score}-{away_score})"
+
+
 class TelegramClient:
     def __init__(self, bot_token: str, chat_id: str):
         self.bot_token = bot_token
