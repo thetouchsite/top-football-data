@@ -61,20 +61,29 @@ npm run typecheck
 
 Nota build locale: `npm run build` puo richiedere una versione Node che supporti `node:sqlite`, usato dal fallback auth locale. Se compare `No such built-in module: node:sqlite`, il problema e nel runtime Node locale, non negli endpoint alert/performance.
 
+## Football API (layer interno)
+
+Dashboard e modelli condividono `GET /api/football/schedules/window?days=7` (massimo 7 giorni in query); il dettaglio match è `GET /api/football/fixtures/[fixtureId]` (core vs enrichment con `view`).  
+Allowlist campionati, policy include e stato lavori: **[docs/football-api-layer.md](docs/football-api-layer.md)**.  
+Piano prossima fase (cache condivisa / SWR / prewarm, solo design): [`.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md`](.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md).
+
 ## Configurazione Frontend
 
 - `MONGODB_URI`: stringa di connessione MongoDB.
 - `MONGODB_DB`: nome database applicativo, default `top-football-pulse`.
-- `SPORTMONKS_API_TOKEN` o `SPORTMONKS_API_KEY`: token Sportmonks Football API v3.
+- `SPORTMONKS_API_TOKEN` o `SPORTMONKS_API_KEY`: token Sportmonks Football API v3 (**obbligatori** per il feed).
 - `SPORTMONKS_BASE_URL`: opzionale, default `https://api.sportmonks.com/v3`.
-- `SPORTMONKS_SCHEDULE_DAYS`: opzionale, finestra calendario.
-- `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`: opzionale, filtro stretto leghe.
-- `SPORTMONKS_SCHEDULE_LEAGUE_IDS`: opzionale, lista leghe Sportmonks.
+- `SPORTMONKS_SCHEDULE_DAYS`: opzionale, default lato client provider impostato a 7 (vedi `src/lib/providers/sportmonks/index.js`); la route schedule **non** accetta oltre 7 giorni in query.
+- `SPORTMONKS_SCHEDULE_LEAGUE_IDS`: opzionale, **override** elenco leghe (CSV di ID) oppure `all` / `global` / `*` per nessun filtro su `fixtures/between`. Se assente, si usano gli **ID ufficiali** in codice (allowlist prodotto in `src/lib/sportmonks-priority-league-ids.js`). **Non** è più il meccanismo principale filtrare leghe solo dalla UI.
+- `SPORTMONKS_SCHEDULE_MAX_PAGES`: opzionale, limite pagine paginazione `fixtures/between` (default 80, max 200 nel codice).
 - `SPORTMONKS_MEDIA_BASE_URL`: opzionale, default `https://cdn.sportmonks.com`.
+- `DEBUG_FOOTBALL_TELEMETRY`: opzionale (`1` / `true` / `yes`) per log dettagliati su route football.
 - `STRIPE_SECRET_KEY`: chiave Stripe server.
 - `STRIPE_PREMIUM_PRICE_ID`: price id Stripe del piano premium.
 - `NEXT_PUBLIC_APP_URL`: URL pubblico usato nei redirect Stripe.
 - `NEXT_PUBLIC_FEATURE_DATI_LIVE`: `true` per abilitare la sezione Dati Live.
+
+*Nota:* in alcuni messaggi/notice del feed compare il riferimento testuale a un “filtro stretto leghe”; la **configurazione reale** passa da `SPORTMONKS_SCHEDULE_LEAGUE_IDS` e dalla allowlist in codice (vedi [docs/football-api-layer.md](docs/football-api-layer.md)). Non esiste al momento una variabile `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT` letta da `process.env`.
 
 Per il collegamento completo, Railway deve usare gli stessi `MONGODB_URI` e `MONGODB_DB` configurati su Vercel.
 
@@ -82,9 +91,9 @@ Per il collegamento completo, Railway deve usare gli stessi `MONGODB_URI` e `MON
 
 - `GET /api/health`: readiness runtime, Mongo, Stripe e provider.
 - `POST /api/leads`: salva lead dal form landing.
-- `GET /api/football/fixtures/[fixtureId]`: dettaglio match da Sportmonks.
+- `GET /api/football/fixtures/[fixtureId]`: dettaglio match (query `view=core` per soli dati core, default per arricchimenti). Sportmonks Football API v3.
 - `GET /api/football/livescores/inplay`: livescore in tempo reale.
-- `GET /api/football/schedules/window?days=4`: calendario pre-match.
+- `GET /api/football/schedules/window?days=7`: calendario pre-match condiviso (dashboard, modelli); `days` al massimo **7**.
 - `GET /api/football/odds/futures`: placeholder futures/outrights.
 - `GET /api/alerts`: alert value/multibet salvati dal backend Python.
 - `GET /api/performance`: riepilogo storico ROI dagli alert chiusi.
@@ -170,17 +179,19 @@ Worker:
 ## Stato Attuale
 
 - Feed calcio: Sportmonks, nessun fallback Sportradar.
+- Layer football (endpoint, allowlist, prossime mosse): [docs/football-api-layer.md](docs/football-api-layer.md).
 - Telegram test: validato con bot e canale di test.
 - MongoDB condiviso: supportato dal worker Python e letto dal sito Next.
 - Performance storiche: collection e API pronte; il settlement dipende dalla disponibilita dei risultati finali Sportmonks.
 - Generazione alert reali: dipende da chiave Sportmonks valida con copertura Predictions/Odds.
 - Immagini Sportmonks: contratto normalizzato `media.imageUrl` / `media.thumbUrl` e componenti UI con fallback.
+- Prossima priorita tecnica football (list): performance feed 7 giorni (cache condivisa / SWR / prewarm) — vedi [`.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md`](.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md); stato operativo: [`TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt`](TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt).
 
 ## Roadmap e Requisiti Cliente
 
 - Piano tecnico-prodotto: [`.cursor/plans/roadmap_funzioni_piattaforma_2026.plan.md`](.cursor/plans/roadmap_funzioni_piattaforma_2026.plan.md)
 - Requisiti cliente: [`docs/cliente/funzioni-piattaforma.md`](docs/cliente/funzioni-piattaforma.md)
-- Mappa API/calcoli: [`TODO_API_E_CALCOLI_FUNZIONI_PIATTAFORMA.txt`](TODO_API_E_CALCOLI_FUNZIONI_PIATTAFORMA.txt)
+- Mappa API/calcoli: il file `TODO_API_E_CALCOLI_FUNZIONI_PIATTAFORMA.txt` era indicato in roadmap storica; **se manca in working copy**, usare i documenti sotto `docs/` e `.cursor/plans/` piu aggiornati.
 
 ## Auth Locale e Google
 

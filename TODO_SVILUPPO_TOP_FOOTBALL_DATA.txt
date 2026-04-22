@@ -1,8 +1,46 @@
 TOP FOOTBALL DATA
 TODO SVILUPPO OPERATIVO
 
-Data aggiornamento: 2026-04-21
-Stato documento: allineato al codice e al documento cliente «Funzioni piattaforma» (vedi sotto)
+Data aggiornamento: 2026-04-22
+Stato documento: allineato al codice, al documento cliente «Funzioni piattaforma» e al layer football (vedi sotto)
+
+====================================================================
+FOOTBALL API LAYER — STATUS (AGGIORNAMENTO 2026-04-22)
+====================================================================
+
+Documento tecnico unificato: docs/football-api-layer.md
+Piano prossima fase performance feed 7 giorni: .cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md
+
+DONE (football / feed list + detail, senza lavori performance architetturale):
+- Baseline e telemetria (summary route/service, DEBUG_FOOTBALL_TELEMETRY)
+- Request tagging (route, requestPurpose, dto, purpose provider)
+- Inflight coalescing (stessa chiave schedule; pattern inflight_shared)
+- Clamp max 7 giorni su GET /api/football/schedules/window
+- Riduzione payload list e core; ScheduleCardDTO condiviso (dashboard + modelli)
+- Split detail core vs enrichment (view, policy include, denylist per scope)
+- expected / expected.type fuori dal percorso core list/detail minimo
+- Matrice fallback policy e include invalidi; semantica source/cache ottimizzata
+- Allowlist campionati ufficiali in src/lib/sportmonks-priority-league-ids.js
+- Priority ordering + mapping catalogo/provider (catalog.js, football-filters)
+- Filtro leghe su fixtures/between lato provider; UI non e piu il livello principale di scelta leghe
+- SPORTMONKS_SCHEDULE_LEAGUE_IDS e SPORTMONKS_SCHEDULE_MAX_PAGES documentate come override/costo
+
+IN PROGRESS (nessun task football bloccante codificato qui):
+- n/a — implementazione performance feed non ancora iniziata in questo tracciato
+
+NEXT (prossima priorita football — da roadmap tecnica, non from-scratch API):
+- P0: rendere il feed 7 giorni "veloce a freddo" — snapshot normalizzato in store condiviso, chiave
+  versionata policy, SWR fresh/stale/hard-expired, lock anti-stampede, stale-if-error, prewarm
+  stesso builder del runtime (piano: feed_7_giorni_velocissimo_vfinale.plan.md)
+
+OUT OF SCOPE (per la fase performance documentata; non toccare senza decisione prodotto):
+- Cambio contratti API pubblici schedule/detail stabilizzati
+- Refactor UI massivo oltre consumo invariato degli endpoint
+- Modifica allowlist competizioni senza processo (oggi: codice sorgente in sportmonks-priority-league-ids)
+
+LIMITI NOTI OGGI:
+- Feed 7 giorni: corretto (policy, DTO, allowlist) ma lento a freddo; warm hit in-memory ok
+- Problema residuo: architettura cache cross-istanza / persistente, non "cleanup API" addizionale
 
 ====================================================================
 LINEE GUIDA (COSA E' IL PROGETTO ORA)
@@ -84,7 +122,10 @@ ARCHITETTURA RILEVANTE (PUNTATORI)
 - Provider Sportmonks: `src/lib/providers/sportmonks/index.js`
 - Orchestrazione feed: `src/server/football/service.js`
 - Priorita leghe / ranking: `src/lib/sportmonks-priority-league-ids.js`, ordinamento in service
-- Env opzionali feed: `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`, `SPORTMONKS_SCHEDULE_LEAGUE_IDS`, ecc.
+- Documentazione layer football: `docs/football-api-layer.md`
+- Env opzionali feed: `SPORTMONKS_SCHEDULE_LEAGUE_IDS` (override allowlist), `SPORTMONKS_SCHEDULE_MAX_PAGES`,
+  `DEBUG_FOOTBALL_TELEMETRY` (vedi tabella in docs/football-api-layer.md; nessun process.env
+  `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT` — solo testo in notice lato service)
 - Shell/UI: `src/app/layout.jsx`, `src/components/layout/*`, schermate in `src/screens/*`
 - Probabilita O/U e GG (schedule/match): calcolo in `src/lib/providers/sportmonks/index.js`
   — priorita (1) predizioni API yes/no se presenti, (2) percentuali modello derivato `buildGoalMarkets`
@@ -157,6 +198,8 @@ STATO ATTUALE (VERITA' OPERATIVA)
 - Dati Live: visibilita e fetch livescore governati dal flag (default off); su Vercel la variabile
   e opzionale finche la funzione resta spenta.
 - Core calcio: Sportmonks reale; nessun secondo provider football nel repo.
+- Feed schedule 7 giorni: end-point e allowlist ok; lentezza a freddo e variabilita per istanza/TTL
+  memory ancora aperti — prossima leva: cache condivisa (vedi sezione FOOTBALL API LAYER sopra).
 - Odds: pre-match Sportmonks integrate dove il piano e gli include lo consentono; comparatore 4 slot,
   mercati giocatore, live odds multi-bookmaker come da documento cliente restano in larga parte da
   implementare o espandere.
@@ -209,13 +252,15 @@ DEFINITION OF DONE — "CORE SPORTMONKS" (RIFERIMENTO)
 - Fixture detail con dati agganciati (standings, coaches, squads, pre-match odds se in piano).
 - `/api/health` con `sportmonks` ready; `/match/<sportmonksFixtureId>` end-to-end.
 - Search/watchlist con fixture id Sportmonks; build e lint verdi.
-- Documenti operativi allineati: questo file, README, `docs/cliente/funzioni-piattaforma.md`,
-  roadmap `.cursor/plans/roadmap_funzioni_piattaforma_2026.plan.md`.
+- Documenti operativi allineati: questo file, README, `docs/football-api-layer.md`,
+  `docs/cliente/funzioni-piattaforma.md`, roadmap `.cursor/plans/roadmap_funzioni_piattaforma_2026.plan.md`.
 
 ====================================================================
 BACKLOG — PROSSIME COSE (PRIORITA')
 ====================================================================
 
+P0. Performance feed 7 giorni (store condiviso, SWR, prewarm) — vedi
+    .cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md e docs/football-api-layer.md
 P0. Consolidare area utenti e permessi (come prima).
 P0. Validare piano Sportmonks vs tabella in roadmap (add-on, include, mercati player).
 
