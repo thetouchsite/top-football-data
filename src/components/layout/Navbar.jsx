@@ -100,7 +100,7 @@ export default function Navbar() {
 
     let isActive = true;
 
-    getScheduleWindow(14)
+    getScheduleWindow(7, { requester: "Navbar" })
       .then((payload) => {
         if (isActive) {
           setSearchMatches(Array.isArray(payload?.matches) ? payload.matches : []);

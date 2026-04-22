@@ -48,7 +48,7 @@ export default function Following() {
   useEffect(() => {
     let isActive = true;
 
-    getScheduleWindow(14)
+    getScheduleWindow(7, { requester: "Following" })
       .then((payload) => {
         if (isActive) {
           setFeedMatches(Array.isArray(payload?.matches) ? payload.matches : []);

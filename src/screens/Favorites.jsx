@@ -31,7 +31,7 @@ export default function Favorites() {
   useEffect(() => {
     let isActive = true;
 
-    getScheduleWindow(14)
+    getScheduleWindow(7, { requester: "Favorites" })
       .then((payload) => {
         if (isActive) {
           setFeedMatches(Array.isArray(payload?.matches) ? payload.matches : []);

@@ -7,6 +7,15 @@ export const runtime = "nodejs";
 const DEBUG_FOOTBALL_TELEMETRY = ["1", "true", "yes"].includes(
   String(process.env.DEBUG_FOOTBALL_TELEMETRY || "").toLowerCase()
 );
+const MAX_SCHEDULE_WINDOW_DAYS = 7;
+
+function clampScheduleWindowDays(days) {
+  if (!Number.isFinite(days) || days <= 0) {
+    return MAX_SCHEDULE_WINDOW_DAYS;
+  }
+
+  return Math.min(days, MAX_SCHEDULE_WINDOW_DAYS);
+}
 
 function deriveRouteTelemetryFromSource(source, isFallback) {
   if (source === "sportmonks_cache" && !isFallback) {
@@ -30,15 +39,16 @@ export async function GET(request) {
     request.nextUrl.searchParams.get("days") || SPORTMONKS_DEFAULT_SCHEDULE_DAYS,
     10
   );
+  const safeDays = clampScheduleWindowDays(days);
 
   try {
-    const payload = await getScheduleWindowPayload(days);
+    const payload = await getScheduleWindowPayload(safeDays);
     const e2eMs = Date.now() - startedAt;
     const derived = deriveRouteTelemetryFromSource(payload?.source, Boolean(payload?.isFallback));
     const routeLog = {
       route: "/api/football/schedules/window",
       requestPurpose: "schedule_window",
-      days,
+      days: safeDays,
       fixtureId: null,
       cacheHit: derived.cacheHit,
       cacheState: derived.cacheState,
@@ -69,7 +79,7 @@ export async function GET(request) {
     const routeLog = {
       route: "/api/football/schedules/window",
       requestPurpose: "schedule_window",
-      days,
+      days: safeDays,
       fixtureId: null,
       cacheHit: false,
       cacheState: "miss",

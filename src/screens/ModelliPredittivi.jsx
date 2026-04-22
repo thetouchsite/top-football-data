@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/command";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { getCompetitionConfig, getSupportedCompetitionOptions } from "@/lib/competitions/catalog";
+import { getCompetitionConfig } from "@/lib/competitions/catalog";
 import PageIntro from "@/components/shared/PageIntro";
 import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import DataStatusChips from "@/components/shared/DataStatusChips";
@@ -38,10 +38,10 @@ import {
 import { getMatchValueCandidate, matchHasValueBetSignal } from "@/lib/match-value";
 
 const STATUS_TABS = [
-  { key: "all", label: "Tutti" },
-  { key: "today", label: "Oggi" },
-  { key: "tomorrow", label: "Domani" },
-  { key: "weekend", label: "Weekend" },
+  { key: "today", label: "Oggi", statusBucket: "today", windowDays: 7 },
+  { key: "tomorrow", label: "Domani", statusBucket: "tomorrow", windowDays: 7 },
+  { key: "weekend", label: "Weekend", statusBucket: "weekend", windowDays: 7 },
+  { key: "seven", label: "7gg", statusBucket: null, windowDays: 7 },
 ];
 
 const SORT_OPTIONS = [
@@ -71,7 +71,8 @@ export default function ModelliPredittivi() {
   const [showValueOnly, setShowValueOnly] = useState(false);
   const [sort, setSort] = useState("featured");
   const [view, setView] = useState("grid");
-  const [statusTab, setStatusTab] = useState("all");
+  const [statusTab, setStatusTab] = useState("today");
+  const [windowDays, setWindowDays] = useState(7);
   const [teamSearch, setTeamSearch] = useState("");
   const [leagueOpen, setLeagueOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -84,7 +85,7 @@ export default function ModelliPredittivi() {
       setScheduleError("");
 
       try {
-        const schedulePayload = await getScheduleWindow(14);
+        const schedulePayload = await getScheduleWindow(windowDays, { requester: "ModelliPredittivi" });
 
         if (!isActive) {
           return;
@@ -105,7 +106,6 @@ export default function ModelliPredittivi() {
         });
         if (process.env.NODE_ENV === "development") {
           const list = sanitizeMatches(schedulePayload.matches);
-          const rawFirst = schedulePayload.rawSchedules?.fixtures?.[0];
           console.log("[ModelliPredittivi] schedule caricato", {
             window: schedulePayload.window,
             provider: schedulePayload.provider,
@@ -115,10 +115,6 @@ export default function ModelliPredittivi() {
             notice: schedulePayload.notice || null,
             hasRawSchedules: Boolean(schedulePayload.rawSchedules),
           });
-          /** Match dopo normalizzazione (quello che usa MatchCard). */
-          console.log("[ModelliPredittivi] match normalizzato (primo)", list[0] ?? null);
-          /** Fixture così come arriva da Sportmonks `fixtures/between` (include nel provider). */
-          console.log("[ModelliPredittivi] fixture API Sportmonks raw (primo)", rawFirst ?? null);
         }
       } catch (error) {
         if (isActive) {
@@ -137,12 +133,11 @@ export default function ModelliPredittivi() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [windowDays]);
 
-  /** Catalogo piattaforma + competizioni presenti nel feed (etichette allineate a `matchLeagueFilter`). */
+  /** Competizioni realmente presenti nel feed corrente. */
   const leagueOptionNames = useMemo(() => {
     const set = new Set();
-    getSupportedCompetitionOptions().forEach((o) => set.add(o.name));
     apiMatches.forEach((match) => {
       const cfg = getCompetitionConfig(match?.league);
       const label =
@@ -156,12 +151,13 @@ export default function ModelliPredittivi() {
 
   const filteredMatches = useMemo(() => {
     const q = teamSearch.trim().toLowerCase();
+    const activeTab = STATUS_TABS.find((tab) => tab.key === statusTab) || STATUS_TABS[0];
 
     return sortMatchesByCriterion(
       apiMatches.filter((match) => {
         if (!matchLeagueFilter(match, league)) return false;
         if (showValueOnly && !matchHasValueBetSignal(match)) return false;
-        if (statusTab !== "all" && getMatchStatusBucket(match) !== statusTab) return false;
+        if (activeTab.statusBucket && getMatchStatusBucket(match) !== activeTab.statusBucket) return false;
         if (
           q &&
           !match.home.toLowerCase().includes(q) &&
@@ -276,7 +272,12 @@ export default function ModelliPredittivi() {
             <button
               key={tab.key}
               type="button"
-              onClick={() => setStatusTab(tab.key)}
+              onClick={() => {
+                setStatusTab(tab.key);
+                if (tab.windowDays !== windowDays) {
+                  setWindowDays(tab.windowDays);
+                }
+              }}
               className={`flex-shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 statusTab === tab.key
                   ? "bg-background text-foreground shadow-sm"

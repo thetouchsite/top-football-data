@@ -388,10 +388,6 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
         dtoTarget: "ScheduleCardDTO",
         dtoVersion: "v1",
       });
-      if (process.env.NODE_ENV === "development") {
-        const firstRaw = rawSchedules?.fixtures?.[0];
-        console.log("[getScheduleWindowPayload] Sportmonks fixtures/between — primo elemento raw", firstRaw ?? null);
-      }
       const normalizedMatches = sortMatchesByFeaturedPriority(
         rawSchedules.fixtures.map(normalizeSportmonksScheduleMatch)
       );
