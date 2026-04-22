@@ -19,6 +19,9 @@ Il sito legge gli alert da MongoDB tramite:
 ## Cosa Fa
 
 - Legge il calendario Sportmonks dei prossimi giorni.
+- Per ogni fixture legge anche gli endpoint diretti sbloccati:
+  - `predictions/value-bets/fixtures/{fixtureId}`;
+  - `odds/pre-match/fixtures/{fixtureId}`.
 - Incrocia predizioni e quote pre-match.
 - Calcola:
   - probabilita modello;
@@ -30,6 +33,7 @@ Il sito legge gli alert da MongoDB tramite:
 - Salva ogni alert in MongoDB nella collection `betAlerts`.
 - Controlla i match conclusi e aggiorna gli alert come `won`, `lost` o `void`.
 - Registra ROI e storico nella collection `betPerformance`.
+- Invia su Telegram una sintesi performance quando vengono chiusi nuovi alert.
 - Deduplica gli alert per evitare spam a ogni ciclo.
 
 ## File Principali
@@ -70,6 +74,9 @@ SPORTMONKS_API_TOKEN=your_sportmonks_token
 SPORTMONKS_BASE_URL=https://api.sportmonks.com/v3/football
 SPORTMONKS_SCHEDULE_DAYS=4
 SPORTMONKS_TIMEZONE=Europe/Rome
+SPORTMONKS_FETCH_DIRECT_VALUE_BETS=true
+SPORTMONKS_FETCH_DIRECT_ODDS=true
+SPORTMONKS_DIRECT_FIXTURE_LIMIT=80
 
 MONGODB_URI=mongodb+srv://...
 MONGODB_DB=top-football-pulse
@@ -99,6 +106,9 @@ Note:
 - `APP_BASE_URL` deve puntare al sito Next/Vercel. Serve per la demo Telegram che legge i pronostici gia visibili nel sito.
 - `TELEGRAM_CHAT_ID` puo essere `@username_canale` o id numerico.
 - `CTA_LABEL` evita formule legalmente sensibili come "Gioca Ora"; default consigliato: `Vedi quota`.
+- `SPORTMONKS_FETCH_DIRECT_VALUE_BETS=true` usa le value-bets ufficiali Sportmonks come fonte primaria dei segnali EV.
+- `SPORTMONKS_FETCH_DIRECT_ODDS=true` usa il feed quote pre-match per costruire il comparatore bookmaker a 4 slot.
+- `SPORTMONKS_DIRECT_FIXTURE_LIMIT` limita quante fixture della schedule vengono arricchite con chiamate dirette a ogni ciclo.
 
 ## Endpoint
 
@@ -146,6 +156,7 @@ POST /run-once
 
 - settlement degli alert pending;
 - scansione fixture Sportmonks;
+- arricchimento diretto con odds e value-bets per fixture;
 - calcolo value bet/multibet;
 - salvataggio MongoDB;
 - invio Telegram se ci sono nuovi alert sopra soglia.

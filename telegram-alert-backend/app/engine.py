@@ -200,6 +200,17 @@ def _bookmaker_name(odd_entry: dict[str, Any]) -> str:
     return str(odd_entry.get("bookmaker_name") or odd_entry.get("bookmaker") or "Bookmaker")
 
 
+def _affiliate_url(bookmaker: str, affiliate_links: dict[str, str]) -> str | None:
+    if bookmaker in affiliate_links:
+        return affiliate_links[bookmaker]
+
+    normalized = _norm(bookmaker)
+    for key, value in affiliate_links.items():
+        if _norm(key) == normalized:
+            return value
+    return None
+
+
 def _extract_bookmaker_odds(
     fixture: dict[str, Any],
     selection: str,
@@ -213,9 +224,136 @@ def _extract_bookmaker_odds(
         if not math.isfinite(odd) or odd <= 1:
             continue
         bookmaker = _bookmaker_name(entry)
-        odds.append(BookmakerOdd(bookmaker=bookmaker, odd=odd, affiliate_url=affiliate_links.get(bookmaker)))
+        odds.append(BookmakerOdd(bookmaker=bookmaker, odd=odd, affiliate_url=_affiliate_url(bookmaker, affiliate_links)))
 
     return sorted(odds, key=lambda item: item.odd, reverse=True)
+
+
+def _extract_value_bet_items(fixture: dict[str, Any]) -> list[dict[str, Any]]:
+    for key in ("valuebets", "value_bets", "valueBets", "valuebet", "valueBet"):
+        items = fixture.get(key)
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
+        if isinstance(items, dict):
+            data = items.get("data")
+            if isinstance(data, list):
+                return [item for item in data if isinstance(item, dict)]
+    return []
+
+
+def _selection_from_value_bet(value_bet: dict[str, Any]) -> str | None:
+    predictions = value_bet.get("predictions") if isinstance(value_bet.get("predictions"), dict) else {}
+    raw_bet = predictions.get("bet") or value_bet.get("bet") or value_bet.get("label") or value_bet.get("name")
+    normalized = _norm(raw_bet)
+
+    for selection, aliases in OUTCOME_ALIASES.items():
+        if normalized in {_norm(alias) for alias in aliases}:
+            return selection
+
+    if normalized in {"1", "x", "2"}:
+        return str(raw_bet).upper()
+    if "over" in normalized and ("2_5" in normalized or "25" in normalized):
+        return "Over 2.5"
+    if "under" in normalized and ("2_5" in normalized or "25" in normalized):
+        return "Under 2.5"
+    if normalized in {"yes", "goal", "gg", "btts_yes", "both_teams_to_score_yes"}:
+        return "GG"
+    if normalized in {"no", "no_goal", "ng", "btts_no", "both_teams_to_score_no"}:
+        return "NG"
+
+    return None
+
+
+def _market_name_for_selection(selection: str) -> str:
+    if selection in {"1", "X", "2"}:
+        return "1X2"
+    if "2.5" in selection:
+        return "U/O 2.5"
+    if selection in {"GG", "NG"}:
+        return "GG/NG"
+    return "Value bet"
+
+
+def _official_bookmaker_odd(
+    value_bet: dict[str, Any],
+    selection: str,
+    affiliate_links: dict[str, str],
+) -> BookmakerOdd | None:
+    predictions = value_bet.get("predictions") if isinstance(value_bet.get("predictions"), dict) else {}
+    odd = _safe_float(predictions.get("odd") or value_bet.get("odd"))
+    if not math.isfinite(odd) or odd <= 1:
+        return None
+
+    bookmaker = str(
+        predictions.get("bookmaker")
+        or value_bet.get("bookmaker_name")
+        or value_bet.get("bookmaker")
+        or "Sportmonks value"
+    )
+    return BookmakerOdd(bookmaker=bookmaker, odd=odd, affiliate_url=_affiliate_url(bookmaker, affiliate_links))
+
+
+def build_official_value_markets(
+    fixture: dict[str, Any],
+    candidate_edge_threshold: float,
+    affiliate_links: dict[str, str],
+) -> list[FixtureMarket]:
+    fixture_id = str(fixture.get("id") or "")
+    if not fixture_id:
+        return []
+
+    home, away = _participant_names(fixture)
+    league = str((fixture.get("league") or {}).get("name") or "Competizione")
+    kickoff = _parse_kickoff(fixture.get("starting_at") or fixture.get("startingAt"))
+    markets: list[FixtureMarket] = []
+
+    for value_bet in _extract_value_bet_items(fixture):
+        predictions = value_bet.get("predictions") if isinstance(value_bet.get("predictions"), dict) else {}
+        selection = _selection_from_value_bet(value_bet)
+        if not selection:
+            continue
+
+        fair_odd = _safe_float(predictions.get("fair_odd") or predictions.get("fairOdd") or value_bet.get("fair_odd"))
+        official_odd = _official_bookmaker_odd(value_bet, selection, affiliate_links)
+        if not math.isfinite(fair_odd) or fair_odd <= 1 or official_odd is None:
+            continue
+
+        comparator = _extract_bookmaker_odds(fixture, selection, affiliate_links)
+        if not comparator:
+            comparator = [official_odd]
+
+        best = comparator[0]
+        if official_odd.odd > best.odd:
+            comparator = sorted([official_odd, *comparator], key=lambda item: item.odd, reverse=True)
+            best = comparator[0]
+
+        model_probability = 1 / fair_odd
+        edge = round(model_probability * best.odd, 3)
+        if edge < candidate_edge_threshold:
+            continue
+
+        value_percent = round(((best.odd - fair_odd) / fair_odd) * 100, 1)
+        markets.append(
+            FixtureMarket(
+                fixture_id=fixture_id,
+                home=home,
+                away=away,
+                league=league,
+                kickoff=kickoff,
+                market=_market_name_for_selection(selection),
+                selection=selection,
+                model_probability=round(model_probability, 4),
+                model_odd=round(fair_odd, 2),
+                best_bookmaker=best.bookmaker,
+                best_odd=best.odd,
+                value_percent=value_percent,
+                edge=edge,
+                comparator=tuple(comparator[:4]),
+                source="sportmonks_value_bets",
+            )
+        )
+
+    return sorted(markets, key=lambda item: item.edge, reverse=True)
 
 
 def load_affiliate_links(raw_json: str) -> dict[str, str]:

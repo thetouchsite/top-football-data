@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "@/lib/router-compat";
 import {
   BarChart3, Activity, TrendingUp, Zap, Crown, Menu, X, ChevronRight,
-  Bell, Search, User, Star, LogOut, Shield
+  Bell, Search, User, Star, LogOut, Shield, LineChart, BellRing
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/AppContext";
@@ -19,6 +19,8 @@ const NAV_ITEMS = [
   { label: "Analisi Statistica", path: "/analisi-statistica", icon: Activity },
   { label: "Dati Live", path: "/dati-live", icon: Zap },
   { label: "Multi-Bet", path: "/multi-bet", icon: Crown },
+  { label: "Alert", path: "/alert-inviati", icon: BellRing },
+  { label: "Performance", path: "/performance-storiche", icon: LineChart },
 ];
 
 export default function Navbar() {

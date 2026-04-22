@@ -108,9 +108,12 @@ La dashboard Next legge `/api/alerts` e `/api/performance` per mostrare segnali 
 - Probabilita O/U 2.5 e GG/NG: priorita a predizioni API, poi modello derivato, poi probabilita implicite dalle quote bookmaker quando disponibili.
 - Value bet UI match/feed: modello interno Next (`buildDerivedValueBet`) quando il feed non espone value ufficiali.
 - Value bet orchestrate: backend Python calcola quota modello, edge/EV, salva alert, manda Telegram e aggiorna ROI.
-- Value bet Sportmonks ufficiali: richiedono add-on Predictions; l'integrazione diretta degli endpoint `predictions/value-bets` resta evoluzione consigliata se il piano Sportmonks la include.
+- Value bet Sportmonks ufficiali: il backend usa `predictions/value-bets/fixtures/{fixtureId}` come fonte primaria quando l'add-on Predictions e attivo.
+- Comparatore quote: il backend arricchisce ogni fixture con `odds/pre-match/fixtures/{fixtureId}` quando l'add-on Odds e attivo.
 
 Il worker genera alert reali solo quando Sportmonks restituisce sia probabilita/predizioni sia quote bookmaker compatibili. Senza add-on Predictions/Odds resta attivo, ma puo non produrre segnali.
+
+Pagina performance: `/performance-storiche` mostra ROI, profitto cumulato e storico alert chiusi leggendo `/api/performance`. Quando il worker chiude nuovi alert, invia anche la sintesi del bilancio sul canale Telegram.
 
 ## Backend Python Railway
 

@@ -71,6 +71,32 @@ def format_multibet_alert(multibet: MultiBet, cta_label: str) -> str:
     return "\n".join(lines)
 
 
+def format_performance_summary(summary: dict, settled_count: int) -> str:
+    curve = summary.get("equityCurve") or []
+    last_points = curve[-5:]
+    lines = [
+        "Performance Storiche aggiornate",
+        "",
+        f"Alert chiusi in questo ciclo: {settled_count}",
+        f"Totale alert chiusi: {summary.get('settled', 0)}",
+        f"Bilancio: {summary.get('profitUnits', 0)} unita",
+        f"ROI reale: {summary.get('roiPercent', 0)}%",
+        f"Hit rate: {summary.get('hitRatePercent', 0)}%",
+        f"Record: {summary.get('won', 0)} vinte / {summary.get('lost', 0)} perse / {summary.get('void', 0)} void",
+    ]
+
+    if last_points:
+        lines.extend(["", "Curva ROI recente:"])
+        for point in last_points:
+            settled_at = point.get("settledAt")
+            label = settled_at.strftime("%d/%m %H:%M") if hasattr(settled_at, "strftime") else "N/D"
+            lines.append(
+                f"- {label}: {point.get('profitUnits', 0)} unita, ROI {point.get('roiPercent', 0)}%"
+            )
+
+    return "\n".join(lines)
+
+
 class TelegramClient:
     def __init__(self, bot_token: str, chat_id: str):
         self.bot_token = bot_token

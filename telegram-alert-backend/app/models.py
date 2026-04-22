@@ -25,6 +25,7 @@ class FixtureMarket:
     value_percent: float
     edge: float
     comparator: tuple[BookmakerOdd, ...] = field(default_factory=tuple)
+    source: str = "sportmonks_predictions_odds"
 
     @property
     def title(self) -> str:

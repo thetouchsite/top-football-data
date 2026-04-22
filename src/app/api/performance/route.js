@@ -70,6 +70,26 @@ export async function GET() {
       .limit(20)
       .toArray();
 
+    const settled = await db
+      .collection("betPerformance")
+      .find({})
+      .sort({ settledAt: 1 })
+      .limit(300)
+      .toArray();
+
+    let runningProfit = 0;
+    let runningStake = 0;
+    const equityCurve = settled.map((item) => {
+      runningProfit += Number(item.profitUnits || 0);
+      runningStake += Number(item.stakeUnits || 0);
+      return {
+        alertKey: item.alertKey,
+        settledAt: item.settledAt ? new Date(item.settledAt).toISOString() : null,
+        profitUnits: Number(runningProfit.toFixed(2)),
+        roiPercent: runningStake > 0 ? Number(((runningProfit / runningStake) * 100).toFixed(2)) : 0,
+      };
+    });
+
     return NextResponse.json({
       ok: true,
       summary: summary || {
@@ -83,6 +103,7 @@ export async function GET() {
         hitRatePercent: 0,
       },
       recent: recent.map(serializeDocument),
+      equityCurve,
     });
   } catch (error) {
     return NextResponse.json(

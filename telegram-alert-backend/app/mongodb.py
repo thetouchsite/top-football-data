@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pymongo import ASCENDING, DESCENDING, MongoClient, UpdateOne
+import certifi
+from pymongo import ASCENDING, DESCENDING, MongoClient
 
 from app.models import FixtureMarket, MultiBet
 
@@ -36,6 +37,7 @@ def _market_to_doc(market: FixtureMarket) -> dict[str, Any]:
         "valuePercent": market.value_percent,
         "edge": market.edge,
         "comparator": [_bookmaker_odd_to_doc(item) for item in market.comparator],
+        "source": market.source,
     }
 
 
@@ -76,6 +78,8 @@ class MongoAlertRepository:
                 self.uri,
                 connect=False,
                 serverSelectionTimeoutMS=5000,
+                tls=True,
+                tlsCAFile=certifi.where(),
             )
             self.db = self.client[self.database_name]
             self.alerts = self.db["betAlerts"]
@@ -99,12 +103,17 @@ class MongoAlertRepository:
         if not self._connect():
             return
 
-        self.alerts.create_index([("alertKey", ASCENDING)], unique=True)
-        self.alerts.create_index([("status", ASCENDING), ("createdAt", DESCENDING)])
-        self.alerts.create_index([("fixtureIds", ASCENDING), ("status", ASCENDING)])
-        self.performance.create_index([("alertKey", ASCENDING)], unique=True)
-        self.performance.create_index([("settledAt", DESCENDING)])
-        self._indexes_ready = True
+        try:
+            self.alerts.create_index([("alertKey", ASCENDING)], unique=True)
+            self.alerts.create_index([("status", ASCENDING), ("createdAt", DESCENDING)])
+            self.alerts.create_index([("fixtureIds", ASCENDING), ("status", ASCENDING)])
+            self.performance.create_index([("alertKey", ASCENDING)], unique=True)
+            self.performance.create_index([("settledAt", DESCENDING)])
+            self._indexes_ready = True
+            self.enabled = True
+            self.error = None
+        except Exception as error:
+            self._mark_unavailable(error)
 
     def save_single_alert(self, market: FixtureMarket, telegram_sent: bool) -> None:
         self.ensure_indexes()
@@ -116,25 +125,28 @@ class MongoAlertRepository:
             "alertKey": market.alert_key,
             "type": "single",
             "status": "pending",
-            "telegramSent": telegram_sent,
             "fixtureIds": [market.fixture_id],
             "createdAt": now,
-            "updatedAt": now,
-            "single": _market_to_doc(market),
             "stakeUnits": 1,
         }
-        self.alerts.update_one(
-            {"alertKey": market.alert_key},
-            {
-                "$setOnInsert": doc,
-                "$set": {
-                    "updatedAt": now,
-                    "telegramSent": telegram_sent,
-                    "single": doc["single"],
+        update_fields = {
+            "updatedAt": now,
+            "single": _market_to_doc(market),
+        }
+        if telegram_sent:
+            update_fields["telegramSent"] = True
+
+        try:
+            self.alerts.update_one(
+                {"alertKey": market.alert_key},
+                {
+                    "$setOnInsert": doc,
+                    "$set": update_fields,
                 },
-            },
-            upsert=True,
-        )
+                upsert=True,
+            )
+        except Exception as error:
+            self._mark_unavailable(error)
 
     def save_multibet_alert(self, multibet: MultiBet, telegram_sent: bool) -> None:
         self.ensure_indexes()
@@ -147,34 +159,41 @@ class MongoAlertRepository:
             "alertKey": multibet.alert_key,
             "type": "multibet",
             "status": "pending",
-            "telegramSent": telegram_sent,
             "fixtureIds": body["fixtureIds"],
             "createdAt": now,
-            "updatedAt": now,
-            "multibet": body,
             "stakeUnits": 1,
         }
-        self.alerts.update_one(
-            {"alertKey": multibet.alert_key},
-            {
-                "$setOnInsert": doc,
-                "$set": {
-                    "updatedAt": now,
-                    "telegramSent": telegram_sent,
-                    "multibet": body,
+        update_fields = {
+            "updatedAt": now,
+            "multibet": body,
+        }
+        if telegram_sent:
+            update_fields["telegramSent"] = True
+
+        try:
+            self.alerts.update_one(
+                {"alertKey": multibet.alert_key},
+                {
+                    "$setOnInsert": doc,
+                    "$set": update_fields,
                 },
-            },
-            upsert=True,
-        )
+                upsert=True,
+            )
+        except Exception as error:
+            self._mark_unavailable(error)
 
     def get_open_alerts(self, limit: int = 200) -> list[dict[str, Any]]:
         self.ensure_indexes()
         if not self.enabled:
             return []
 
-        return list(
-            self.alerts.find({"status": "pending"}).sort("createdAt", ASCENDING).limit(limit)
-        )
+        try:
+            return list(
+                self.alerts.find({"status": "pending"}).sort("createdAt", ASCENDING).limit(limit)
+            )
+        except Exception as error:
+            self._mark_unavailable(error)
+            return []
 
     def settle_alert(self, alert: dict[str, Any], status: str, legs: list[dict[str, Any]]) -> None:
         if status not in {"won", "lost", "void"}:
@@ -204,22 +223,25 @@ class MongoAlertRepository:
             "createdAt": alert.get("createdAt") or now,
         }
 
-        self.alerts.update_one(
-            {"alertKey": alert["alertKey"]},
-            {
-                "$set": {
-                    "status": status,
-                    "result": result_doc,
-                    "updatedAt": now,
-                    "settledAt": now,
-                }
-            },
-        )
-        self.performance.update_one(
-            {"alertKey": alert["alertKey"]},
-            {"$set": result_doc},
-            upsert=True,
-        )
+        try:
+            self.alerts.update_one(
+                {"alertKey": alert["alertKey"]},
+                {
+                    "$set": {
+                        "status": status,
+                        "result": result_doc,
+                        "updatedAt": now,
+                        "settledAt": now,
+                    }
+                },
+            )
+            self.performance.update_one(
+                {"alertKey": alert["alertKey"]},
+                {"$set": result_doc},
+                upsert=True,
+            )
+        except Exception as error:
+            self._mark_unavailable(error)
 
     def bulk_settle(self, settled: list[tuple[dict[str, Any], str, list[dict[str, Any]]]]) -> int:
         if not settled:
@@ -232,6 +254,59 @@ class MongoAlertRepository:
         for alert, status, legs in settled:
             self.settle_alert(alert, status, legs)
         return len(settled)
+
+    def get_performance_summary(self) -> dict[str, Any] | None:
+        self.ensure_indexes()
+        if not self.enabled:
+            return None
+
+        try:
+            settled = list(self.performance.find({}).sort("settledAt", ASCENDING))
+        except Exception as error:
+            self._mark_unavailable(error)
+            return None
+
+        stake_units = sum(float(item.get("stakeUnits") or 0) for item in settled)
+        profit_units = round(sum(float(item.get("profitUnits") or 0) for item in settled), 2)
+        won = sum(1 for item in settled if item.get("status") == "won")
+        lost = sum(1 for item in settled if item.get("status") == "lost")
+        void = sum(1 for item in settled if item.get("status") == "void")
+        graded = won + lost
+        equity_curve = []
+        running_profit = 0.0
+        running_stake = 0.0
+
+        for item in settled:
+            running_profit += float(item.get("profitUnits") or 0)
+            running_stake += float(item.get("stakeUnits") or 0)
+            equity_curve.append(
+                {
+                    "settledAt": item.get("settledAt"),
+                    "profitUnits": round(running_profit, 2),
+                    "roiPercent": round((running_profit / running_stake) * 100, 2) if running_stake else 0,
+                }
+            )
+
+        return {
+            "settled": len(settled),
+            "won": won,
+            "lost": lost,
+            "void": void,
+            "stakeUnits": stake_units,
+            "profitUnits": profit_units,
+            "roiPercent": round((profit_units / stake_units) * 100, 2) if stake_units else 0,
+            "hitRatePercent": round((won / graded) * 100, 2) if graded else 0,
+            "equityCurve": equity_curve[-20:],
+        }
+
+    def _mark_unavailable(self, error: Exception) -> None:
+        self.enabled = False
+        self.error = str(error)
+        self.client = None
+        self.db = None
+        self.alerts = None
+        self.performance = None
+        self._indexes_ready = False
 
 
 def _alert_decimal_odd(alert: dict[str, Any]) -> float:

@@ -5,13 +5,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import get_settings
-from app.engine import build_fixture_markets, build_multibets, load_affiliate_links
+from app.engine import build_fixture_markets, build_multibets, build_official_value_markets, load_affiliate_links
 from app.mongodb import MongoAlertRepository
 from app.results import settle_alert_from_fixtures
 from app.site_feed import SiteFeedClient, build_high_probability_picks, format_demo_picks_message
 from app.sportmonks import SportmonksClient
 from app.storage import AlertStore
-from app.telegram import TelegramClient, format_multibet_alert, format_single_alert
+from app.telegram import TelegramClient, format_multibet_alert, format_performance_summary, format_single_alert
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("telegram-alert-backend")
@@ -46,16 +46,9 @@ class AlertWorker:
             days=self.settings.sportmonks_schedule_days,
             league_ids=self.settings.sportmonks_league_ids,
         )
+        fixtures = await self.hydrate_fixtures_with_direct_feeds(fixtures)
 
-        markets = [
-            market
-            for fixture in fixtures
-            for market in build_fixture_markets(
-                fixture=fixture,
-                candidate_edge_threshold=self.settings.candidate_edge_threshold,
-                affiliate_links=affiliate_links,
-            )
-        ]
+        markets = self.build_markets(fixtures, affiliate_links)
         singles = [
             market
             for market in markets
@@ -100,6 +93,63 @@ class AlertWorker:
         self.last_result = result
         return result
 
+    async def hydrate_fixtures_with_direct_feeds(self, fixtures: list[dict]) -> list[dict]:
+        direct_limit = self.settings.sportmonks_direct_fixture_limit
+        hydrated: list[dict] = []
+
+        for index, fixture in enumerate(fixtures):
+            if index >= direct_limit:
+                hydrated.append(fixture)
+                continue
+
+            fixture_id = str(fixture.get("id") or "")
+            if not fixture_id:
+                hydrated.append(fixture)
+                continue
+
+            enriched = dict(fixture)
+            try:
+                if self.settings.sportmonks_fetch_direct_odds:
+                    direct_odds = await self.sportmonks.fetch_pre_match_odds_by_fixture(fixture_id)
+                    if direct_odds:
+                        enriched["odds"] = direct_odds
+
+                if self.settings.sportmonks_fetch_direct_value_bets:
+                    value_bets = await self.sportmonks.fetch_value_bets_by_fixture(fixture_id)
+                    if value_bets:
+                        enriched["valuebets"] = value_bets
+            except Exception as error:
+                logger.warning("Direct Sportmonks feed failed for fixture %s: %s", fixture_id, error)
+
+            hydrated.append(enriched)
+
+        return hydrated
+
+    def build_markets(self, fixtures: list[dict], affiliate_links: dict[str, str]):
+        markets = []
+        seen: set[tuple[str, str, str]] = set()
+
+        for fixture in fixtures:
+            official_markets = build_official_value_markets(
+                fixture=fixture,
+                candidate_edge_threshold=self.settings.candidate_edge_threshold,
+                affiliate_links=affiliate_links,
+            )
+            derived_markets = build_fixture_markets(
+                fixture=fixture,
+                candidate_edge_threshold=self.settings.candidate_edge_threshold,
+                affiliate_links=affiliate_links,
+            )
+
+            for market in [*official_markets, *derived_markets]:
+                key = (market.fixture_id, market.market, market.selection)
+                if key in seen:
+                    continue
+                seen.add(key)
+                markets.append(market)
+
+        return sorted(markets, key=lambda item: item.edge, reverse=True)
+
     async def settle_open_alerts(self) -> int:
         open_alerts = self.repository.get_open_alerts()
         if not open_alerts:
@@ -127,7 +177,15 @@ class AlertWorker:
             status, legs = result
             settled.append((alert, status, legs))
 
-        return self.repository.bulk_settle(settled)
+        settled_count = self.repository.bulk_settle(settled)
+        if settled_count:
+            summary = self.repository.get_performance_summary()
+            if summary:
+                try:
+                    await self.telegram.send_message(format_performance_summary(summary, settled_count))
+                except Exception as error:
+                    logger.warning("Performance Telegram summary failed: %s", error)
+        return settled_count
 
     async def send_demo_predictions(self) -> dict[str, object]:
         matches = await self.site_feed.fetch_schedule_matches(

@@ -40,7 +40,6 @@ const EVENT_TYPE_LABELS = {
  * | `scores`           | Risultato se già disponibile |
  * | `odds.bookmaker`   | Quote 1X2, O/U, GG, bookmaker → card, value, comparatore implicito |
  * | `predictions.type` | Probabilità 1X2 / score modello Sportmonks |
- * | `expected.type`    | xG attesi (riga centrale card) |
  * | `statistics.type`  | Copertura statistiche (confidence / badge coverage) |
  * | `metadata`         | Metadati fixture (es. prenotifiche piano / predictable) |
  *
@@ -59,7 +58,6 @@ export const SPORTMONKS_SCHEDULE_PREMATCH_INCLUDES = [
   "scores",
   "odds.bookmaker",
   "predictions.type",
-  "expected.type",
   "statistics.type",
   "metadata",
 ];

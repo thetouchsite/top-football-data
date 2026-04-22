@@ -37,7 +37,6 @@ class SportmonksClient:
                     "scores",
                     "odds.bookmaker",
                     "predictions.type",
-                    "expected.type",
                     "statistics.type",
                     "metadata",
                 ]
@@ -75,6 +74,20 @@ class SportmonksClient:
 
         return fixtures
 
+    async def fetch_pre_match_odds_by_fixture(self, fixture_id: str) -> list[dict[str, Any]]:
+        return await self._fetch_paginated(
+            path=f"/odds/pre-match/fixtures/{fixture_id}",
+            params={"include": "bookmaker;market"},
+            max_pages=20,
+        )
+
+    async def fetch_value_bets_by_fixture(self, fixture_id: str) -> list[dict[str, Any]]:
+        return await self._fetch_paginated(
+            path=f"/predictions/value-bets/fixtures/{fixture_id}",
+            params={"include": "type"},
+            max_pages=10,
+        )
+
     async def fetch_fixture_by_id(self, fixture_id: str) -> dict[str, Any] | None:
         if not self.api_token:
             raise RuntimeError("SPORTMONKS_API_TOKEN/SPORTMONKS_API_KEY non configurato.")
@@ -104,3 +117,52 @@ class SportmonksClient:
         payload = response.json()
         data = payload.get("data")
         return data if isinstance(data, dict) else None
+
+    async def _fetch_paginated(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        max_pages: int = 10,
+    ) -> list[dict[str, Any]]:
+        if not self.api_token:
+            raise RuntimeError("SPORTMONKS_API_TOKEN/SPORTMONKS_API_KEY non configurato.")
+
+        merged_params: dict[str, Any] = {
+            "api_token": self.api_token,
+            "timezone": self.timezone,
+            "per_page": 50,
+            **(params or {}),
+        }
+        items: list[dict[str, Any]] = []
+        page = 1
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            while page <= max_pages:
+                merged_params["page"] = page
+                response = await client.get(
+                    f"{self.base_url}{path}",
+                    params=merged_params,
+                    headers={"Accept": "application/json"},
+                )
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as error:
+                    status_code = error.response.status_code
+                    if status_code == 401:
+                        raise RuntimeError(
+                            "Sportmonks ha rifiutato la chiave API locale: controlla SPORTMONKS_API_TOKEN/SPORTMONKS_API_KEY."
+                        ) from None
+                    if status_code in {403, 404}:
+                        return []
+                    raise RuntimeError(f"Sportmonks request fallita con status {status_code}.") from None
+
+                payload = response.json()
+                items.extend(_as_list(payload.get("data")))
+
+                pagination = payload.get("pagination") or payload.get("meta", {}).get("pagination") or {}
+                total_pages = int(pagination.get("total_pages") or pagination.get("totalPages") or 1)
+                if page >= total_pages:
+                    break
+                page += 1
+
+        return items

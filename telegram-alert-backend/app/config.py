@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     sportmonks_schedule_days: int = Field(default=4, alias="SPORTMONKS_SCHEDULE_DAYS")
     sportmonks_timezone: str = Field(default="Europe/Rome", alias="SPORTMONKS_TIMEZONE")
     sportmonks_league_ids: str = Field(default="", alias="SPORTMONKS_SCHEDULE_LEAGUE_IDS")
+    sportmonks_fetch_direct_value_bets: bool = Field(default=True, alias="SPORTMONKS_FETCH_DIRECT_VALUE_BETS")
+    sportmonks_fetch_direct_odds: bool = Field(default=True, alias="SPORTMONKS_FETCH_DIRECT_ODDS")
+    sportmonks_direct_fixture_limit: int = Field(default=80, alias="SPORTMONKS_DIRECT_FIXTURE_LIMIT")
 
     mongodb_uri: str = Field(default="", alias="MONGODB_URI")
     mongodb_db: str = Field(default="top-football-pulse", alias="MONGODB_DB")
@@ -51,6 +54,11 @@ class Settings(BaseSettings):
     @classmethod
     def clamp_schedule_days(cls, value: int) -> int:
         return max(1, min(value, 14))
+
+    @field_validator("sportmonks_direct_fixture_limit")
+    @classmethod
+    def clamp_direct_fixture_limit(cls, value: int) -> int:
+        return max(1, min(value, 200))
 
     @field_validator("poll_interval_seconds")
     @classmethod
