@@ -67,6 +67,31 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 Il `Procfile` contiene gia un comando equivalente.
 
+### Importante: evitare restart del bot a ogni deploy Vercel
+
+Railway e Vercel usano lo stesso repository, ma il bot non deve redeployare quando cambi il sito Next.
+
+Nel servizio Railway del bot imposta:
+
+```text
+Settings -> Source -> Watch Paths
+telegram-alert-backend/**
+```
+
+In alternativa, se vuoi deployare il bot solo manualmente:
+
+```text
+Settings -> Source -> Automatic Deploys = Off
+```
+
+Se usi Config as Code, imposta nel servizio Railway il config file path:
+
+```text
+/telegram-alert-backend/railway.json
+```
+
+Nota Railway: i watch paths sono relativi alla root del repository, anche quando la Root Directory del servizio e `telegram-alert-backend`.
+
 ## Variabili Ambiente
 
 ```env
