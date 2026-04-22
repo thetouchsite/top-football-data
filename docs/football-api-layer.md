@@ -35,7 +35,12 @@ Client unificato: `src/api/football.js` (coalescing inflight su stessa URL, ness
 
 ### Orchestrazione
 
-- `src/server/football/service.js` — `getScheduleWindowPayload`, `getFixturePayload`, costanti di mappa provider (dashboard/modelli, dettagli), matrice **fallback policy** e ordine di implementazione documentati come export (riferimento per contratti e scope).
+- `src/server/football/service.js` - entrypoint pubblico: re-export di `getScheduleWindowPayload`, `getFixturePayload` e contratti usati dal resto dell'app.
+- `src/server/football/schedule.js` - orchestration calendario/list feed.
+- `src/server/football/fixture.js` - orchestration dettaglio fixture, core/enrichment e fallback.
+- `src/server/football/payloads.js` - builder DTO/payload e notice Sportmonks.
+- `src/server/football/runtime.js` - cache inflight/memory e telemetria service.
+- `src/server/football/contracts.js` - TTL, mappa provider, fallback policy e contratti DTO.
 
 - `src/lib/providers/sportmonks/index.js` — chiamate HTTP, include per scope (list, detail core, enrichment), denylist include invalidi, normalizzazione, telemetria richieste (tagging purpose/route).
 
@@ -131,7 +136,10 @@ Nessun impegno a implementare in questo file; solo tracciamento intent.
 
 | Cosa | Dove |
 |------|------|
-| Service orchestrazione | `src/server/football/service.js` |
+| Service entrypoint | `src/server/football/service.js` |
+| Service calendario | `src/server/football/schedule.js` |
+| Service fixture | `src/server/football/fixture.js` |
+| Payload, cache e contratti service | `src/server/football/payloads.js`, `src/server/football/runtime.js`, `src/server/football/contracts.js` |
 | Provider + include policy | `src/lib/providers/sportmonks/index.js` |
 | Allowlist e priorità | `src/lib/sportmonks-priority-league-ids.js` |
 | Catalogo competizioni | `src/lib/competitions/catalog.js` |
