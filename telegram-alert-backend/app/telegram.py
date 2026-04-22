@@ -19,7 +19,7 @@ def _kickoff_label(market: FixtureMarket) -> str:
 
 def format_single_alert(market: FixtureMarket, cta_label: str) -> str:
     lines = [
-        f"Alert Value Bet +{round((market.edge - 1) * 100, 1)}%",
+        f"🔥 Alert Value Bet +{round((market.edge - 1) * 100, 1)}%",
         "",
         f"{market.title}",
         f"{market.league} - {_kickoff_label(market)}",
@@ -41,7 +41,7 @@ def format_single_alert(market: FixtureMarket, cta_label: str) -> str:
 
 def format_multibet_alert(multibet: MultiBet, cta_label: str) -> str:
     lines = [
-        f"Alert Value Combo +{multibet.data_edge_percent}%",
+        f"🔥 Alert Value Combo +{multibet.data_edge_percent}%",
         "",
         f"Eventi: {len(multibet.events)}",
         f"Quota totale: {multibet.total_odd}",
@@ -75,14 +75,14 @@ def format_performance_summary(summary: dict, settled_count: int) -> str:
     curve = summary.get("equityCurve") or []
     last_points = curve[-5:]
     lines = [
-        "Performance Storiche aggiornate",
+        "📊 Performance Storiche aggiornate",
         "",
         f"Alert chiusi in questo ciclo: {settled_count}",
         f"Totale alert chiusi: {summary.get('settled', 0)}",
-        f"Bilancio: {summary.get('profitUnits', 0)} unita",
+        f"💰 Bilancio: {summary.get('profitUnits', 0)} unita",
         f"ROI reale: {summary.get('roiPercent', 0)}%",
         f"Hit rate: {summary.get('hitRatePercent', 0)}%",
-        f"Record: {summary.get('won', 0)} vinte / {summary.get('lost', 0)} perse / {summary.get('void', 0)} void",
+        f"🏆 Record: {summary.get('won', 0)} vinte / {summary.get('lost', 0)} perse / {summary.get('void', 0)} void",
     ]
 
     if last_points:
@@ -99,6 +99,7 @@ def format_performance_summary(summary: dict, settled_count: int) -> str:
 
 def format_settlement_alert(alert: dict, status: str, legs: list[dict]) -> str:
     result = _settlement_result_label(status)
+    icon = _settlement_result_icon(status)
     profit_units = _settlement_profit_units(alert, status)
     alert_type = "Singola" if alert.get("type") == "single" else "Multipla"
     title = _settlement_title(alert)
@@ -106,12 +107,12 @@ def format_settlement_alert(alert: dict, status: str, legs: list[dict]) -> str:
     decimal_odd = _settlement_decimal_odd(alert)
 
     lines = [
-        f"Alert {result}",
+        f"{icon} Alert {result}",
         "",
         f"{alert_type}: {title}",
         f"Quota: {decimal_odd}",
         f"Stake: {stake_units:g}u",
-        f"Profitto: {_signed_units(profit_units)}",
+        f"💰 Profitto: {_signed_units(profit_units)}",
     ]
 
     if legs:
@@ -133,6 +134,16 @@ def _settlement_result_label(status: str | None) -> str:
     if status == "void":
         return "void"
     return "chiuso"
+
+
+def _settlement_result_icon(status: str | None) -> str:
+    if status == "won":
+        return "🏆"
+    if status == "lost":
+        return "❌"
+    if status == "void":
+        return "↩️"
+    return "📌"
 
 
 def _settlement_title(alert: dict) -> str:
