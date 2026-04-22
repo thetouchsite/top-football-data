@@ -207,7 +207,7 @@ export default function MatchDetail() {
     const f = bundle.fixture;
     const raw = bundle.rawFixture;
 
-    console.log("[MatchDetail] === risposta API fixture (completa) ===", {
+    console.log("[MatchDetail] risposta API fixture (sintesi)", {
       meta: {
         provider: bundle.provider,
         source: bundle.source,
@@ -216,8 +216,10 @@ export default function MatchDetail() {
         freshness: bundle.freshness,
         competition: bundle.competition,
       },
-      fixture: f,
-      rawFixture: raw,
+      fixtureId: f?.id ?? null,
+      hasOdds: Boolean(f?.odds),
+      hasPredictions: Array.isArray(f?.predictions) ? f.predictions.length > 0 : Boolean(f?.predictions),
+      hasMetadata: Boolean(f?.metadata),
     });
 
     const rawLineups = Array.isArray(raw?.lineups) ? raw.lineups : [];
@@ -234,7 +236,14 @@ export default function MatchDetail() {
       raw_lineups_count: rawLineups.length,
       raw_with_formation_field: withFormationField.length,
       raw_with_formation_position: withFormationPosition.length,
-      sample_raw_lineup_entry: rawLineups[0] ?? null,
+      sample_raw_lineup_entry: rawLineups[0]
+        ? {
+            id: rawLineups[0]?.id ?? null,
+            type_id: rawLineups[0]?.type_id ?? null,
+            hasFormationField: Boolean(rawLineups[0]?.formation_field),
+            formationPosition: rawLineups[0]?.formation_position ?? null,
+          }
+        : null,
       squads_fallback_home: f?.squads?.home?.length ?? 0,
       squads_fallback_away: f?.squads?.away?.length ?? 0,
       players_sidebar_count: Array.isArray(f?.players) ? f.players.length : 0,

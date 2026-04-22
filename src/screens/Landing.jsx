@@ -43,7 +43,7 @@ export default function Landing() {
 
     const loadLandingMetrics = async () => {
       try {
-        const schedulePayload = await getScheduleWindow(14);
+        const schedulePayload = await getScheduleWindow(7, { requester: "Landing" });
         const livePayload = isDatiLiveFeatureEnabled()
           ? await getLivescoresInplay()
           : { matches: [] };

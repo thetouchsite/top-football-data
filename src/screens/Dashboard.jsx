@@ -80,7 +80,7 @@ export default function Dashboard() {
       try {
         if (isDatiLiveFeatureEnabled()) {
           const [nextSchedulePayload, nextLivePayload] = await Promise.all([
-            getScheduleWindow(14),
+            getScheduleWindow(7, { requester: "Dashboard" }),
             getLivescoresInplay(),
           ]);
 
@@ -92,7 +92,7 @@ export default function Dashboard() {
           setLivePayload(nextLivePayload);
           setDashboardNotice(nextLivePayload.notice || nextSchedulePayload.notice || "");
         } else {
-          const nextSchedulePayload = await getScheduleWindow(14);
+          const nextSchedulePayload = await getScheduleWindow(7, { requester: "Dashboard" });
 
           if (!isActive) {
             return;

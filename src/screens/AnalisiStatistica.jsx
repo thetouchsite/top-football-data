@@ -40,7 +40,7 @@ export default function AnalisiStatistica() {
 
     const loadSchedule = async () => {
       try {
-        const payload = await getScheduleWindow(14);
+        const payload = await getScheduleWindow(7, { requester: "AnalisiStatistica" });
 
         if (!isActive) {
           return;
