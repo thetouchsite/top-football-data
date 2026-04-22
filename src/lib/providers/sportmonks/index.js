@@ -23,6 +23,48 @@ const EVENT_TYPE_LABELS = {
   substitution: "Sostituzione",
   dangerous: "Occasione",
 };
+const DEBUG_FOOTBALL_TELEMETRY = ["1", "true", "yes"].includes(
+  String(process.env.DEBUG_FOOTBALL_TELEMETRY || "").toLowerCase()
+);
+
+function mapProviderSource(source, { fallbackTriggered, retryCount, error } = {}) {
+  if (source === "sportmonks_cache") {
+    return fallbackTriggered ? "stale_cache" : "memory_cache";
+  }
+  if (source === "sportmonks_api") {
+    return "provider_fetch";
+  }
+  if (source === "provider_unavailable" || source === "route_error") {
+    return "fallback_provider";
+  }
+  if (fallbackTriggered || Number(retryCount || 0) > 0 || error) {
+    return "provider_fetch";
+  }
+  return source || "provider_fetch";
+}
+
+function shouldLogVerboseProviderTelemetry(payload = {}) {
+  if (DEBUG_FOOTBALL_TELEMETRY) {
+    return true;
+  }
+  return (
+    payload.cacheState === "miss" ||
+    payload.fallbackTriggered === true ||
+    Number(payload.retryCount || 0) > 0 ||
+    Boolean(payload.error)
+  );
+}
+
+function logFootballProviderTelemetry(payload = {}) {
+  const nextPayload = {
+    ...payload,
+    source: mapProviderSource(payload.source, payload),
+  };
+  if (!shouldLogVerboseProviderTelemetry(nextPayload)) {
+    return;
+  }
+  console.info("[football][provider]", nextPayload);
+}
 
 /**
  * Include **unici** per `GET /football/fixtures/between/{start}/{end}` (Modelli predittivi + schedule window).
@@ -179,9 +221,9 @@ const SPORTMONKS_LIVE_INCLUDE_ATTEMPTS = [
 export const SPORTMONKS_PROVIDER_ID = "sportmonks";
 export const SPORTMONKS_DEFAULT_SCHEDULE_DAYS = clampInteger(
   process.env.SPORTMONKS_SCHEDULE_DAYS,
-  14,
+  7,
   1,
-  14
+  30
 );
 
 /**
@@ -512,7 +554,9 @@ function buildRequestParams({
 }
 
 async function requestSportmonksJson(pathname, options = {}) {
-  const url = buildSportmonksUrl(pathname, buildRequestParams(options));
+  const startedAt = Date.now();
+  const { telemetry = {}, ...requestOptions } = options || {};
+  const url = buildSportmonksUrl(pathname, buildRequestParams(requestOptions));
   const response = await fetch(url, {
     cache: "no-store",
     headers: {
@@ -535,28 +579,105 @@ async function requestSportmonksJson(pathname, options = {}) {
       payload?.errors?.[0]?.message ||
       `Sportmonks request failed with status ${response.status}.`;
 
+    logFootballProviderTelemetry({
+      route: telemetry.route || null,
+      requestPurpose: telemetry.requestPurpose || null,
+      days: telemetry.days ?? null,
+      fixtureId: telemetry.fixtureId ?? null,
+      cacheHit: false,
+      cacheState: "miss",
+      providerLatencyMs: Date.now() - startedAt,
+      pagesFetched: 1,
+      itemsFetched: 0,
+      payloadBytes: payload ? JSON.stringify(payload).length : 0,
+      normalizeMs: null,
+      e2eMs: Date.now() - startedAt,
+      fallbackTriggered: Boolean(telemetry.fallbackTriggered),
+      retryCount: telemetry.retryCount ?? 0,
+      dtoTarget: telemetry.dtoTarget || null,
+      dtoVersion: telemetry.dtoVersion || "v1",
+      providerEndpoint: pathname,
+      includeSet: Array.isArray(requestOptions.include)
+        ? requestOptions.include.join(";")
+        : requestOptions.include || null,
+      estimatedCallCost: 1,
+      status: response.status,
+      error: providerMessage,
+    });
     throw new Error(providerMessage);
   }
+
+  logFootballProviderTelemetry({
+    route: telemetry.route || null,
+    requestPurpose: telemetry.requestPurpose || null,
+    days: telemetry.days ?? null,
+    fixtureId: telemetry.fixtureId ?? null,
+    cacheHit: null,
+    cacheState: null,
+    providerLatencyMs: Date.now() - startedAt,
+    pagesFetched: 1,
+    itemsFetched: Array.isArray(payload?.data) ? payload.data.length : payload?.data ? 1 : 0,
+    payloadBytes: payload ? JSON.stringify(payload).length : 0,
+    normalizeMs: null,
+    e2eMs: Date.now() - startedAt,
+    fallbackTriggered: Boolean(telemetry.fallbackTriggered),
+    retryCount: telemetry.retryCount ?? 0,
+    dtoTarget: telemetry.dtoTarget || null,
+    dtoVersion: telemetry.dtoVersion || "v1",
+    providerEndpoint: pathname,
+    includeSet: Array.isArray(requestOptions.include)
+      ? requestOptions.include.join(";")
+      : requestOptions.include || null,
+    estimatedCallCost: 1,
+    status: response.status,
+  });
 
   return payload;
 }
 
+function getSportmonksCollectionPageMeta(payload) {
+  const pagination = payload?.pagination || payload?.meta?.pagination || {};
+  const currentPage = Math.max(
+    1,
+    safeNumber(pagination?.current_page ?? pagination?.currentPage, 1)
+  );
+  const rawTotalPages = safeNumber(
+    pagination?.total_pages ?? pagination?.totalPages,
+    Number.NaN
+  );
+  const totalPages = Number.isFinite(rawTotalPages) && rawTotalPages > 0 ? rawTotalPages : null;
+  const hasMoreByFlag =
+    typeof pagination?.has_more === "boolean"
+      ? pagination.has_more
+      : typeof pagination?.hasMore === "boolean"
+        ? pagination.hasMore
+        : null;
+  const hasMore = hasMoreByFlag ?? (Number.isFinite(totalPages) ? currentPage < totalPages : false);
+
+  return {
+    currentPage,
+    totalPages,
+    hasMore,
+  };
+}
+
 async function requestSportmonksCollection(pathname, options = {}) {
-  const { maxPages: maxPagesOption, ...requestOptions } = options;
+  const startedAt = Date.now();
+  const { telemetry = {}, maxPages: maxPagesOption, ...requestOptions } = options || {};
   /** Default 10: altri endpoint (es. odds) restano leggeri. Calendario usa `maxPages` dedicato. */
   const maxPages = maxPagesOption ?? 10;
 
-  const firstPayload = await requestSportmonksJson(pathname, requestOptions);
+  const firstPayload = await requestSportmonksJson(pathname, {
+    ...requestOptions,
+    telemetry: {
+      ...telemetry,
+      retryCount: telemetry.retryCount ?? 0,
+    },
+  });
   const firstData = asArray(firstPayload?.data);
-  const totalPages =
-    safeNumber(
-      firstPayload?.pagination?.total_pages ??
-        firstPayload?.meta?.pagination?.total_pages ??
-        firstPayload?.meta?.pagination?.totalPages,
-      1
-    ) || 1;
+  const firstMeta = getSportmonksCollectionPageMeta(firstPayload);
 
-  if (totalPages <= 1) {
+  if (!firstMeta.hasMore && (!firstMeta.totalPages || firstMeta.totalPages <= 1)) {
     return {
       ...firstPayload,
       data: firstData,
@@ -564,53 +685,175 @@ async function requestSportmonksCollection(pathname, options = {}) {
     };
   }
 
-  const pageLimit = Math.min(totalPages, maxPages);
-  const remainingPages = [];
+  const allData = [...firstData];
+  let pagesFetched = 1;
+  let failures = 0;
+  let totalPages = firstMeta.totalPages;
 
-  for (let page = 2; page <= pageLimit; page += 1) {
-    remainingPages.push(
-      requestSportmonksJson(pathname, {
-        ...requestOptions,
-        page,
-      })
-    );
+  if (Number.isFinite(firstMeta.totalPages)) {
+    const pageLimit = Math.min(firstMeta.totalPages, maxPages);
+    const remainingPages = [];
+
+    for (let page = 2; page <= pageLimit; page += 1) {
+      remainingPages.push(
+        requestSportmonksJson(pathname, {
+          ...requestOptions,
+          page,
+        })
+      );
+    }
+
+    const pagePayloads = await Promise.allSettled(remainingPages);
+    pagePayloads.forEach((result) => {
+      if (result.status === "fulfilled") {
+        allData.push(...asArray(result.value?.data));
+        pagesFetched += 1;
+      } else {
+        failures += 1;
+      }
+    });
+  } else {
+    let nextPage = 2;
+    let hasMore = firstMeta.hasMore;
+    while (hasMore && nextPage <= maxPages) {
+      try {
+        const payload = await requestSportmonksJson(pathname, {
+          ...requestOptions,
+          page: nextPage,
+        });
+        allData.push(...asArray(payload?.data));
+        pagesFetched += 1;
+        const meta = getSportmonksCollectionPageMeta(payload);
+        hasMore = Boolean(meta.hasMore);
+        if (Number.isFinite(meta.totalPages)) {
+          totalPages = meta.totalPages;
+        }
+      } catch {
+        failures += 1;
+        hasMore = false;
+      }
+      nextPage += 1;
+    }
   }
 
-  const pagePayloads = await Promise.all(remainingPages);
-  const allData = pagePayloads.reduce(
-    (items, payload) => items.concat(asArray(payload?.data)),
-    [...firstData]
-  );
+  const boundedTotalPages = Number.isFinite(totalPages) ? totalPages : null;
+  const truncatedByLimit =
+    Number.isFinite(boundedTotalPages) && Number.isFinite(maxPages)
+      ? boundedTotalPages > maxPages
+      : false;
+  const truncatedByFailure = failures > 0;
+  const truncatedByUnknown = boundedTotalPages == null ? false : pagesFetched < boundedTotalPages;
 
-  return {
+  const collectionPayload = {
     ...firstPayload,
     data: allData,
     collectionPagination: {
-      totalPages,
-      pagesFetched: pageLimit,
-      truncated: pageLimit < totalPages,
+      totalPages: boundedTotalPages,
+      pagesFetched,
+      truncated: truncatedByLimit || truncatedByFailure || truncatedByUnknown,
       perPage: safeNumber(requestOptions.perPage, 50),
+      failures,
     },
   };
+  logFootballProviderTelemetry({
+    route: telemetry.route || null,
+    requestPurpose: telemetry.requestPurpose || null,
+    days: telemetry.days ?? null,
+    fixtureId: telemetry.fixtureId ?? null,
+    cacheHit: false,
+    cacheState: "miss",
+    providerLatencyMs: Date.now() - startedAt,
+    pagesFetched: collectionPayload.collectionPagination?.pagesFetched ?? 1,
+    itemsFetched: allData.length,
+    payloadBytes: collectionPayload ? JSON.stringify(collectionPayload).length : 0,
+    normalizeMs: null,
+    e2eMs: Date.now() - startedAt,
+    fallbackTriggered: Boolean(telemetry.fallbackTriggered),
+    retryCount: telemetry.retryCount ?? 0,
+    dtoTarget: telemetry.dtoTarget || null,
+    dtoVersion: telemetry.dtoVersion || "v1",
+    providerEndpoint: pathname,
+    includeSet: Array.isArray(requestOptions.include)
+      ? requestOptions.include.join(";")
+      : requestOptions.include || null,
+    estimatedCallCost: collectionPayload.collectionPagination?.pagesFetched ?? 1,
+    status: 200,
+  });
+  return collectionPayload;
 }
 
 async function requestSportmonksWithIncludeFallback(pathname, attempts, options = {}) {
   let lastError = null;
+  const startedAt = Date.now();
+  const { telemetry = {}, ...requestOptions } = options || {};
+  let attemptIndex = 0;
 
   for (const include of attempts) {
+    attemptIndex += 1;
     try {
-      const requester = options.expectCollection
+      const requester = requestOptions.expectCollection
         ? requestSportmonksCollection
         : requestSportmonksJson;
 
-      return await requester(pathname, {
-        ...options,
+      const payload = await requester(pathname, {
+        ...requestOptions,
         include,
+        telemetry: {
+          ...telemetry,
+          fallbackTriggered: attemptIndex > 1,
+          retryCount: attemptIndex - 1,
+        },
       });
+      logFootballProviderTelemetry({
+        route: telemetry.route || null,
+        requestPurpose: telemetry.requestPurpose || null,
+        days: telemetry.days ?? null,
+        fixtureId: telemetry.fixtureId ?? null,
+        cacheHit: false,
+        cacheState: "miss",
+        providerLatencyMs: Date.now() - startedAt,
+        pagesFetched: payload?.collectionPagination?.pagesFetched ?? 1,
+        itemsFetched: Array.isArray(payload?.data) ? payload.data.length : payload?.data ? 1 : 0,
+        payloadBytes: payload ? JSON.stringify(payload).length : 0,
+        normalizeMs: null,
+        e2eMs: Date.now() - startedAt,
+        fallbackTriggered: attemptIndex > 1,
+        retryCount: attemptIndex - 1,
+        dtoTarget: telemetry.dtoTarget || null,
+        dtoVersion: telemetry.dtoVersion || "v1",
+        providerEndpoint: pathname,
+        includeSet: Array.isArray(include) ? include.join(";") : include || null,
+        estimatedCallCost: payload?.collectionPagination?.pagesFetched ?? 1,
+        status: 200,
+      });
+      return payload;
     } catch (error) {
       lastError = error;
     }
   }
+
+  logFootballProviderTelemetry({
+    route: telemetry.route || null,
+    requestPurpose: telemetry.requestPurpose || null,
+    days: telemetry.days ?? null,
+    fixtureId: telemetry.fixtureId ?? null,
+    cacheHit: false,
+    cacheState: "miss",
+    providerLatencyMs: Date.now() - startedAt,
+    pagesFetched: null,
+    itemsFetched: 0,
+    payloadBytes: null,
+    normalizeMs: null,
+    e2eMs: Date.now() - startedAt,
+    fallbackTriggered: true,
+    retryCount: Math.max(0, attemptIndex - 1),
+    dtoTarget: telemetry.dtoTarget || null,
+    dtoVersion: telemetry.dtoVersion || "v1",
+    providerEndpoint: pathname,
+    includeSet: null,
+    estimatedCallCost: null,
+    error: lastError?.message || "unknown_error",
+  });
 
   throw lastError || new Error("Impossibile recuperare il feed Sportmonks.");
 }
@@ -3069,8 +3312,11 @@ export function mergeSportmonksLiveMatches(previousMatches = [], updatedMatches 
   return Array.from(mergedMap.values());
 }
 
-export async function fetchSportmonksScheduleWindow(days = SPORTMONKS_DEFAULT_SCHEDULE_DAYS) {
-  const safeDays = clampInteger(days, SPORTMONKS_DEFAULT_SCHEDULE_DAYS, 1, 14);
+export async function fetchSportmonksScheduleWindow(
+  days = SPORTMONKS_DEFAULT_SCHEDULE_DAYS,
+  telemetry = {}
+) {
+  const safeDays = clampInteger(days, SPORTMONKS_DEFAULT_SCHEDULE_DAYS, 1, 30);
   /** Quante pagine scaricare al massimo (50 fixture/pagina). Prima era fisso a 10 → solo 500 match: molte leghe potevano mancare. */
   const scheduleMaxPages = clampInteger(process.env.SPORTMONKS_SCHEDULE_MAX_PAGES, 80, 1, 200);
   const fromDate = new Date();
@@ -3086,6 +3332,14 @@ export async function fetchSportmonksScheduleWindow(days = SPORTMONKS_DEFAULT_SC
     perPage: 50,
     filters: leagueFilters || undefined,
     maxPages: scheduleMaxPages,
+    telemetry: {
+      route: telemetry.route || "/api/football/schedules/window",
+      requestPurpose: telemetry.requestPurpose || "schedule_window",
+      days: safeDays,
+      fixtureId: null,
+      dtoTarget: telemetry.dtoTarget || "ScheduleCardDTO",
+      dtoVersion: telemetry.dtoVersion || "v1",
+    },
   });
 
   return {
@@ -3144,7 +3398,7 @@ async function mergePrematchOddsIntoFixture(fixture) {
   return { ...fixture, odds: [...existing, ...extra] };
 }
 
-export async function fetchSportmonksFixtureById(fixtureId) {
+export async function fetchSportmonksFixtureById(fixtureId, telemetry = {}) {
   const normalizedFixtureId = String(fixtureId || "").trim();
 
   if (!normalizedFixtureId) {
@@ -3157,6 +3411,14 @@ export async function fetchSportmonksFixtureById(fixtureId) {
     {
       timezone: ROME_TIMEZONE,
       perPage: null,
+      telemetry: {
+        route: telemetry.route || "/api/football/fixtures/[fixtureId]",
+        requestPurpose: telemetry.requestPurpose || "fixture_detail",
+        days: null,
+        fixtureId: normalizedFixtureId,
+        dtoTarget: telemetry.dtoTarget || "MatchDetailCoreDTO",
+        dtoVersion: telemetry.dtoVersion || "v1",
+      },
     }
   );
 
@@ -3168,7 +3430,7 @@ export async function fetchSportmonksFixtureById(fixtureId) {
   return mergePrematchOddsIntoFixture(raw);
 }
 
-export async function fetchSportmonksSeasonStandings(seasonId) {
+export async function fetchSportmonksSeasonStandings(seasonId, telemetry = {}) {
   const normalizedSeasonId = String(seasonId || "").trim();
 
   if (!normalizedSeasonId) {
@@ -3180,13 +3442,21 @@ export async function fetchSportmonksSeasonStandings(seasonId) {
     {
       include: ["participant", "details", "form", "league", "season", "stage", "group", "round"],
       perPage: 100,
+      telemetry: {
+        route: telemetry.route || "/api/football/fixtures/[fixtureId]",
+        requestPurpose: telemetry.requestPurpose || "fixture_detail_standings",
+        days: null,
+        fixtureId: telemetry.fixtureId ?? null,
+        dtoTarget: telemetry.dtoTarget || "MatchDetailEnrichedDTO",
+        dtoVersion: telemetry.dtoVersion || "v1",
+      },
     }
   );
 
   return asArray(response?.data);
 }
 
-export async function fetchSportmonksTeamSquad(teamId) {
+export async function fetchSportmonksTeamSquad(teamId, telemetry = {}) {
   const normalizedTeamId = String(teamId || "").trim();
 
   if (!normalizedTeamId) {
@@ -3198,6 +3468,14 @@ export async function fetchSportmonksTeamSquad(teamId) {
     {
       include: ["player", "position", "detailedPosition"],
       perPage: 100,
+      telemetry: {
+        route: telemetry.route || "/api/football/fixtures/[fixtureId]",
+        requestPurpose: telemetry.requestPurpose || "fixture_detail_squad",
+        days: null,
+        fixtureId: telemetry.fixtureId ?? null,
+        dtoTarget: telemetry.dtoTarget || "MatchDetailEnrichedDTO",
+        dtoVersion: telemetry.dtoVersion || "v1",
+      },
     }
   );
 

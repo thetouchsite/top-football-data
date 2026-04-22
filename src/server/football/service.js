@@ -24,6 +24,45 @@ const LIVE_CACHE_TTL_MS = 5_000;
 const LIVE_FULL_SYNC_INTERVAL_MS = 60_000;
 const FIXTURE_CACHE_TTL_MS = 300_000;
 
+const DEBUG_FOOTBALL_TELEMETRY = ["1", "true", "yes"].includes(
+  String(process.env.DEBUG_FOOTBALL_TELEMETRY || "").toLowerCase()
+);
+
+function mapTelemetrySource(source, { cacheState, fallbackTriggered } = {}) {
+  if (source === "sportmonks_cache" && cacheState === "hit" && !fallbackTriggered) {
+    return "memory_cache";
+  }
+  if (source === "sportmonks_cache" && (cacheState === "stale-hit" || fallbackTriggered)) {
+    return "stale_cache";
+  }
+  if (source === "sportmonks_api") {
+    return "provider_fetch";
+  }
+  if (source === "provider_unavailable" || source === "route_error") {
+    return "fallback_provider";
+  }
+  return source || null;
+}
+
+function shouldLogVerboseTelemetry(payload = {}) {
+  if (DEBUG_FOOTBALL_TELEMETRY) {
+    return true;
+  }
+  return (
+    payload.cacheState === "miss" ||
+    payload.fallbackTriggered === true ||
+    Number(payload.retryCount || 0) > 0 ||
+    Boolean(payload.error)
+  );
+}
+
+function logFootballServiceTelemetry(payload = {}) {
+  if (!shouldLogVerboseTelemetry(payload)) {
+    return;
+  }
+  console.info("[football][service]", payload);
+}
+
 function getScheduleCacheStore() {
   if (!globalThis.__footballScheduleWindowCache) {
     globalThis.__footballScheduleWindowCache = new Map();
@@ -108,6 +147,23 @@ function enrichLiveMatches(matches = [], provider, source, updatedAt) {
       oddsProvider: match?.odds_provider || "derived_live_model",
     })
   );
+}
+
+function compactScheduleRawPayload(rawSchedules = null) {
+  if (!rawSchedules || typeof rawSchedules !== "object") {
+    return null;
+  }
+
+  return {
+    window: rawSchedules.window || null,
+    scheduleLeagueFilter: rawSchedules.scheduleLeagueFilter || null,
+    schedulePagination: rawSchedules.schedulePagination || null,
+    fixturesCount: Array.isArray(rawSchedules.fixtures) ? rawSchedules.fixtures.length : 0,
+    sampleFixture:
+      process.env.NODE_ENV === "development" && Array.isArray(rawSchedules.fixtures)
+        ? rawSchedules.fixtures[0] || null
+        : null,
+  };
 }
 
 function buildSchedulePayload({
@@ -282,6 +338,7 @@ function buildSportmonksPlanNotice(rawPayload, matches = []) {
 }
 
 export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDULE_DAYS) {
+  const startedAt = Date.now();
   const safeDays = Number.isFinite(days) ? days : SPORTMONKS_DEFAULT_SCHEDULE_DAYS;
   const cacheKey = String(safeDays);
   const cacheStore = getScheduleCacheStore();
@@ -289,6 +346,33 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
   const cachedEntry = cacheStore.get(cacheKey);
 
   if (cachedEntry && Date.now() - cachedEntry.updatedAt < SCHEDULE_CACHE_TTL_MS) {
+    const e2eMs = Date.now() - startedAt;
+    const cachedPayload = cachedEntry.payload;
+    logFootballServiceTelemetry({
+      route: "/api/football/schedules/window",
+      requestPurpose: "schedule_window",
+      days: safeDays,
+      fixtureId: null,
+      cacheHit: true,
+      cacheState: "hit",
+      providerLatencyMs: null,
+      pagesFetched: cachedPayload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
+      itemsFetched: Array.isArray(cachedPayload?.matches) ? cachedPayload.matches.length : 0,
+      payloadBytes: cachedPayload ? JSON.stringify(cachedPayload).length : 0,
+      normalizeMs: null,
+      e2eMs,
+      fallbackTriggered: Boolean(cachedPayload?.isFallback),
+      retryCount: 0,
+      dtoTarget: "ScheduleCardDTO",
+      dtoVersion: "v1",
+      providerEndpoint: "fixtures/between/{start}/{end}",
+      includeSet: null,
+      estimatedCallCost: cachedPayload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
+      source: mapTelemetrySource(cachedPayload?.source || "sportmonks_cache", {
+        cacheState: "hit",
+        fallbackTriggered: Boolean(cachedPayload?.isFallback),
+      }),
+    });
     return cachedEntry.payload;
   }
 
@@ -298,7 +382,12 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
 
   const requestPromise = (async () => {
     try {
-      const rawSchedules = await fetchSportmonksScheduleWindow(safeDays);
+      const rawSchedules = await fetchSportmonksScheduleWindow(safeDays, {
+        route: "/api/football/schedules/window",
+        requestPurpose: "schedule_window",
+        dtoTarget: "ScheduleCardDTO",
+        dtoVersion: "v1",
+      });
       if (process.env.NODE_ENV === "development") {
         const firstRaw = rawSchedules?.fixtures?.[0];
         console.log("[getScheduleWindowPayload] Sportmonks fixtures/between — primo elemento raw", firstRaw ?? null);
@@ -306,6 +395,7 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
       const normalizedMatches = sortMatchesByFeaturedPriority(
         rawSchedules.fixtures.map(normalizeSportmonksScheduleMatch)
       );
+      const normalizeMs = Date.now() - startedAt;
       const updatedAt = Date.now();
       const scheduleFilterHint = rawSchedules?.scheduleLeagueFilter
         ? " Calendario ristretto dal filtro API leghe (SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT)."
@@ -318,17 +408,42 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
       const payload = buildSchedulePayload({
         matches: normalizedMatches,
         window: rawSchedules.window,
-        rawSchedules,
+        rawSchedules: compactScheduleRawPayload(rawSchedules),
         source: "sportmonks_api",
         notice: `${buildSportmonksPlanNotice(rawSchedules, normalizedMatches) || ""}${scheduleFilterHint}${paginationHint}`.trim(),
         updatedAt,
       });
 
       cacheStore.set(cacheKey, { payload, updatedAt });
+      logFootballServiceTelemetry({
+        route: "/api/football/schedules/window",
+        requestPurpose: "schedule_window",
+        days: safeDays,
+        fixtureId: null,
+        cacheHit: false,
+        cacheState: "miss",
+        providerLatencyMs: null,
+        pagesFetched: payload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
+        itemsFetched: Array.isArray(payload?.matches) ? payload.matches.length : 0,
+        payloadBytes: payload ? JSON.stringify(payload).length : 0,
+        normalizeMs,
+        e2eMs: Date.now() - startedAt,
+        fallbackTriggered: Boolean(payload?.isFallback),
+        retryCount: 0,
+        dtoTarget: "ScheduleCardDTO",
+        dtoVersion: "v1",
+        providerEndpoint: "fixtures/between/{start}/{end}",
+        includeSet: null,
+        estimatedCallCost: payload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
+        source: mapTelemetrySource(payload?.source || "sportmonks_api", {
+          cacheState: "miss",
+          fallbackTriggered: Boolean(payload?.isFallback),
+        }),
+      });
       return payload;
     } catch (error) {
       if (cachedEntry?.payload) {
-        return buildSchedulePayload({
+        const stalePayload = buildSchedulePayload({
           matches: cachedEntry.payload.matches,
           window: cachedEntry.payload.window,
           rawSchedules: cachedEntry.payload.rawSchedules,
@@ -339,9 +454,36 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
             : error.message || "Mostro l'ultimo calendario disponibile dalla cache provider.",
           updatedAt: cachedEntry.updatedAt,
         });
+        logFootballServiceTelemetry({
+          route: "/api/football/schedules/window",
+          requestPurpose: "schedule_window",
+          days: safeDays,
+          fixtureId: null,
+          cacheHit: true,
+          cacheState: "stale-hit",
+          providerLatencyMs: null,
+          pagesFetched: stalePayload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
+          itemsFetched: Array.isArray(stalePayload?.matches) ? stalePayload.matches.length : 0,
+          payloadBytes: stalePayload ? JSON.stringify(stalePayload).length : 0,
+          normalizeMs: null,
+          e2eMs: Date.now() - startedAt,
+          fallbackTriggered: true,
+          retryCount: 0,
+          dtoTarget: "ScheduleCardDTO",
+          dtoVersion: "v1",
+          providerEndpoint: "fixtures/between/{start}/{end}",
+          includeSet: null,
+          estimatedCallCost: stalePayload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
+          source: mapTelemetrySource("sportmonks_cache", {
+            cacheState: "stale-hit",
+            fallbackTriggered: true,
+          }),
+          error: error?.message || "unknown_error",
+        });
+        return stalePayload;
       }
 
-      return buildSchedulePayload({
+      const fallbackPayload = buildSchedulePayload({
         matches: [],
         window: null,
         rawSchedules: null,
@@ -349,6 +491,33 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
         notice: error.message || "Impossibile recuperare il calendario dal provider corrente.",
         updatedAt: null,
       });
+      logFootballServiceTelemetry({
+        route: "/api/football/schedules/window",
+        requestPurpose: "schedule_window",
+        days: safeDays,
+        fixtureId: null,
+        cacheHit: false,
+        cacheState: "miss",
+        providerLatencyMs: null,
+        pagesFetched: null,
+        itemsFetched: 0,
+        payloadBytes: fallbackPayload ? JSON.stringify(fallbackPayload).length : 0,
+        normalizeMs: null,
+        e2eMs: Date.now() - startedAt,
+        fallbackTriggered: true,
+        retryCount: 0,
+        dtoTarget: "ScheduleCardDTO",
+        dtoVersion: "v1",
+        providerEndpoint: "fixtures/between/{start}/{end}",
+        includeSet: null,
+        estimatedCallCost: null,
+        source: mapTelemetrySource("provider_unavailable", {
+          cacheState: "miss",
+          fallbackTriggered: true,
+        }),
+        error: error?.message || "unknown_error",
+      });
+      return fallbackPayload;
     } finally {
       inflightStore.delete(cacheKey);
     }
@@ -441,6 +610,7 @@ export async function getLivescoresInplayPayload() {
 }
 
 export async function getFixturePayload(fixtureId) {
+  const startedAt = Date.now();
   const normalizedFixtureId = decodeURIComponent(String(fixtureId || "").trim());
   const fixtureCacheStore = getFixtureCacheStore();
   const fixtureInflightStore = getFixtureInflightStore();
@@ -456,13 +626,39 @@ export async function getFixturePayload(fixtureId) {
   }
 
   if (cachedEntry && Date.now() - cachedEntry.updatedAt < FIXTURE_CACHE_TTL_MS) {
-    return buildFixturePayload({
+    const payload = buildFixturePayload({
       normalizedFixture: cachedEntry.normalizedFixture,
       rawFixture: cachedEntry.rawFixture,
       provider: cachedEntry.provider,
       source: "sportmonks_cache",
       updatedAt: cachedEntry.updatedAt,
     });
+    logFootballServiceTelemetry({
+      route: "/api/football/fixtures/[fixtureId]",
+      requestPurpose: "fixture_detail",
+      days: null,
+      fixtureId: normalizedFixtureId,
+      cacheHit: true,
+      cacheState: "hit",
+      providerLatencyMs: null,
+      pagesFetched: null,
+      itemsFetched: payload?.body?.fixture ? 1 : 0,
+      payloadBytes: payload ? JSON.stringify(payload).length : 0,
+      normalizeMs: null,
+      e2eMs: Date.now() - startedAt,
+      fallbackTriggered: Boolean(payload?.body?.isFallback),
+      retryCount: 0,
+      dtoTarget: "MatchDetailCoreDTO",
+      dtoVersion: "v1",
+      providerEndpoint: "fixtures/{fixtureId}",
+      includeSet: null,
+      estimatedCallCost: null,
+      source: mapTelemetrySource(payload?.body?.source || "sportmonks_cache", {
+        cacheState: "hit",
+        fallbackTriggered: Boolean(payload?.body?.isFallback),
+      }),
+    });
+    return payload;
   }
 
   if (fixtureInflightStore.has(normalizedFixtureId)) {
@@ -471,7 +667,12 @@ export async function getFixturePayload(fixtureId) {
 
   const requestPromise = (async () => {
     try {
-      const rawFixture = await fetchSportmonksFixtureById(normalizedFixtureId);
+      const rawFixture = await fetchSportmonksFixtureById(normalizedFixtureId, {
+        route: "/api/football/fixtures/[fixtureId]",
+        requestPurpose: "fixture_detail",
+        dtoTarget: "MatchDetailCoreDTO",
+        dtoVersion: "v1",
+      });
       const participants = Array.isArray(rawFixture?.participants) ? rawFixture.participants : [];
       const homeParticipant =
         participants.find(
@@ -484,9 +685,27 @@ export async function getFixturePayload(fixtureId) {
             String(entry?.location || entry?.meta?.location || "").toLowerCase() === "away"
         ) || participants.find((entry) => entry?.id !== homeParticipant?.id) || participants[1] || null;
       const [standingsResult, homeSquadResult, awaySquadResult] = await Promise.allSettled([
-        fetchSportmonksSeasonStandings(rawFixture?.season?.id || rawFixture?.season_id),
-        fetchSportmonksTeamSquad(homeParticipant?.id),
-        fetchSportmonksTeamSquad(awayParticipant?.id),
+        fetchSportmonksSeasonStandings(rawFixture?.season?.id || rawFixture?.season_id, {
+          route: "/api/football/fixtures/[fixtureId]",
+          requestPurpose: "fixture_detail_standings",
+          fixtureId: normalizedFixtureId,
+          dtoTarget: "MatchDetailEnrichedDTO",
+          dtoVersion: "v1",
+        }),
+        fetchSportmonksTeamSquad(homeParticipant?.id, {
+          route: "/api/football/fixtures/[fixtureId]",
+          requestPurpose: "fixture_detail_squad_home",
+          fixtureId: normalizedFixtureId,
+          dtoTarget: "MatchDetailEnrichedDTO",
+          dtoVersion: "v1",
+        }),
+        fetchSportmonksTeamSquad(awayParticipant?.id, {
+          route: "/api/football/fixtures/[fixtureId]",
+          requestPurpose: "fixture_detail_squad_away",
+          fixtureId: normalizedFixtureId,
+          dtoTarget: "MatchDetailEnrichedDTO",
+          dtoVersion: "v1",
+        }),
       ]);
       const enrichedFixture = {
         ...rawFixture,
@@ -497,6 +716,7 @@ export async function getFixturePayload(fixtureId) {
         },
       };
       const normalizedFixture = normalizeSportmonksFixture(enrichedFixture);
+      const normalizeMs = Date.now() - startedAt;
       const updatedAt = Date.now();
 
       fixtureCacheStore.set(normalizedFixtureId, {
@@ -506,15 +726,41 @@ export async function getFixturePayload(fixtureId) {
         updatedAt,
       });
 
-      return buildFixturePayload({
+      const payload = buildFixturePayload({
         normalizedFixture,
         rawFixture: enrichedFixture,
         source: "sportmonks_api",
         updatedAt,
       });
+      logFootballServiceTelemetry({
+        route: "/api/football/fixtures/[fixtureId]",
+        requestPurpose: "fixture_detail",
+        days: null,
+        fixtureId: normalizedFixtureId,
+        cacheHit: false,
+        cacheState: "miss",
+        providerLatencyMs: null,
+        pagesFetched: null,
+        itemsFetched: 1,
+        payloadBytes: payload ? JSON.stringify(payload).length : 0,
+        normalizeMs,
+        e2eMs: Date.now() - startedAt,
+        fallbackTriggered: Boolean(payload?.body?.isFallback),
+        retryCount: 0,
+        dtoTarget: "MatchDetailCoreDTO",
+        dtoVersion: "v1",
+        providerEndpoint: "fixtures/{fixtureId}",
+        includeSet: null,
+        estimatedCallCost: 3,
+        source: mapTelemetrySource(payload?.body?.source || "sportmonks_api", {
+          cacheState: "miss",
+          fallbackTriggered: Boolean(payload?.body?.isFallback),
+        }),
+      });
+      return payload;
     } catch (error) {
       if (cachedEntry) {
-        return buildFixturePayload({
+        const stalePayload = buildFixturePayload({
           normalizedFixture: cachedEntry.normalizedFixture,
           rawFixture: cachedEntry.rawFixture,
           provider: cachedEntry.provider,
@@ -524,12 +770,66 @@ export async function getFixturePayload(fixtureId) {
             ? "Rate limit Sportmonks raggiunto. Mostro l'ultima fixture disponibile dalla cache provider."
             : error.message || "Fixture provider non aggiornata. Mostro l'ultima versione in cache.",
         });
+        logFootballServiceTelemetry({
+          route: "/api/football/fixtures/[fixtureId]",
+          requestPurpose: "fixture_detail",
+          days: null,
+          fixtureId: normalizedFixtureId,
+          cacheHit: true,
+          cacheState: "stale-hit",
+          providerLatencyMs: null,
+          pagesFetched: null,
+          itemsFetched: stalePayload?.body?.fixture ? 1 : 0,
+          payloadBytes: stalePayload ? JSON.stringify(stalePayload).length : 0,
+          normalizeMs: null,
+          e2eMs: Date.now() - startedAt,
+          fallbackTriggered: true,
+          retryCount: 0,
+          dtoTarget: "MatchDetailCoreDTO",
+          dtoVersion: "v1",
+          providerEndpoint: "fixtures/{fixtureId}",
+          includeSet: null,
+          estimatedCallCost: null,
+          source: mapTelemetrySource("sportmonks_cache", {
+            cacheState: "stale-hit",
+            fallbackTriggered: true,
+          }),
+          error: error?.message || "unknown_error",
+        });
+        return stalePayload;
       }
 
-      return buildEmptyFixturePayload(
+      const emptyPayload = buildEmptyFixturePayload(
         normalizedFixtureId,
         error.message || `Fixture ${normalizedFixtureId} non disponibile con il feed corrente.`
       );
+      logFootballServiceTelemetry({
+        route: "/api/football/fixtures/[fixtureId]",
+        requestPurpose: "fixture_detail",
+        days: null,
+        fixtureId: normalizedFixtureId,
+        cacheHit: false,
+        cacheState: "miss",
+        providerLatencyMs: null,
+        pagesFetched: null,
+        itemsFetched: 0,
+        payloadBytes: emptyPayload ? JSON.stringify(emptyPayload).length : 0,
+        normalizeMs: null,
+        e2eMs: Date.now() - startedAt,
+        fallbackTriggered: true,
+        retryCount: 0,
+        dtoTarget: "MatchDetailCoreDTO",
+        dtoVersion: "v1",
+        providerEndpoint: "fixtures/{fixtureId}",
+        includeSet: null,
+        estimatedCallCost: null,
+        source: mapTelemetrySource("provider_unavailable", {
+          cacheState: "miss",
+          fallbackTriggered: true,
+        }),
+        error: error?.message || "unknown_error",
+      });
+      return emptyPayload;
     } finally {
       fixtureInflightStore.delete(normalizedFixtureId);
     }
