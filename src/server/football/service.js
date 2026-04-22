@@ -161,7 +161,19 @@ function compactScheduleRawPayload(rawSchedules = null) {
     fixturesCount: Array.isArray(rawSchedules.fixtures) ? rawSchedules.fixtures.length : 0,
     sampleFixture:
       process.env.NODE_ENV === "development" && Array.isArray(rawSchedules.fixtures)
-        ? rawSchedules.fixtures[0] || null
+        ? {
+            id: rawSchedules.fixtures[0]?.id ?? null,
+            league:
+              rawSchedules.fixtures[0]?.league?.name ||
+              rawSchedules.fixtures[0]?.league_name ||
+              null,
+            hasOdds: Array.isArray(rawSchedules.fixtures[0]?.odds)
+              ? rawSchedules.fixtures[0].odds.length > 0
+              : Boolean(rawSchedules.fixtures[0]?.odds),
+            hasPredictions: Array.isArray(rawSchedules.fixtures[0]?.predictions)
+              ? rawSchedules.fixtures[0].predictions.length > 0
+              : Boolean(rawSchedules.fixtures[0]?.predictions),
+          }
         : null,
   };
 }
@@ -364,7 +376,7 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
       fallbackTriggered: Boolean(cachedPayload?.isFallback),
       retryCount: 0,
       dtoTarget: "ScheduleCardDTO",
-      dtoVersion: "v1",
+      dtoVersion: "v2",
       providerEndpoint: "fixtures/between/{start}/{end}",
       includeSet: null,
       estimatedCallCost: cachedPayload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
@@ -386,7 +398,7 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
         route: "/api/football/schedules/window",
         requestPurpose: "schedule_window",
         dtoTarget: "ScheduleCardDTO",
-        dtoVersion: "v1",
+        dtoVersion: "v2",
       });
       const normalizedMatches = sortMatchesByFeaturedPriority(
         rawSchedules.fixtures.map(normalizeSportmonksScheduleMatch)
@@ -427,7 +439,7 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
         fallbackTriggered: Boolean(payload?.isFallback),
         retryCount: 0,
         dtoTarget: "ScheduleCardDTO",
-        dtoVersion: "v1",
+        dtoVersion: "v2",
         providerEndpoint: "fixtures/between/{start}/{end}",
         includeSet: null,
         estimatedCallCost: payload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
@@ -466,7 +478,7 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
           fallbackTriggered: true,
           retryCount: 0,
           dtoTarget: "ScheduleCardDTO",
-          dtoVersion: "v1",
+          dtoVersion: "v2",
           providerEndpoint: "fixtures/between/{start}/{end}",
           includeSet: null,
           estimatedCallCost: stalePayload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
@@ -503,7 +515,7 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
         fallbackTriggered: true,
         retryCount: 0,
         dtoTarget: "ScheduleCardDTO",
-        dtoVersion: "v1",
+        dtoVersion: "v2",
         providerEndpoint: "fixtures/between/{start}/{end}",
         includeSet: null,
         estimatedCallCost: null,

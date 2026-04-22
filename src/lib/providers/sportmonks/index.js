@@ -74,34 +74,26 @@ function logFootballProviderTelemetry(payload = {}) {
  * | Include            | Uso in pagina |
  * |--------------------|---------------|
  * | `league`           | Nome competizione, logo (`league_media`) |
- * | `season`           | Contesto stagione (normalizzazione / catalogo) |
- * | `stage`, `round`   | Contesto turno/giornata |
  * | `state`            | Stato partita (PRE/LIVE/FT…) |
  * | `participants`     | Nomi squadre, loghi, form abbreviata (`home`/`away`, media) |
- * | `venue`            | Stadio (copertura / dettaglio leggero) |
  * | `scores`           | Risultato se già disponibile |
- * | `odds.bookmaker`   | Quote 1X2, O/U, GG, bookmaker → card, value, comparatore implicito |
+ * | `odds`             | Quote 1X2, O/U, GG utili per card/value |
  * | `predictions.type` | Probabilità 1X2 / score modello Sportmonks |
  * | `statistics.type`  | Copertura statistiche (confidence / badge coverage) |
- * | `metadata`         | Metadati fixture (es. prenotifiche piano / predictable) |
  *
- * Non inclusi qui (peso inutile sulla lista): `lineups`, `formations`, `events`, `pressure` → dettaglio match o endpoint dedicati.
+ * Non inclusi qui (peso inutile sulla lista): `season`, `stage`, `round`, `venue`,
+ * `lineups`, `formations`, `events`, `pressure`, `metadata`, `odds.bookmaker`.
  *
  * @see https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date-range.md
  */
 export const SPORTMONKS_SCHEDULE_PREMATCH_INCLUDES = [
   "league",
-  "season",
-  "stage",
-  "round",
   "state",
   "participants",
-  "venue",
   "scores",
-  "odds.bookmaker",
+  "odds",
   "predictions.type",
   "statistics.type",
-  "metadata",
 ];
 
 /**
@@ -3122,7 +3114,54 @@ function normalizeScheduleLikeFixture(fixture = {}) {
 }
 
 export function normalizeSportmonksScheduleMatch(fixture = {}) {
-  return normalizeScheduleLikeFixture(fixture);
+  const normalizedFixture = normalizeScheduleLikeFixture(fixture);
+
+  return {
+    id: normalizedFixture.id,
+    sportEventId: normalizedFixture.sportEventId,
+    home: normalizedFixture.home,
+    homeShort: normalizedFixture.homeShort,
+    away: normalizedFixture.away,
+    awayShort: normalizedFixture.awayShort,
+    league: normalizedFixture.league,
+    date: normalizedFixture.date,
+    time: normalizedFixture.time,
+    kickoff_at: normalizedFixture.kickoff_at,
+    status: normalizedFixture.status,
+    state: normalizedFixture.state,
+    coverage: normalizedFixture.coverage,
+    competition: normalizedFixture.competition || null,
+    prob: normalizedFixture.prob,
+    odds: normalizedFixture.odds,
+    ou: normalizedFixture.ou,
+    gg: normalizedFixture.gg,
+    ouProb: normalizedFixture.ouProb,
+    ggProb: normalizedFixture.ggProb,
+    xg: normalizedFixture.xg,
+    valueBet: normalizedFixture.valueBet,
+    valueBetSource: normalizedFixture.valueBetSource,
+    valueMarkets: normalizedFixture.valueMarkets
+      ? {
+          primary: normalizedFixture.valueMarkets.primary || null,
+          modelOdds: normalizedFixture.valueMarkets.modelOdds || null,
+        }
+      : null,
+    modelOdds: normalizedFixture.modelOdds,
+    modelOddsOu: normalizedFixture.modelOddsOu,
+    modelOddsGg: normalizedFixture.modelOddsGg,
+    scores: normalizedFixture.scores,
+    confidence: normalizedFixture.confidence,
+    confidence_source: normalizedFixture.confidence_source,
+    reliability_score: normalizedFixture.reliability_score,
+    badges: normalizedFixture.badges,
+    prediction_provider: normalizedFixture.prediction_provider,
+    odds_provider: normalizedFixture.odds_provider,
+    provider_ids: normalizedFixture.provider_ids,
+    home_media: normalizedFixture.home_media,
+    away_media: normalizedFixture.away_media,
+    league_media: normalizedFixture.league_media,
+    apiLoaded: true,
+  };
 }
 
 export function normalizeSportmonksFixture(fixture = {}) {
@@ -3316,7 +3355,7 @@ export async function fetchSportmonksScheduleWindow(
   days = SPORTMONKS_DEFAULT_SCHEDULE_DAYS,
   telemetry = {}
 ) {
-  const safeDays = clampInteger(days, SPORTMONKS_DEFAULT_SCHEDULE_DAYS, 1, 30);
+  const safeDays = clampInteger(days, SPORTMONKS_DEFAULT_SCHEDULE_DAYS, 1, 7);
   /** Quante pagine scaricare al massimo (50 fixture/pagina). Prima era fisso a 10 → solo 500 match: molte leghe potevano mancare. */
   const scheduleMaxPages = clampInteger(process.env.SPORTMONKS_SCHEDULE_MAX_PAGES, 80, 1, 200);
   const fromDate = new Date();
