@@ -37,7 +37,7 @@ Client unificato: `src/api/football.js` (coalescing inflight su stessa URL, ness
 
 - `src/server/football/service.js` — `getScheduleWindowPayload`, `getFixturePayload`, costanti di mappa provider (dashboard/modelli, dettagli), matrice **fallback policy** e ordine di implementazione documentati come export (riferimento per contratti e scope).
 
-- `src/lib/providers/sportmonks/index.js` — chiamate HTTP, include per scope (list, detail core, enrichment, live), denylist include invalidi, normalizzazione, telemetria richieste (tagging purpose/route).
+- `src/lib/providers/sportmonks/index.js` — chiamate HTTP, include per scope (list, detail core, enrichment), denylist include invalidi, normalizzazione, telemetria richieste (tagging purpose/route).
 
 ---
 

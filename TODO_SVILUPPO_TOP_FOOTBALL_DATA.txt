@@ -1,11 +1,11 @@
-TOP FOOTBALL DATA
+﻿TOP FOOTBALL DATA
 TODO SVILUPPO OPERATIVO
 
 Data aggiornamento: 2026-04-22
-Stato documento: allineato al codice, al documento cliente «Funzioni piattaforma» e al layer football (vedi sotto)
+Stato documento: allineato al codice, al documento cliente Â«Funzioni piattaformaÂ» e al layer football (vedi sotto)
 
 ====================================================================
-FOOTBALL API LAYER — STATUS (AGGIORNAMENTO 2026-04-22)
+FOOTBALL API LAYER â€” STATUS (AGGIORNAMENTO 2026-04-22)
 ====================================================================
 
 Documento tecnico unificato: docs/football-api-layer.md
@@ -26,10 +26,10 @@ DONE (football / feed list + detail, senza lavori performance architetturale):
 - SPORTMONKS_SCHEDULE_LEAGUE_IDS e SPORTMONKS_SCHEDULE_MAX_PAGES documentate come override/costo
 
 IN PROGRESS (nessun task football bloccante codificato qui):
-- n/a — implementazione performance feed non ancora iniziata in questo tracciato
+- n/a â€” implementazione performance feed non ancora iniziata in questo tracciato
 
-NEXT (prossima priorita football — da roadmap tecnica, non from-scratch API):
-- P0: rendere il feed 7 giorni "veloce a freddo" — snapshot normalizzato in store condiviso, chiave
+NEXT (prossima priorita football â€” da roadmap tecnica, non from-scratch API):
+- P0: rendere il feed 7 giorni "veloce a freddo" â€” snapshot normalizzato in store condiviso, chiave
   versionata policy, SWR fresh/stale/hard-expired, lock anti-stampede, stale-if-error, prewarm
   stesso builder del runtime (piano: feed_7_giorni_velocissimo_vfinale.plan.md)
 
@@ -52,14 +52,13 @@ LINEE GUIDA (COSA E' IL PROGETTO ORA)
   rimossi; quote e comparatore restano da costruire sopra Sportmonks (e UI interna).
 - ID canonico match: fixture id Sportmonks (`/match/[id]`, API fixtures, watchlist/search).
 - Health (`GET /api/health`): readiness su MongoDB, Stripe e `providers.sportmonks` soltanto.
-- `GET /api/football/odds/futures`: ancora placeholder fino a integrazione outrights Sportmonks.
-- Dati Live (pagina `/dati-live`, nav, fetch livescore su altre schermate): controllati da
-  `NEXT_PUBLIC_FEATURE_DATI_LIVE=true` (vedi `src/lib/feature-flags.js` e README). Default spento.
+- Endpoint futures/outrights rimosso: verra ricreato solo quando ci sara una integrazione Sportmonks reale.
+- Dati Live / livescore rimossi dal frontend e dal layer API: si ricreano solo con una decisione prodotto esplicita.
 - Immagini Sportmonks (loghi / foto): implementate end-to-end su provider+domain+UI (`FootballMediaImage`,
   campi `home_media` / `away_media` / `league_media` e `player.media`). Base CDN configurabile con
   `SPORTMONKS_MEDIA_BASE_URL`. Le schermate non devono leggere oggetti raw provider per le immagini.
-  Contrasto dark mode: le immagini remote usano di default un “mat” chiaro (fondo bianco / zinc-100 in dark)
-  + padding interno, così loghi scuri o asset per sfondo chiaro restano leggibili; prop opzionale
+  Contrasto dark mode: le immagini remote usano di default un â€œmatâ€ chiaro (fondo bianco / zinc-100 in dark)
+  + padding interno, cosÃ¬ loghi scuri o asset per sfondo chiaro restano leggibili; prop opzionale
   `surface="none"` su `FootballMediaImage` se serve eccezione.
 - Area pubblica marketing (aprile 2026): completata con landing unica `/come-funziona` come hub principale
   (sezioni Funzioni, Vantaggi, Premium, Telegram, FAQ) e menu ad anchor interni sticky. Rimosse le pagine
@@ -74,7 +73,7 @@ LINEE GUIDA (COSA E' IL PROGETTO ORA)
   mantenute via redirect verso `/legal/*`.
 
 ====================================================================
-ALLINEAMENTO DOCUMENTO CLIENTE — FUNZIONI PIATTAFORMA (2026)
+ALLINEAMENTO DOCUMENTO CLIENTE â€” FUNZIONI PIATTAFORMA (2026)
 ====================================================================
 
 - Requisiti strutturati: `docs/cliente/funzioni-piattaforma.md` (markdown; il .docx in root resta
@@ -96,21 +95,21 @@ Stato Sezione A (SAFE, implementato ora):
 
 Sintesi macro (da negoziare sul contratto Sportmonks e sul backlog):
 
-A — Modelli / singolo match — Prediction API + quote live; probabilita e quota modello; value;
+A â€” Modelli / singolo match â€” Prediction API + quote pre-match; probabilita e quota modello; value;
    comparatore a 4 slot + CTA affiliazione (copy legale); xG e tre risultati esatti piu probabili;
-   barre di confidenza; formazioni verso Reliability score; toggle «solo Value Bet»; grafico
+   barre di confidenza; formazioni verso Reliability score; toggle Â«solo Value BetÂ»; grafico
    Pressure Index.
 
-B — Analisi statistica deep — Formazioni aggiornate (~60 min), impact player (penalita se assenti
+B â€” Analisi statistica deep â€” Formazioni aggiornate (~60 min), impact player (penalita se assenti
    titolari chiave); player props (tiri, xG, heatmap se API, disciplina); momentum, xPts, pressure,
-   tempi di rete; tab SPA (Formazioni / Player stats / Team Momentum); comparatore «intelligente»
+   tempi di rete; tab SPA (Formazioni / Player stats / Team Momentum); comparatore Â«intelligenteÂ»
    sul tab (es. marcatore vs ammoniti); lazy loading quote al click sul giocatore.
 
-C — Bet multipla — Orchestratore edge/EV su 3-4 eventi con soglie; UI confidence / Data edge /
-   probabilita di successo; sostituire placeholder futures; notifiche (Telegram/push) su EV > soglia;
+C â€” Bet multipla â€” Orchestratore edge/EV su 3-4 eventi con soglie; UI confidence / Data edge /
+   probabilita di successo; creare endpoint futures solo se supportato da feed reale; notifiche (Telegram/push) su EV > soglia;
    pagina performance storiche (ROI) e sintesi canale Telegram.
 
-D — Trasversali — Copy CTA conforme (alternativa a «Gioca ora» se richiesto); GEO/SEO; allineamento
+D â€” Trasversali â€” Copy CTA conforme (alternativa a Â«Gioca oraÂ» se richiesto); GEO/SEO; allineamento
    Premium/MultiBet alle feature vendute; area pubblica/marketing se in scope.
 
 ====================================================================
@@ -125,36 +124,34 @@ ARCHITETTURA RILEVANTE (PUNTATORI)
 - Documentazione layer football: `docs/football-api-layer.md`
 - Env opzionali feed: `SPORTMONKS_SCHEDULE_LEAGUE_IDS` (override allowlist), `SPORTMONKS_SCHEDULE_MAX_PAGES`,
   `DEBUG_FOOTBALL_TELEMETRY` (vedi tabella in docs/football-api-layer.md; nessun process.env
-  `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT` — solo testo in notice lato service)
+  `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT` â€” solo testo in notice lato service)
 - Shell/UI: `src/app/layout.jsx`, `src/components/layout/*`, schermate in `src/screens/*`
 - Probabilita O/U e GG (schedule/match): calcolo in `src/lib/providers/sportmonks/index.js`
-  — priorita (1) predizioni API yes/no se presenti, (2) percentuali modello derivato `buildGoalMarkets`
+  â€” priorita (1) predizioni API yes/no se presenti, (2) percentuali modello derivato `buildGoalMarkets`
   (`ouProbDerived` / `ggProbDerived`, stesse formule delle quote derivate), (3) implicite da quote
   bookmaker (`100/quota`), (4) fallback implicite sulle quote mostrate. Campi payload: `ouProb`, `ggProb`.
 - Value bet (UI): `src/components/shared/ValueBetBadge.jsx`; dato mostrato da `buildDerivedValueBet` in
-  `sportmonks/index.js` (euristica interna) — non e l'API ufficiale Sportmonks "Value bets".
+  `sportmonks/index.js` (euristica interna) â€” non e l'API ufficiale Sportmonks "Value bets".
 - Value bet Sportmonks ufficiale: add-on Predictions; endpoint `predictions/value-bets` e
   `predictions/value-bets/fixtures/{id}` (fair_odd, odd, bookmaker, is_value, stake). Vedi
   https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions/value-bet
-  — integrazione futura quando il piano cliente lo consente.
+  â€” integrazione futura quando il piano cliente lo consente.
 - Toaster: `src/components/ui/toast.jsx` usa `pointer-events-none` su viewport/provider per non
   bloccare click su navbar/header (`z` toast sopra la barra).
-- Live odds UI (griglia da props, non brand esterno): `src/components/live/LiveOddsGrid.jsx`
 - Auth/account: `src/app/api/auth`, `src/lib/auth-*.js`, API `/api/account/*`
 - Documentazione operativa sintetica: `README.md`
-- Feature flag: `src/lib/feature-flags.js`
 
 ====================================================================
 CRONOLOGIA SINTETICA (MIGRAZIONI GIA' FATTE)
 ====================================================================
 
-Fase iniziale — hardening e real-feed-first
+Fase iniziale â€” hardening e real-feed-first
 - Health, billing, domain layer; mock tolti dai percorsi core; provenance/freshness in UI.
 
 Migrazione Sportmonks-first (core)
-- Schedule, fixture, live, statistiche, lineups, standings, coaches/referees/formations, squad,
-  pre-match odds (in base al piano); incremental live (`inplay` + `latest` dove previsto).
-- Canonical ids Sportmonks; dashboard/modelli/dati live/match detail/search/watchlist riallineati.
+- Schedule, fixture, statistiche, lineups, standings, coaches/referees/formations, squad,
+  pre-match odds (in base al piano).
+- Canonical ids Sportmonks; dashboard/modelli/match detail/search/watchlist riallineati.
 
 Pass UX / shell
 - Ranking per priority league ids; calendario globale di default con filtro leghe opzionale;
@@ -165,28 +162,25 @@ Auth e account
 - Persistenza DB: profilo, preferenze, watchlist, following; pagine `/preferiti`, `/seguiti`;
   `/watchlist` redirect legacy.
 
-Aprile 2026 — pulizia provider
+Aprile 2026 â€” pulizia provider
 - Rimozione completa dipendenze e codice Sportradar (inclusi artefatti `.api` collegati).
-- Rimozione stub OddsMatrix; health/catalog solo Sportmonks; UI `LiveOddsGrid` + copy MultiBet/doc
+- Rimozione stub OddsMatrix; health/catalog solo Sportmonks; copy MultiBet/doc
   allineati a "solo Sportmonks" per quote/comparatore.
 
-Aprile 2026 — roadmap step 1 (feature flag Dati Live)
-- Variabile `NEXT_PUBLIC_FEATURE_DATI_LIVE` (solo `true` abilita): `src/lib/feature-flags.js`.
-- `src/middleware.js`: con flag spento redirect `/dati-live` -> `/dashboard`.
-- Navbar, Dashboard, Modelli predittivi, Landing: niente `getLivescoresInplay` se flag spento; meno
-  hit a `GET /api/football/livescores/inplay`. Default senza env = spento (ok anche senza variabile su Vercel).
-- Riattivazione prodotto: env `true` + redeploy su Vercel (vedi README).
+Aprile 2026 — rimozione livescore non prioritario
+- Rimossi route /api/football/livescores/inplay, pagina /dati-live, feature flag, middleware e UI live.
+- Il layer football resta limitato a schedule window e fixture detail.
 
-Aprile 2026 — probabilita O/U-GG, value bet, UX shell
+Aprile 2026 â€” probabilita O/U-GG, value bet, UX shell
 - Normalizer Sportmonks: `extractPredictionBundle` espone `ouProb`/`ggProb` da yes/no API; `buildGoalMarkets`
   espone anche `ouProbDerived`/`ggProbDerived`; `resolveScheduleOuGgProbabilities` unifica API / derivato /
   implicite bookmaker. Match card e match detail mostrano % quando disponibili (`MatchCard.jsx`,
-  `MatchDetail.jsx` sezione “Probabilita e quote”).
+  `MatchDetail.jsx` sezione â€œProbabilita e quoteâ€).
 - Badge value bet: stile chip sobrio, `aria-label`/`title` esplicativi.
 - Toast layer: fix click header intercettati da viewport toast (`pointer-events-none` + toast `pointer-events-auto`).
 - Layout globale: `overflow-x` / `max-w-full` su shell e body; Landing/login responsive; dropdown nav `100dvw`.
 
-Aprile 2026 — UI PageIntro, value display, roadmap cliente
+Aprile 2026 â€” UI PageIntro, value display, roadmap cliente
 - Componenti condivisi PageIntro/FeedMetaPanel; value-bet-display; pass su piu schermate.
 - Documentazione: `docs/cliente/funzioni-piattaforma.md`; piano `.cursor/plans/roadmap_funzioni_piattaforma_2026.plan.md`.
 
@@ -195,16 +189,14 @@ STATO ATTUALE (VERITA' OPERATIVA)
 ====================================================================
 
 - Build e lint: attesi verdi su main dopo le ultime modifiche.
-- Dati Live: visibilita e fetch livescore governati dal flag (default off); su Vercel la variabile
-  e opzionale finche la funzione resta spenta.
 - Core calcio: Sportmonks reale; nessun secondo provider football nel repo.
 - Feed schedule 7 giorni: end-point e allowlist ok; lentezza a freddo e variabilita per istanza/TTL
-  memory ancora aperti — prossima leva: cache condivisa (vedi sezione FOOTBALL API LAYER sopra).
+  memory ancora aperti â€” prossima leva: cache condivisa (vedi sezione FOOTBALL API LAYER sopra).
 - Odds: pre-match Sportmonks integrate dove il piano e gli include lo consentono; comparatore 4 slot,
-  mercati giocatore, live odds multi-bookmaker come da documento cliente restano in larga parte da
+  mercati giocatore e comparatore avanzato come da documento cliente restano in larga parte da
   implementare o espandere.
 - Value bet UI: `buildDerivedValueBet` (euristica prob/xG); per allineamento a value Sportmonks ufficiale
-  servono endpoint value-bets (add-on Predictions) o copy esplicito «modello interno».
+  servono endpoint value-bets (add-on Predictions) o copy esplicito Â«modello internoÂ».
 - Premium: Stripe checkout/portal presenti; gating e persistenza utente vanno consolidati
   end-to-end in produzione (Mongo stabile, webhook, entitlement).
 - MongoDB: in locale spesso TLS/SSL in health; impatta premium e dati non-auth se Atlas non e ok;
@@ -213,21 +205,21 @@ STATO ATTUALE (VERITA' OPERATIVA)
   `lineups.xGLineup`, `statistics.type`, mercati player) rispetto al contratto reale.
 
 ====================================================================
-GAP APERTI (SINTESI) — ALLINEATI AL DOCUMENTO CLIENTE
+GAP APERTI (SINTESI) â€” ALLINEATI AL DOCUMENTO CLIENTE
 ====================================================================
 
-1. Sez. A — Modelli singolo match: prediction/value come da brief; comparatore 4 slot + CTA;
+1. Sez. A â€” Modelli singolo match: prediction/value come da brief; comparatore 4 slot + CTA;
    xG/score; UI confidenza, Reliability da formazioni, toggle Value, Pressure Index.
-2. Sez. B — Analisi: modulo tattico/formazioni, impact player, tab e comparatore context-aware;
+2. Sez. B â€” Analisi: modulo tattico/formazioni, impact player, tab e comparatore context-aware;
    player props e lazy load quote; dipendenza forte da include/API SM.
-3. Sez. C — Multipla: motore edge/EV, soglie, UI metriche; sostituire placeholder `odds/futures`;
+3. Sez. C â€” Multipla: motore edge/EV, soglie, UI metriche; creare endpoint futures solo con integrazione reale;
    notifiche EV; storico ROI e pipeline Telegram.
-4. Sez. D — Copy CTA legale; GEO/SEO; Premium e messaggistica coerenti con le feature reali.
-5. Contratto Sportmonks — matrice feature -> endpoint -> add-on (`docs/sportmonks-matrix.md` da creare;
+4. Sez. D â€” Copy CTA legale; GEO/SEO; Premium e messaggistica coerenti con le feature reali.
+5. Contratto Sportmonks â€” matrice feature -> endpoint -> add-on (`docs/sportmonks-matrix.md` da creare;
    vedi todo `debt-sportmonks-contract` nel file roadmap).
-6. Premium / account — entitlement server-side, Mongo produzione, webhook Stripe validati.
-7. Area utenti — middleware/guard coerenti, OAuth Google stabile in deploy, admin evoluto.
-8. Alerting — following persistito; estendere a worker Telegram/push con dedup e soglie EV come da brief.
+6. Premium / account â€” entitlement server-side, Mongo produzione, webhook Stripe validati.
+7. Area utenti â€” middleware/guard coerenti, OAuth Google stabile in deploy, admin evoluto.
+8. Alerting â€” following persistito; estendere a worker Telegram/push con dedup e soglie EV come da brief.
 
 ====================================================================
 INPUT NECESSARI DAL TEAM
@@ -238,17 +230,17 @@ INPUT NECESSARI DAL TEAM
   mercati odds giocatore (marcatori, ammoniti) per la sez. B.
 - Se si vuole il **value bet come Sportmonks**: add-on **Predictions** attivo e integrazione endpoint
   `predictions/value-bets` (vedi doc ufficiale SM); oggi il prodotto usa solo `buildDerivedValueBet`.
-- Link affiliazione bookmaker e vincoli legali sul testo CTA (alternativa a «Gioca ora»).
+- Link affiliazione bookmaker e vincoli legali sul testo CTA (alternativa a Â«Gioca oraÂ»).
 - Stringa MongoDB valida per staging/produzione; strategia TLS/certificati.
 - Webhook secret Stripe e price id definitivi.
 - Scope V1 free vs premium e messaggistica prodotto.
 - Credenziali Google OAuth produzione (`GOOGLE_*`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`).
 
 ====================================================================
-DEFINITION OF DONE — "CORE SPORTMONKS" (RIFERIMENTO)
+DEFINITION OF DONE â€” "CORE SPORTMONKS" (RIFERIMENTO)
 ====================================================================
 
-- Preview con match reali Sportmonks su dashboard/modelli/dati live.
+- Preview con match reali Sportmonks su dashboard/modelli.
 - Fixture detail con dati agganciati (standings, coaches, squads, pre-match odds se in piano).
 - `/api/health` con `sportmonks` ready; `/match/<sportmonksFixtureId>` end-to-end.
 - Search/watchlist con fixture id Sportmonks; build e lint verdi.
@@ -256,22 +248,22 @@ DEFINITION OF DONE — "CORE SPORTMONKS" (RIFERIMENTO)
   `docs/cliente/funzioni-piattaforma.md`, roadmap `.cursor/plans/roadmap_funzioni_piattaforma_2026.plan.md`.
 
 ====================================================================
-BACKLOG — PROSSIME COSE (PRIORITA')
+BACKLOG â€” PROSSIME COSE (PRIORITA')
 ====================================================================
 
-P0. Performance feed 7 giorni (store condiviso, SWR, prewarm) — vedi
+P0. Performance feed 7 giorni (store condiviso, SWR, prewarm) â€” vedi
     .cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md e docs/football-api-layer.md
 P0. Consolidare area utenti e permessi (come prima).
 P0. Validare piano Sportmonks vs tabella in roadmap (add-on, include, mercati player).
 
-P1. Sez. A (modelli) — value/comparatore 1X2/U-O/GG solidi; poi 4 slot, toggle Value, Pressure chart.
+P1. Sez. A (modelli) â€” value/comparatore 1X2/U-O/GG solidi; poi 4 slot, toggle Value, Pressure chart.
 P1. Comparatore globale / contesto match in shell (vedi todo `comparator-shell-global` in roadmap).
 
-P2. Sez. B — tab analisi, lazy load, mercati giocatore quando API disponibili.
+P2. Sez. B â€” tab analisi, lazy load, mercati giocatore quando API disponibili.
 P2. Watchlist / following E2E (persistenza, edge case fuori finestra schedule).
 
-P3. Sez. C — orchestratore EV + futures reali + notifiche + performance storiche (Mongo + worker).
-P3. MongoDB produzione — TLS stabile; tempi bootstrap accettabili.
+P3. Sez. C â€” orchestratore EV + futures reali + notifiche + performance storiche (Mongo + worker).
+P3. MongoDB produzione â€” TLS stabile; tempi bootstrap accettabili.
 
 P4. Telegram UI + worker; Premium/copy; area pubblica/marketing se in scope.
 
@@ -297,3 +289,5 @@ AGGIORNAMENTO DEMO TELEGRAM SENZA PREDICTIONS/ODDS
 - Non genera dati casuali e non usa fallback fake: legge il feed normalizzato del sito, inclusi i fallback gia dichiarati in UI.
 - Messaggio Telegram: elenco dei prossimi pronostici sopra soglia con partita, mercato, selezione, probabilita e quota modello.
 - Uso consigliato finche Sportmonks Predictions/Odds non sono abilitati.
+
+

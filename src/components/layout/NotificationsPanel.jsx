@@ -1,10 +1,9 @@
 import React from "react";
-import { Bell, Check, TrendingUp, Zap, Crown, BarChart2, Users } from "lucide-react";
+import { Bell, Check, TrendingUp, Crown, BarChart2, Users } from "lucide-react";
 import { useApp } from "@/lib/AppContext";
 
 const TYPE_CONFIG = {
   value_bet: { icon: TrendingUp, color: "text-primary", bg: "bg-primary/10" },
-  live_alert: { icon: Zap, color: "text-destructive", bg: "bg-destructive/10" },
   combo: { icon: Crown, color: "text-accent", bg: "bg-accent/10" },
   odds_drop: { icon: BarChart2, color: "text-blue-400", bg: "bg-blue-400/10" },
   lineup: { icon: Users, color: "text-green-400", bg: "bg-green-400/10" },

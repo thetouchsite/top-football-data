@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 import { Link } from "@/lib/router-compat";
 import { motion } from "framer-motion";
 import {
   TrendingUp, BarChart3, Zap, Send, Users, FileText, Heart, Check, Star
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getLivescoresInplay, getScheduleWindow } from "@/api/football";
+import { getScheduleWindow } from "@/api/football";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import LeadGuideForm from "@/components/public/LeadGuideForm";
 import { trackConversionEvent } from "@/components/public/conversion-events";
@@ -24,15 +23,14 @@ const PILLARS = [
   },
   {
     icon: Zap,
-    title: "Dati Live",
-    desc: "Analisi live in rollout progressivo",
+    title: "Match Detail",
+    desc: "Dettaglio partita con probabilita, quote e copertura dati",
   },
 ];
 
 export default function Landing() {
   const pillars = useMemo(() => PILLARS, []);
   const [landingMetrics, setLandingMetrics] = useState({
-    liveCount: 0,
     scheduleCount: 0,
     valueCount: 0,
   });
@@ -44,9 +42,6 @@ export default function Landing() {
     const loadLandingMetrics = async () => {
       try {
         const schedulePayload = await getScheduleWindow(7, { requester: "Landing" });
-        const livePayload = isDatiLiveFeatureEnabled()
-          ? await getLivescoresInplay()
-          : { matches: [] };
 
         if (!isActive) {
           return;
@@ -55,16 +50,12 @@ export default function Landing() {
         const scheduleMatches = Array.isArray(schedulePayload.matches)
           ? schedulePayload.matches
           : [];
-        const liveMatches = Array.isArray(livePayload.matches)
-          ? livePayload.matches
-          : [];
 
         setLandingMetrics({
-          liveCount: liveMatches.length,
           scheduleCount: scheduleMatches.length,
           valueCount: scheduleMatches.filter((match) => match.valueBet).length,
         });
-        setPreviewMatch(scheduleMatches[0] || liveMatches[0] || null);
+        setPreviewMatch(scheduleMatches[0] || null);
       } catch {}
     };
 
@@ -79,7 +70,7 @@ export default function Landing() {
     () => [
       { value: `+${landingMetrics.scheduleCount}`, label: "match in schedule", icon: Users },
       { value: `+${landingMetrics.valueCount}`, label: "value bet rilevati", icon: FileText },
-      { value: `+${landingMetrics.liveCount}`, label: "partite live", icon: Heart },
+      { value: "2", label: "endpoint football attivi", icon: Heart },
     ],
     [landingMetrics]
   );
@@ -140,11 +131,6 @@ export default function Landing() {
                 <div>
                   <h3 className="font-semibold text-foreground mb-1 flex items-center gap-2">
                     <span>{p.title}</span>
-                    {p.title === "Dati Live" && !isDatiLiveFeatureEnabled() && (
-                      <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                        In Arrivo
-                      </span>
-                    )}
                   </h3>
                   <p className="text-sm text-muted-foreground">{p.desc}</p>
                 </div>
@@ -240,7 +226,7 @@ export default function Landing() {
             </a>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            {["Analisi giornaliere", "Movimenti quote", "Insight live"].map((item, i) => (
+            {["Analisi giornaliere", "Movimenti quote", "Insight pre-match"].map((item, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
                 <Check className="w-4 h-4 text-primary" />
                 <span className="font-semibold text-foreground">{item}</span>

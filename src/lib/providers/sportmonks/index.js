@@ -244,50 +244,6 @@ const SPORTMONKS_FIXTURE_CORE_INCLUDE_ATTEMPTS = [
 
 const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDES = [...SPORTMONKS_INCLUDE_POLICY.detailEnrichmentAllowed];
 
-const SPORTMONKS_LIVE_INCLUDE_ATTEMPTS = [
-  [
-    "league",
-    "season",
-    "stage",
-    "round",
-    "state",
-    "participants",
-    "venue",
-    "scores",
-    "periods",
-    "events.type",
-    "statistics.type",
-    "lineups.details.type",
-    "predictions.type",
-    "expected.type",
-    "pressure",
-    "referees",
-    "coaches",
-    "formations",
-    "metadata",
-  ],
-  [
-    "league",
-    "season",
-    "round",
-    "state",
-    "participants",
-    "venue",
-    "scores",
-    "periods",
-    "events.type",
-    "statistics.type",
-    "lineups.details.type",
-    "predictions.type",
-    "expected.type",
-    "referees",
-    "coaches",
-    "formations",
-    "metadata",
-  ],
-  ["league", "season", "round", "state", "participants", "venue", "scores", "events.type"],
-];
-
 export const SPORTMONKS_PROVIDER_ID = "sportmonks";
 export const SPORTMONKS_DEFAULT_SCHEDULE_DAYS = clampInteger(
   process.env.SPORTMONKS_SCHEDULE_DAYS,
@@ -2474,87 +2430,6 @@ function normalizeSportmonksEvent(entry, homeParticipant, awayParticipant) {
   };
 }
 
-function buildDangerPackage(homeName, awayName, score, stats, minute) {
-  const homePressure =
-    stats.dangerousAttacks.home * 1.25 +
-    stats.shotsOnTarget.home * 6 +
-    stats.corners.home * 2 +
-    (stats.possession.home - 50);
-  const awayPressure =
-    stats.dangerousAttacks.away * 1.25 +
-    stats.shotsOnTarget.away * 6 +
-    stats.corners.away * 2 +
-    (stats.possession.away - 50);
-  const dominantTeam = homePressure >= awayPressure ? homeName : awayName;
-  const dominantPressure = Math.max(homePressure, awayPressure);
-  const dangerIndex = Math.min(
-    95,
-    Math.max(
-      18,
-      Math.round(22 + dominantPressure * 0.75 + Math.max(score.home, score.away) * 6 + minute * 0.15)
-    )
-  );
-
-  let dangerMessage =
-    "Partita ancora sotto controllo, senza un accumulo forte di pressione offensiva.";
-
-  if (dangerIndex >= 70) {
-    dangerMessage = `Alta pressione offensiva di ${dominantTeam}. Possibile episodio pesante nei prossimi minuti.`;
-  } else if (dangerIndex >= 50) {
-    dangerMessage = `${dominantTeam} sta aumentando volume e qualita degli attacchi rispetto all'avversaria.`;
-  } else if (dangerIndex >= 35) {
-    dangerMessage = `Fase di studio con picchi sporadici: ${dominantTeam} ha comunque un leggero vantaggio territoriale.`;
-  }
-
-  return {
-    dangerIndex,
-    dangerMessage,
-    dangerHistory: Array.from({ length: 8 }, (_, index) =>
-      Math.max(12, dangerIndex - (7 - index) * 4)
-    ),
-  };
-}
-
-function buildLiveOdds(score, stats, minute) {
-  const homePressure =
-    stats.dangerousAttacks.home * 1.2 +
-    stats.shotsOnTarget.home * 6 +
-    (stats.possession.home - 50) * 0.4;
-  const awayPressure =
-    stats.dangerousAttacks.away * 1.2 +
-    stats.shotsOnTarget.away * 6 +
-    (stats.possession.away - 50) * 0.4;
-  const scoreDelta = score.home - score.away;
-  const drawProbability = Math.max(14, 34 - minute * 0.18 - Math.abs(scoreDelta) * 6);
-  const homeProbability = Math.max(
-    12,
-    34 + scoreDelta * 14 + (homePressure - awayPressure) * 0.35
-  );
-  const awayProbability = Math.max(10, 100 - homeProbability - drawProbability);
-  const normalized = ensureProbabilitySum({
-    home: Math.round(homeProbability),
-    draw: Math.round(drawProbability),
-    away: Math.round(Math.max(10, awayProbability)),
-  });
-  const goalProbability = Math.max(
-    12,
-    Math.min(
-      88,
-      28 + (stats.xgLive.home + stats.xgLive.away) * 18 + Math.max(homePressure, awayPressure) * 0.18
-    )
-  );
-
-  return {
-    over25: probabilityToOdds(Math.min(84, goalProbability + 8)),
-    goal: probabilityToOdds(goalProbability),
-    homeWin: probabilityToOdds(normalized.home),
-    draw: probabilityToOdds(normalized.draw),
-    awayWin: probabilityToOdds(normalized.away),
-    nextGoalHome: probabilityToOdds(Math.min(84, 28 + homePressure * 0.65)),
-    nextGoalAway: probabilityToOdds(Math.min(84, 28 + awayPressure * 0.65)),
-  };
-}
-
 function formatPositionLabel(position) {
   const normalizedPosition = normalizeLookupKey(position);
 
@@ -3402,94 +3277,6 @@ export function normalizeSportmonksFixture(fixture = {}) {
   };
 }
 
-function getLiveMinute(fixture, events = []) {
-  const state = fixture?.state || {};
-  const minuteValue =
-    safeNumber(state?.minute, Number.NaN) ||
-    safeNumber(state?.time?.minute, Number.NaN) ||
-    safeNumber(fixture?.minute, Number.NaN);
-
-  if (Number.isFinite(minuteValue)) {
-    return minuteValue + safeNumber(state?.extra_minute, 0);
-  }
-
-  const eventMinutes = events.map((event) => safeNumber(event.minute, 0));
-  return eventMinutes.length ? Math.max(...eventMinutes) : 0;
-}
-
-export function normalizeSportmonksLiveMatch(fixture = {}) {
-  const core = normalizeCoreSportmonksFixture(fixture);
-  const normalizedEvents = asArray(fixture?.events)
-    .map((entry) => normalizeSportmonksEvent(entry, core.homeParticipant, core.awayParticipant))
-    .filter(Boolean)
-    .slice(-8);
-  const stats = buildTeamStats(
-    fixture?.statistics,
-    core.homeParticipant,
-    core.awayParticipant,
-    core.derivedXg
-  );
-  const minute = getLiveMinute(fixture, normalizedEvents);
-  const danger = buildDangerPackage(
-    core.homeParticipant?.name || "Home",
-    core.awayParticipant?.name || "Away",
-    core.scores,
-    stats,
-    minute
-  );
-  const liveProbabilities = core.predictionProvider === "sportmonks_predictions" ? core.probabilities : null;
-  const lineups = asArray(fixture?.lineups);
-  const formationOverrides = getFormationOverrides(
-    fixture?.formations,
-    core.homeParticipant,
-    core.awayParticipant
-  );
-  const lineupStatus = buildLineupStatus(fixture, lineups, formationOverrides);
-
-  return {
-    id: core.fixtureId,
-    sportEventId: core.fixtureId,
-    home: core.homeParticipant?.name || "Home",
-    homeShort: formatShortCode(core.homeParticipant),
-    away: core.awayParticipant?.name || "Away",
-    awayShort: formatShortCode(core.awayParticipant),
-    homeScore: core.scores.home,
-    awayScore: core.scores.away,
-    minute,
-    league: core.info.league,
-    country: core.info.country,
-    round: core.info.round,
-    state: core.stateInfo.name,
-    coverage: core.coverage,
-    stats,
-    liveOdds: buildLiveOdds(core.scores, stats, minute),
-    liveProbabilities,
-    dangerIndex: danger.dangerIndex,
-    dangerMessage: danger.dangerMessage,
-    dangerHistory: danger.dangerHistory,
-    events: normalizedEvents,
-    lineup_status: lineupStatus,
-    lineupConfirmed: lineupStatus === "official",
-    provider_ids: core.providerIds,
-    home_media: buildMediaBundle(core.homeParticipant),
-    away_media: buildMediaBundle(core.awayParticipant),
-    league_media: buildMediaBundle(fixture?.league),
-    apiLoaded: true,
-  };
-}
-
-export function mergeSportmonksLiveMatches(previousMatches = [], updatedMatches = []) {
-  const mergedMap = new Map(
-    asArray(previousMatches).map((match) => [String(match?.id || ""), match])
-  );
-
-  asArray(updatedMatches).forEach((match) => {
-    mergedMap.set(String(match?.id || ""), match);
-  });
-
-  return Array.from(mergedMap.values());
-}
-
 export async function fetchSportmonksScheduleWindow(
   days = SPORTMONKS_DEFAULT_SCHEDULE_DAYS,
   telemetry = {}
@@ -3702,40 +3489,6 @@ export async function fetchSportmonksTeamSquad(teamId, telemetry = {}) {
   return asArray(response?.data);
 }
 
-export async function fetchSportmonksLivescoresInplay() {
-  const response = await requestSportmonksWithIncludeFallback(
-    "livescores/inplay",
-    SPORTMONKS_LIVE_INCLUDE_ATTEMPTS,
-    {
-      expectCollection: true,
-      timezone: ROME_TIMEZONE,
-      perPage: 100,
-    }
-  );
-
-  return {
-    fixtures: asArray(response?.data),
-    raw: response,
-  };
-}
-
-export async function fetchSportmonksLivescoresLatest() {
-  const response = await requestSportmonksWithIncludeFallback(
-    "livescores/latest",
-    SPORTMONKS_LIVE_INCLUDE_ATTEMPTS,
-    {
-      expectCollection: true,
-      timezone: ROME_TIMEZONE,
-      perPage: 100,
-    }
-  );
-
-  return {
-    fixtures: asArray(response?.data),
-    raw: response,
-  };
-}
-
 export function getSportmonksProviderReadiness() {
   const configured = Boolean(getSportmonksApiToken({ silent: true }));
   const scheduleLeagueFilter = Boolean(getSportmonksFixtureLeaguesFilterParam());
@@ -3745,7 +3498,7 @@ export function getSportmonksProviderReadiness() {
     configured,
     ready: configured,
     baseUrl: getSportmonksFootballBaseUrl(),
-    hasLive: configured,
+    hasLive: false,
     hasPredictions: configured,
     hasExpectedGoals: configured,
     hasLineups: configured,

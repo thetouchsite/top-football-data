@@ -465,7 +465,7 @@ export default function AnalisiStatistica() {
               <p className="text-xs text-muted-foreground leading-relaxed mb-4">
                 Questo percorso analytics usa Sportmonks per lineup, squads, coach, referee,
                 venue, standings e metadata di fixture. Predictions provider-driven, xG provider
-                e live odds bookmaker dipendono invece dal piano Sportmonks attivo e oggi non
+                e mercati bookmaker avanzati dipendono invece dal piano Sportmonks attivo e oggi non
                 risultano esposti nel feed corrente.
               </p>
               <div className="grid md:grid-cols-2 gap-3">

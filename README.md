@@ -81,7 +81,6 @@ Piano prossima fase (cache condivisa / SWR / prewarm, solo design): [`.cursor/pl
 - `STRIPE_SECRET_KEY`: chiave Stripe server.
 - `STRIPE_PREMIUM_PRICE_ID`: price id Stripe del piano premium.
 - `NEXT_PUBLIC_APP_URL`: URL pubblico usato nei redirect Stripe.
-- `NEXT_PUBLIC_FEATURE_DATI_LIVE`: `true` per abilitare la sezione Dati Live.
 
 *Nota:* in alcuni messaggi/notice del feed compare il riferimento testuale a un “filtro stretto leghe”; la **configurazione reale** passa da `SPORTMONKS_SCHEDULE_LEAGUE_IDS` e dalla allowlist in codice (vedi [docs/football-api-layer.md](docs/football-api-layer.md)). Non esiste al momento una variabile `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT` letta da `process.env`.
 
@@ -92,9 +91,7 @@ Per il collegamento completo, Railway deve usare gli stessi `MONGODB_URI` e `MON
 - `GET /api/health`: readiness runtime, Mongo, Stripe e provider.
 - `POST /api/leads`: salva lead dal form landing.
 - `GET /api/football/fixtures/[fixtureId]`: dettaglio match (query `view=core` per soli dati core, default per arricchimenti). Sportmonks Football API v3.
-- `GET /api/football/livescores/inplay`: livescore in tempo reale.
 - `GET /api/football/schedules/window?days=7`: calendario pre-match condiviso (dashboard, modelli); `days` al massimo **7**.
-- `GET /api/football/odds/futures`: placeholder futures/outrights.
 - `GET /api/alerts`: alert value/multibet salvati dal backend Python.
 - `GET /api/performance`: riepilogo storico ROI dagli alert chiusi.
 - `POST /api/billing/checkout`: crea Stripe Checkout.

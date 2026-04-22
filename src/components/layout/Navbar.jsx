@@ -1,23 +1,21 @@
 ﻿"use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "@/lib/router-compat";
 import {
-  BarChart3, Activity, TrendingUp, Zap, Crown, Menu, X, ChevronRight,
+  BarChart3, Activity, TrendingUp, Crown, Menu, X, ChevronRight,
   Bell, Search, User, Star, LogOut, Shield, LineChart, BellRing
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/AppContext";
 import { getScheduleWindow } from "@/api/football";
 import NotificationsPanel from "./NotificationsPanel";
-import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
 
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
   { label: "Modelli Predittivi", path: "/modelli-predittivi", icon: TrendingUp },
   { label: "Analisi Statistica", path: "/analisi-statistica", icon: Activity },
-  { label: "Dati Live", path: "/dati-live", icon: Zap },
   { label: "Multi-Bet", path: "/multi-bet", icon: Crown },
   { label: "Alert", path: "/alert-inviati", icon: BellRing },
   { label: "Performance", path: "/performance-storiche", icon: LineChart },
@@ -45,14 +43,7 @@ export default function Navbar() {
   const notifsPanelRef = useRef(null);
   const userPanelRef = useRef(null);
 
-  const datiLiveEnabled = isDatiLiveFeatureEnabled();
-  const navItems = useMemo(
-    () =>
-      NAV_ITEMS.filter(
-        (item) => item.path !== "/dati-live" || datiLiveEnabled
-      ),
-    [datiLiveEnabled]
-  );
+  const navItems = NAV_ITEMS;
 
   const closeAllOverlays = React.useCallback(() => {
     setSearchOpen(false);

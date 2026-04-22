@@ -2,7 +2,6 @@
 import { Link } from "@/lib/router-compat";
 import {
   TrendingUp,
-  Zap,
   Crown,
   ChevronRight,
   AlertTriangle,
@@ -19,13 +18,12 @@ import ValueBetBadge from "@/components/shared/ValueBetBadge";
 import ConfidenceBar from "@/components/shared/ConfidenceBar";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { useApp } from "@/lib/AppContext";
-import { getLivescoresInplay, getScheduleWindow } from "@/api/football";
+import { getScheduleWindow } from "@/api/football";
 import {
   getMatchStatusBucket,
   matchLeagueFilter,
   sortMatchesByFeaturedPriority,
 } from "@/lib/football-filters";
-import { isDatiLiveFeatureEnabled } from "@/lib/feature-flags";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
 
 const QUICK_LEAGUES = [
@@ -68,7 +66,6 @@ export default function Dashboard() {
   const { isPremium, favorites } = useApp();
   const [activeLeague, setActiveLeague] = useState("Tutti");
   const [schedulePayload, setSchedulePayload] = useState(null);
-  const [livePayload, setLivePayload] = useState(null);
   const [orchestratorAlerts, setOrchestratorAlerts] = useState([]);
   const [performanceSummary, setPerformanceSummary] = useState(null);
   const [dashboardNotice, setDashboardNotice] = useState("");
@@ -78,30 +75,14 @@ export default function Dashboard() {
 
     const loadDashboardFeeds = async () => {
       try {
-        if (isDatiLiveFeatureEnabled()) {
-          const [nextSchedulePayload, nextLivePayload] = await Promise.all([
-            getScheduleWindow(7, { requester: "Dashboard" }),
-            getLivescoresInplay(),
-          ]);
+        const nextSchedulePayload = await getScheduleWindow(7, { requester: "Dashboard" });
 
-          if (!isActive) {
-            return;
-          }
-
-          setSchedulePayload(nextSchedulePayload);
-          setLivePayload(nextLivePayload);
-          setDashboardNotice(nextLivePayload.notice || nextSchedulePayload.notice || "");
-        } else {
-          const nextSchedulePayload = await getScheduleWindow(7, { requester: "Dashboard" });
-
-          if (!isActive) {
-            return;
-          }
-
-          setSchedulePayload(nextSchedulePayload);
-          setLivePayload(null);
-          setDashboardNotice(nextSchedulePayload.notice || "");
+        if (!isActive) {
+          return;
         }
+
+        setSchedulePayload(nextSchedulePayload);
+        setDashboardNotice(nextSchedulePayload.notice || "");
       } catch (error) {
         if (isActive) {
           setDashboardNotice(
@@ -154,7 +135,6 @@ export default function Dashboard() {
   }, []);
 
   const feedMatches = Array.isArray(schedulePayload?.matches) ? schedulePayload.matches : [];
-  const liveMatches = Array.isArray(livePayload?.matches) ? livePayload.matches : [];
 
   const topMatches = useMemo(
     () =>
@@ -186,16 +166,6 @@ export default function Dashboard() {
       });
     });
 
-    liveMatches.slice(0, 2).forEach((match) => {
-      items.push({
-        id: `live-${match.id}`,
-        icon: Zap,
-        color: "text-destructive",
-        message: `${match.home} vs ${match.away} - indice di pericolosita ${match.dangerIndex}%`,
-        time: "live",
-      });
-    });
-
     valueBets.slice(0, 1).forEach((match) => {
       items.push({
         id: `value-${match.id}`,
@@ -217,9 +187,8 @@ export default function Dashboard() {
     }
 
     return items.slice(0, 3);
-  }, [dashboardNotice, liveMatches, orchestratorAlerts, valueBets]);
+  }, [dashboardNotice, orchestratorAlerts, valueBets]);
 
-  const liveCount = liveMatches.length;
   const today = feedMatches.filter((match) => getMatchStatusBucket(match) === "today").length;
   const featuredTitle = today > 0 ? "Top Match del Giorno" : "Prossimo Slot Disponibile";
 
@@ -240,15 +209,6 @@ export default function Dashboard() {
         path: "/modelli-predittivi",
       },
     ];
-    if (isDatiLiveFeatureEnabled()) {
-      cards.push({
-        label: "Partite Live",
-        value: liveCount,
-        icon: Zap,
-        color: "text-destructive",
-        path: "/dati-live",
-      });
-    }
     cards.push({
       label: "Combo Premium",
       value: isPremium ? "Preview" : "Locked",
@@ -257,23 +217,13 @@ export default function Dashboard() {
       path: "/multi-bet",
     });
     return cards;
-  }, [today, valueBets.length, orchestratorAlerts.length, liveCount, isPremium]);
+  }, [today, valueBets.length, orchestratorAlerts.length, isPremium]);
 
   const feedSummary = useMemo(() => {
     const p = schedulePayload?.provider || "—";
     const st = schedulePayload?.freshness?.state || "—";
-    if (isDatiLiveFeatureEnabled() && livePayload) {
-      const n = liveMatches.length;
-      return `${p} · ${st} · live ${n} partita${n === 1 ? "" : "e"}`;
-    }
     return `${p} · freshness ${st}`;
-  }, [
-    schedulePayload?.provider,
-    schedulePayload?.freshness?.state,
-    isDatiLiveFeatureEnabled,
-    livePayload,
-    liveMatches.length,
-  ]);
+  }, [schedulePayload?.provider, schedulePayload?.freshness?.state]);
 
   return (
     <div className="app-page">
@@ -298,27 +248,9 @@ export default function Dashboard() {
                 leagueMedia={feedMatches[0]?.league_media}
                 predictionProvider={feedMatches[0]?.prediction_provider}
                 oddsProvider={feedMatches[0]?.odds_provider}
-                notice={isDatiLiveFeatureEnabled() ? undefined : dashboardNotice}
+                notice={dashboardNotice}
               />
             </div>
-            {isDatiLiveFeatureEnabled() && (
-              <div className="space-y-2 pt-1 border-t border-border/20">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Livescore
-                </p>
-                <DataStatusChips
-                  provider={livePayload?.provider}
-                  source={livePayload?.source}
-                  freshness={livePayload?.freshness}
-                  competition={liveMatches[0]?.competition}
-                  leagueMedia={liveMatches[0]?.league_media}
-                  predictionProvider={liveMatches[0]?.prediction_provider}
-                  oddsProvider={liveMatches[0]?.odds_provider}
-                  lineupStatus={liveMatches[0]?.lineup_status}
-                  notice={dashboardNotice}
-                />
-              </div>
-            )}
           </FeedMetaPanel>
         </div>
 
@@ -630,15 +562,6 @@ export default function Dashboard() {
                     <span className="text-xs text-foreground">Multi-Bet preview</span>
                     <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
                   </Link>
-                  {isDatiLiveFeatureEnabled() && (
-                    <Link
-                      to="/dati-live"
-                      className="flex items-center justify-between p-2.5 rounded-lg bg-secondary/40 hover:bg-secondary/60 transition-all group"
-                    >
-                      <span className="text-xs text-foreground">Live center</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary" />
-                    </Link>
-                  )}
                 </div>
               </GlassCard>
             )}

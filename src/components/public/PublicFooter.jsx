@@ -27,7 +27,7 @@ export default function PublicFooter() {
             <span className="font-orbitron text-xs tracking-wide text-foreground">TOP FOOTBALL DATA</span>
           </div>
           <div className="rounded-full border border-accent/20 bg-accent/8 px-3 py-1 text-xs font-semibold text-accent">
-            Dati Live: In Arrivo
+            Feed Sportmonks: schedule e dettaglio match
           </div>
         </div>
 

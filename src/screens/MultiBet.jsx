@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Crown, Lock, Star, Cpu, Shield, Lightbulb, ChevronDown, ChevronUp, ChevronRight, TrendingUp, RefreshCw } from "lucide-react";
+import { Crown, Lock, Star, Cpu, Shield, Lightbulb, ChevronDown, ChevronUp, ChevronRight } from "lucide-react";
 import PageIntro from "@/components/shared/PageIntro";
 import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import GlassCard from "@/components/shared/GlassCard";
@@ -10,14 +10,6 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MULTI_BET_COMBOS } from "@/lib/mockData";
 import { useApp } from "@/lib/AppContext";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { getFuturesOdds } from "@/api/football";
 
 const COMBO_TABS = [
   { key: "algoritmiche", label: "Algoritmiche", icon: Cpu },
@@ -36,65 +28,6 @@ const TAG_COLORS = {
   Bilanciata: "bg-accent/10 text-accent border-accent/20",
   Aggressiva: "bg-destructive/10 text-destructive border-destructive/20",
 };
-
-const FUTURES_TREND_STYLES = {
-  up: "text-accent",
-  down: "text-primary",
-  flat: "text-muted-foreground",
-};
-
-function formatTrendLabel(trend) {
-  if (trend === "up") return "in salita";
-  if (trend === "down") return "in calo";
-  return "stabile";
-}
-
-function FuturesMarketCard({ market }) {
-  return (
-    <GlassCard className="border-primary/10">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <div className="text-xs text-muted-foreground">Market futures</div>
-          <h3 className="font-semibold text-sm text-foreground">{market.name}</h3>
-        </div>
-        <span className="text-[11px] px-2 py-1 rounded-full border border-border/40 bg-secondary/40 text-muted-foreground">
-          {market.booksCount} book
-        </span>
-      </div>
-      <div className="space-y-2">
-        {market.outcomes.slice(0, 5).map((outcome) => (
-          <div
-            key={outcome.id}
-            className="rounded-lg border border-border/30 bg-secondary/20 px-3 py-2"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-foreground truncate">
-                  {outcome.name}
-                </div>
-                <div className="text-[11px] text-muted-foreground">
-                  Prob. implicita {outcome.impliedProbability}%
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-orbitron text-base font-black text-foreground">
-                  {outcome.bestOdds || "--"}
-                </div>
-                <div
-                  className={`text-[11px] font-semibold ${
-                    FUTURES_TREND_STYLES[outcome.trend] || FUTURES_TREND_STYLES.flat
-                  }`}
-                >
-                  {formatTrendLabel(outcome.trend)}
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </GlassCard>
-  );
-}
 
 function ComboCard({ combo, isPremium }) {
   const [expanded, setExpanded] = useState(false);
@@ -206,69 +139,8 @@ function ComboCard({ combo, isPremium }) {
 
 export default function MultiBet() {
   const { isPremium } = useApp();
-  const [futuresMarkets, setFuturesMarkets] = useState([]);
-  const [futuresCompetitions, setFuturesCompetitions] = useState([]);
-  const [selectedCompetitionId, setSelectedCompetitionId] = useState("");
-  const [futuresNotice, setFuturesNotice] = useState("");
-  const [futuresLoading, setFuturesLoading] = useState(true);
-  const [futuresLoaded, setFuturesLoaded] = useState(false);
-  const [futuresRefreshKey, setFuturesRefreshKey] = useState(0);
-
-  useEffect(() => {
-    let isActive = true;
-
-    const loadFutures = async () => {
-      setFuturesLoading(true);
-      setFuturesNotice("");
-
-      try {
-        const payload = await getFuturesOdds({
-          competitionId: selectedCompetitionId,
-        });
-
-        if (!isActive) {
-          return;
-        }
-
-        setFuturesMarkets(Array.isArray(payload.markets) ? payload.markets : []);
-        setFuturesCompetitions(
-          Array.isArray(payload.competitions) ? payload.competitions : []
-        );
-        setSelectedCompetitionId(
-          payload.selectedCompetition?.id || selectedCompetitionId || ""
-        );
-        setFuturesNotice(payload.notice || "");
-        setFuturesLoaded(true);
-      } catch (error) {
-        if (!isActive) {
-          return;
-        }
-
-        setFuturesMarkets([]);
-        setFuturesNotice(
-          error.message || "Feed futures non disponibile."
-        );
-        setFuturesLoaded(false);
-      } finally {
-        if (isActive) {
-          setFuturesLoading(false);
-        }
-      }
-    };
-
-    loadFutures();
-
-    return () => {
-      isActive = false;
-    };
-  }, [selectedCompetitionId, futuresRefreshKey]);
-
-  const futuresFeedSummary = useMemo(() => {
-    if (futuresLoading) return "Caricamento feed futures (outrights Sportmonks)…";
-    if (futuresNotice) return futuresNotice;
-    if (futuresLoaded) return "Futures / outrights · layer separato dalle quote match-by-match";
-    return "Feed futures non disponibile o in attesa";
-  }, [futuresLoading, futuresNotice, futuresLoaded]);
+  const feedSummary =
+    "Preview locale: nessun endpoint futures/outrights attivo nel layer football corrente.";
 
   return (
     <div className="app-page">
@@ -285,28 +157,16 @@ export default function MultiBet() {
           </span>
         </PageIntro>
 
-        <FeedMetaPanel summary={futuresFeedSummary} label="Stato feed dati" className="mb-8">
+        <FeedMetaPanel summary={feedSummary} label="Stato feed dati" className="mb-8">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Il feed attuale copre solo futures/outrights separati dal layer principale Sportmonks.
-            Il motore multi-bet reale e la comparazione bookmaker match-by-match restano{" "}
+            Il layer football attivo espone calendario e dettaglio match. Il motore multi-bet reale,
+            i futures/outrights e la comparazione bookmaker match-by-match restano{" "}
             <code className="rounded bg-secondary/60 px-1 py-0.5 text-[10px]">not_available_with_current_feed</code>.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            {futuresLoaded && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                Odds Comparison Futures
-              </span>
-            )}
-            {futuresLoading && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
-                Caricamento futures…
-              </span>
-            )}
-            {futuresNotice && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30 max-w-full truncate" title={futuresNotice}>
-                {futuresNotice}
-              </span>
-            )}
+            <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/50 text-muted-foreground border border-border/30">
+              No futures API
+            </span>
           </div>
         </FeedMetaPanel>
 
@@ -331,71 +191,6 @@ export default function MultiBet() {
               ))}
             </div>
           </GlassCard>
-        </div>
-
-        <div className="mb-8 min-w-0 rounded-xl border border-border/40 bg-secondary/5 p-4 md:p-5">
-          <div className="mb-4 flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="min-w-0">
-              <div className="mb-1 flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 shrink-0 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">
-                  Futures Odds Comparison
-                </h3>
-              </div>
-              <p className="text-pretty text-xs text-muted-foreground">
-                Feed dedicato a outrights e mercati futures, separato dalle quote
-                match-by-match.
-              </p>
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap">
-              <Select
-                value={selectedCompetitionId || "__auto__"}
-                onValueChange={(value) =>
-                  setSelectedCompetitionId(value === "__auto__" ? "" : value)
-                }
-              >
-                <SelectTrigger className="h-9 w-full min-w-0 max-w-full bg-secondary/60 text-xs border-border/50 sm:w-64 sm:max-w-[16rem]">
-                  <SelectValue placeholder="Seleziona competizione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__auto__">Scelta automatica</SelectItem>
-                  {futuresCompetitions.map((competition) => (
-                    <SelectItem key={competition.id} value={competition.id}>
-                      {competition.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <button
-                onClick={() => setFuturesRefreshKey((current) => current + 1)}
-                className="h-9 w-9 rounded-lg border border-border/40 bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
-                aria-label="Aggiorna futures"
-              >
-                <RefreshCw
-                  className={`w-4 h-4 ${futuresLoading ? "animate-spin" : ""}`}
-                />
-              </button>
-            </div>
-          </div>
-
-          {futuresMarkets.length > 0 ? (
-            <div className="grid xl:grid-cols-3 md:grid-cols-2 gap-4">
-              {futuresMarkets.slice(0, 3).map((market) => (
-                <FuturesMarketCard key={market.id} market={market} />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border/40 bg-secondary/20 px-4 py-6">
-              <div className="text-sm font-semibold text-foreground mb-1">
-                Nessun futures market disponibile
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Questo feed copre mercati outright futures. Per quote evento 1X2,
-                O/U e comparazione bookmaker match-by-match servono gli odds Sportmonks
-                (pre-match/live secondo il piano) e il comparatore interno quando esposto dal feed.
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Main panel */}

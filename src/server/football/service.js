@@ -2,27 +2,20 @@ import { sortMatchesByFeaturedPriority } from "@/lib/football-filters";
 import { collectCompetitionSummaries } from "@/lib/competitions/catalog";
 import { createFixtureDetail } from "@/lib/domain/fixtures";
 import { createProviderFreshness } from "@/lib/domain/freshness";
-import { createLiveMatch } from "@/lib/domain/live";
 import { createPrematchMatch } from "@/lib/domain/matches";
 import {
   fetchSportmonksFixtureCoreById,
   fetchSportmonksFixtureEnrichmentById,
-  fetchSportmonksLivescoresInplay,
-  fetchSportmonksLivescoresLatest,
   fetchSportmonksScheduleWindow,
   fetchSportmonksSeasonStandings,
   fetchSportmonksTeamSquad,
-  mergeSportmonksLiveMatches,
   normalizeSportmonksFixture,
-  normalizeSportmonksLiveMatch,
   normalizeSportmonksScheduleMatch,
   SPORTMONKS_DEFAULT_SCHEDULE_DAYS,
   SPORTMONKS_PROVIDER_ID,
 } from "@/lib/providers/sportmonks";
 
 const SCHEDULE_CACHE_TTL_MS = 60_000;
-const LIVE_CACHE_TTL_MS = 5_000;
-const LIVE_FULL_SYNC_INTERVAL_MS = 60_000;
 const FIXTURE_CACHE_TTL_MS = 300_000;
 
 const DEBUG_FOOTBALL_TELEMETRY = ["1", "true", "yes"].includes(
@@ -167,28 +160,6 @@ function getScheduleInflightStore() {
   return globalThis.__footballScheduleWindowInflight;
 }
 
-function getLivescoreCacheStore() {
-  if (!globalThis.__footballLivescoresInplayCache) {
-    globalThis.__footballLivescoresInplayCache = {
-      payload: null,
-      updatedAt: 0,
-      lastFullSyncAt: 0,
-    };
-  }
-
-  return globalThis.__footballLivescoresInplayCache;
-}
-
-function getLivescoreInflightStore() {
-  if (!globalThis.__footballLivescoresInplayInflight) {
-    globalThis.__footballLivescoresInplayInflight = {
-      promise: null,
-    };
-  }
-
-  return globalThis.__footballLivescoresInplayInflight;
-}
-
 function getFixtureCacheStore() {
   if (!globalThis.__footballFixtureCache) {
     globalThis.__footballFixtureCache = new Map();
@@ -218,21 +189,6 @@ function enrichPrematchMatches(matches = [], provider, source, updatedAt) {
       ttlMs: SCHEDULE_CACHE_TTL_MS,
       predictionProvider: match?.prediction_provider || "derived_internal_model",
       oddsProvider: match?.odds_provider || "not_available_with_current_feed",
-    })
-  );
-}
-
-function enrichLiveMatches(matches = [], provider, source, updatedAt) {
-  return matches.map((match) =>
-    createLiveMatch(match, {
-      provider,
-      source,
-      updatedAt,
-      ttlMs: LIVE_CACHE_TTL_MS,
-      predictionProvider:
-        match?.prediction_provider ||
-        (match?.liveProbabilities ? "sportmonks_predictions" : "derived_live_model"),
-      oddsProvider: match?.odds_provider || "derived_live_model",
     })
   );
 }
@@ -293,31 +249,6 @@ function buildSchedulePayload({
   };
 }
 
-function buildLivePayload({
-  matches = [],
-  rawLivescores = null,
-  provider = SPORTMONKS_PROVIDER_ID,
-  source,
-  notice = "",
-  updatedAt = null,
-}) {
-  const enrichedMatches = enrichLiveMatches(matches, provider, source, updatedAt);
-
-  return {
-    matches: enrichedMatches,
-    competitions: collectCompetitionSummaries(enrichedMatches),
-    rawLivescores,
-    provider,
-    source,
-    isFallback: provider !== SPORTMONKS_PROVIDER_ID || source === "provider_unavailable",
-    freshness: createProviderFreshness({
-      updatedAt,
-      ttlMs: LIVE_CACHE_TTL_MS,
-    }),
-    notice,
-  };
-}
-
 function buildFixturePayload({
   normalizedFixture,
   rawFixture,
@@ -366,35 +297,6 @@ function buildEmptyFixturePayload(fixtureId, notice) {
   };
 }
 
-function humanizeSportmonksApiMessage(message) {
-  const raw = String(message || "").trim();
-
-  if (!raw) {
-    return "";
-  }
-
-  if (
-    /no result\(s\) found/i.test(raw) ||
-    /did not return any data/i.test(raw) ||
-    (/subscription/i.test(raw) && /access/i.test(raw))
-  ) {
-    return "Nessun dato da questo endpoint Sportmonks: di solito significa che non ci sono partite live in questo momento oppure che il piano non include livescores in-play o gli add-on necessari. Verifica piano e permessi su Sportmonks.";
-  }
-
-  return raw;
-}
-
-function getLiveNoticeFromMatches(matches) {
-  if (!matches.length) {
-    return "";
-  }
-
-  const hasProviderProbabilities = matches.some((match) => match?.liveProbabilities);
-  return hasProviderProbabilities
-    ? ""
-    : "Probabilities live non presenti nel feed corrente. Le live odds restano derivate dal contesto match.";
-}
-
 function subscriptionHasPaidExtras(subscription) {
   if (!subscription || typeof subscription !== "object") {
     return false;
@@ -431,7 +333,7 @@ function buildSportmonksPlanNotice(rawPayload, matches = []) {
   }
 
   if (hasProviderOdds) {
-    return `Piano Sportmonks attivo: ${planNames.join(", ")}. Pre-match odds disponibili; predictions, xG provider-driven e live odds non risultano abilitati nel feed corrente.`;
+    return `Piano Sportmonks attivo: ${planNames.join(", ")}. Pre-match odds disponibili; predictions e xG provider-driven non risultano abilitati nel feed corrente.`;
   }
 
   return `Piano Sportmonks attivo: ${planNames.join(", ")}. Add-on predictions/xG/odds non rilevati nel feed corrente.`;
@@ -660,88 +562,6 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
 
   inflightStore.set(cacheKey, requestPromise);
   return requestPromise;
-}
-
-export async function getLivescoresInplayPayload() {
-  const cacheStore = getLivescoreCacheStore();
-  const inflightStore = getLivescoreInflightStore();
-  const now = Date.now();
-
-  if (cacheStore.payload && now - cacheStore.updatedAt < LIVE_CACHE_TTL_MS) {
-    return cacheStore.payload;
-  }
-
-  if (inflightStore.promise) {
-    return inflightStore.promise;
-  }
-
-  inflightStore.promise = (async () => {
-    try {
-      const shouldFullSync =
-        !cacheStore.payload ||
-        !Array.isArray(cacheStore.payload?.matches) ||
-        cacheStore.payload.matches.length === 0 ||
-        now - cacheStore.lastFullSyncAt > LIVE_FULL_SYNC_INTERVAL_MS;
-      const liveResponse = shouldFullSync
-        ? await fetchSportmonksLivescoresInplay()
-        : await fetchSportmonksLivescoresLatest();
-      const normalizedMatches = liveResponse.fixtures.map(normalizeSportmonksLiveMatch);
-      const mergedMatches = sortMatchesByFeaturedPriority(
-        shouldFullSync
-          ? normalizedMatches
-          : mergeSportmonksLiveMatches(cacheStore.payload?.matches || [], normalizedMatches)
-      );
-      const updatedAt = Date.now();
-      const apiLiveMessage =
-        mergedMatches.length === 0
-          ? humanizeSportmonksApiMessage(liveResponse?.raw?.message)
-          : "";
-      const payload = buildLivePayload({
-        matches: mergedMatches,
-        rawLivescores: liveResponse,
-        source: shouldFullSync ? "sportmonks_api" : "sportmonks_live_latest",
-        notice:
-          apiLiveMessage ||
-          buildSportmonksPlanNotice(liveResponse, mergedMatches) ||
-          getLiveNoticeFromMatches(mergedMatches),
-        updatedAt,
-      });
-
-      cacheStore.payload = payload;
-      cacheStore.updatedAt = updatedAt;
-
-      if (shouldFullSync) {
-        cacheStore.lastFullSyncAt = updatedAt;
-      }
-
-      return payload;
-    } catch (error) {
-      if (cacheStore.payload) {
-        return buildLivePayload({
-          matches: cacheStore.payload.matches,
-          rawLivescores: cacheStore.payload.rawLivescores,
-          provider: SPORTMONKS_PROVIDER_ID,
-          source: "sportmonks_cache",
-          notice: isRateLimitError(error)
-            ? "Rate limit Sportmonks raggiunto. Mostro l'ultimo livescore disponibile dalla cache provider."
-            : error.message || "Mostro l'ultimo livescore disponibile dalla cache provider.",
-          updatedAt: cacheStore.updatedAt,
-        });
-      }
-
-      return buildLivePayload({
-        matches: [],
-        rawLivescores: null,
-        source: "provider_unavailable",
-        notice: error.message || "Impossibile recuperare i livescores in-play.",
-        updatedAt: null,
-      });
-    } finally {
-      inflightStore.promise = null;
-    }
-  })();
-
-  return inflightStore.promise;
 }
 
 export async function getFixturePayload(fixtureId, options = {}) {

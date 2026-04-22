@@ -2,7 +2,6 @@ import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { admin } from "better-auth/plugins/admin";
 import { oneTap } from "better-auth/plugins";
-import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { getMigrations } from "better-auth/db/migration";
@@ -25,6 +24,7 @@ const canUseLocalAuthFallback =
 
 let authInstancePromise = null;
 let localSqliteDatabase = null;
+let localMemoryDatabase = null;
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID || "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
@@ -32,15 +32,53 @@ const isGoogleAuthEnabled = Boolean(googleClientId && googleClientSecret);
 const isGoogleOneTapEnabled =
   process.env.NEXT_PUBLIC_GOOGLE_ONE_TAP_ENABLED === "true";
 
-function getLocalSqliteDatabase() {
+async function getLocalSqliteDatabase() {
   if (localSqliteDatabase) {
     return localSqliteDatabase;
+  }
+
+  let DatabaseSync;
+  try {
+    ({ DatabaseSync } = await import("node:sqlite"));
+  } catch (error) {
+    throw new Error(
+      "Fallback auth SQLite non disponibile: il runtime Node corrente non supporta node:sqlite. Usa MongoDB raggiungibile oppure aggiorna Node a una versione che espone node:sqlite.",
+      { cause: error }
+    );
   }
 
   const databaseDir = path.join(process.cwd(), ".data");
   mkdirSync(databaseDir, { recursive: true });
   localSqliteDatabase = new DatabaseSync(path.join(databaseDir, "auth-local.sqlite"));
   return localSqliteDatabase;
+}
+
+async function getLocalAuthFallback() {
+  try {
+    const sqliteDatabase = await getLocalSqliteDatabase();
+
+    return {
+      adapter: sqliteDatabase,
+      storageMode: "sqlite-fallback",
+      rawDatabase: sqliteDatabase,
+    };
+  } catch (sqliteError) {
+    const { memoryAdapter } = await import("@better-auth/memory-adapter");
+    if (!localMemoryDatabase) {
+      localMemoryDatabase = {};
+    }
+
+    console.warn(
+      "[auth] Fallback SQLite non disponibile. Uso fallback auth in-memory locale: sessioni e utenti creati spariscono al riavvio del dev server.",
+      sqliteError
+    );
+
+    return {
+      adapter: memoryAdapter(localMemoryDatabase),
+      storageMode: "memory-fallback",
+      rawDatabase: localMemoryDatabase,
+    };
+  }
 }
 
 async function resolveAuthDatabase() {
@@ -65,15 +103,11 @@ async function resolveAuthDatabase() {
     }
 
     console.warn(
-      "[auth] MongoDB non raggiungibile. Attivo fallback SQLite locale per login e registrazione.",
+      "[auth] MongoDB non raggiungibile. Attivo fallback locale per login e registrazione.",
       error
     );
 
-    return {
-      adapter: getLocalSqliteDatabase(),
-      storageMode: "sqlite-fallback",
-      rawDatabase: getLocalSqliteDatabase(),
-    };
+    return getLocalAuthFallback();
   }
 }
 
