@@ -27,6 +27,9 @@ function deriveRouteTelemetryFromSource(source, isFallback) {
   if (source === "sportmonks_api") {
     return { cacheHit: false, cacheState: "miss", source: "provider_fetch" };
   }
+  if (source === "sportmonks_inflight") {
+    return { cacheHit: true, cacheState: "hit", source: "inflight_shared" };
+  }
   if (source === "provider_unavailable" || source === "route_error") {
     return { cacheHit: false, cacheState: "miss", source: "fallback_provider" };
   }

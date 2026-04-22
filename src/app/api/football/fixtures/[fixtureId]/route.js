@@ -17,24 +17,30 @@ function deriveRouteTelemetryFromSource(source, isFallback) {
   if (source === "sportmonks_api") {
     return { cacheHit: false, cacheState: "miss", source: "provider_fetch" };
   }
+  if (source === "sportmonks_inflight") {
+    return { cacheHit: true, cacheState: "hit", source: "inflight_shared" };
+  }
   if (source === "provider_unavailable" || source === "route_error") {
     return { cacheHit: false, cacheState: "miss", source: "fallback_provider" };
   }
   return { cacheHit: false, cacheState: "miss", source: source || null };
 }
 
-export async function GET(_request, { params }) {
+export async function GET(request, { params }) {
   const startedAt = Date.now();
   try {
     const resolvedParams = await params;
     const fixtureId = resolvedParams?.fixtureId || null;
-    const result = await getFixturePayload(fixtureId);
+    const view = request.nextUrl.searchParams.get("view");
+    const result = await getFixturePayload(fixtureId, { view });
     const payload = result?.body || {};
     const e2eMs = Date.now() - startedAt;
+    const requestPurpose = view === "core" ? "fixture_detail_core" : "fixture_detail";
+    const dtoTarget = view === "core" ? "MatchDetailCoreDTO" : "MatchDetailEnrichedDTO";
     const derived = deriveRouteTelemetryFromSource(payload?.source, Boolean(payload?.isFallback));
     const routeLog = {
       route: "/api/football/fixtures/[fixtureId]",
-      requestPurpose: "fixture_detail",
+      requestPurpose,
       days: null,
       fixtureId,
       cacheHit: derived.cacheHit,
@@ -47,7 +53,7 @@ export async function GET(_request, { params }) {
       e2eMs,
       fallbackTriggered: Boolean(payload?.isFallback),
       retryCount: 0,
-      dtoTarget: "MatchDetailCoreDTO",
+      dtoTarget,
       dtoVersion: "v1",
       providerEndpoint: "fixtures/{fixtureId}",
       includeSet: null,

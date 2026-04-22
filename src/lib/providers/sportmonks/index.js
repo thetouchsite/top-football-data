@@ -96,75 +96,150 @@ export const SPORTMONKS_SCHEDULE_PREMATCH_INCLUDES = [
   "statistics.type",
 ];
 
-/**
- * Dettaglio fixture: odds + predictions + expected (xG) come bundle Sportmonks;
- * `pressure` richiede add-on Pressure Index (dati per grafico / live).
- */
-const SPORTMONKS_FIXTURE_INCLUDE_ATTEMPTS = [
-  [
-    "league",
+export const SPORTMONKS_INCLUDE_POLICY = {
+  listAllowed: [...SPORTMONKS_SCHEDULE_PREMATCH_INCLUDES],
+  listForbidden: [
     "season",
     "stage",
     "round",
+    "venue",
+    "metadata",
+    "odds.bookmaker",
+    "player_markets",
+    "correct_score",
+    "corners",
+  ],
+  detailCoreAllowed: [
+    "league",
     "state",
     "participants",
-    "venue",
     "scores",
-    "periods",
-    "events.type",
-    "statistics.type",
-    /** Serve l'entità `lineups` esplicita: solo `lineups.details.type` può non caricare le righe (formation_field). */
-    "lineups",
-    "lineups.details.type",
-    "odds.bookmaker",
+    "odds",
     "predictions.type",
-    "expected.type",
-    "pressure",
-    "referees",
-    "coaches",
+    "statistics.type",
+  ],
+  detailCoreForbidden: [
+    "standings",
+    "squads",
+    "lineups",
     "formations",
+    "staff",
+    "h2h",
+    "expected",
+    "expected.type",
+  ],
+  detailEnrichmentAllowed: ["lineups", "lineups.details.type", "events.type", "formations", "coaches", "referees"],
+  detailEnrichmentForbidden: [
+    "expected",
+    "expected.type",
+    "odds.bookmaker",
+    "player_markets",
+    "correct_score",
+    "corners",
+  ],
+};
+
+export const SCHEDULE_CARD_DTO_CONTRACT = {
+  required: [
+    "id",
+    "sportEventId",
+    "kickoff_at",
+    "date",
+    "time",
+    "status",
+    "state",
+    "home",
+    "away",
+    "league",
+    "competition",
+    "prob",
+    "odds",
+    "ou",
+    "gg",
+    "valueBet",
+    "confidence",
+    "scores",
+    "prediction_provider",
+    "odds_provider",
+    "provider_ids",
+    "coverage",
+    "apiLoaded",
+  ],
+  optionalModelFields: ["modelOdds", "modelOddsOu", "modelOddsGg", "xg", "valueMarkets", "ouProb", "ggProb"],
+  forbiddenInList: [
+    "player_markets",
+    "correct_score_deep",
+    "corners_deep",
+    "odds.bookmaker",
     "metadata",
+    "lineups",
+    "formations",
+    "events",
+    "standings",
+    "teamSquads",
+  ],
+};
+
+export const MATCH_DETAIL_CORE_DTO_CONTRACT = {
+  required: [
+    "id",
+    "sportEventId",
+    "kickoff_at",
+    "status",
+    "state",
+    "home",
+    "away",
+    "league",
+    "competition",
+    "prob",
+    "odds",
+    "confidence",
+    "scores",
+    "valueBet",
+    "prediction_provider",
+    "odds_provider",
+    "provider_ids",
+    "coverage",
+    "apiLoaded",
+  ],
+  optional: ["xg", "ou", "gg", "badges", "reliability_score", "bestOdds", "bestBookmaker", "movement"],
+  forbidden: ["expected", "expected.type", "standings", "teamSquads", "h2h", "staff"],
+};
+
+export const MATCH_DETAIL_ENRICHMENT_DTO_CONTRACT = {
+  required: ["lineups", "formations", "coaches", "referees"],
+  optional: ["standings", "teamSquads", "h2h", "events", "metadata"],
+  forbidden: ["blocking_core_dependency", "expected", "expected.type"],
+};
+
+const SPORTMONKS_INCLUDE_DENYLIST_BY_SCOPE = {
+  list: new Set(SPORTMONKS_INCLUDE_POLICY.listForbidden),
+  detail_core: new Set(SPORTMONKS_INCLUDE_POLICY.detailCoreForbidden),
+  detail_enrichment: new Set(SPORTMONKS_INCLUDE_POLICY.detailEnrichmentForbidden),
+};
+
+const SPORTMONKS_FIXTURE_CORE_INCLUDE_ATTEMPTS = [
+  [
+    "league",
+    "state",
+    "participants",
+    "scores",
+    "odds",
+    "predictions.type",
+    "statistics.type",
   ],
   [
     "league",
-    "season",
-    "stage",
-    "round",
     "state",
     "participants",
-    "venue",
     "scores",
-    "periods",
-    "events.type",
-    "statistics.type",
-    "lineups",
-    "lineups.details.type",
-    "odds.bookmaker",
+    "odds",
     "predictions.type",
-    "expected.type",
-    "referees",
-    "coaches",
-    "formations",
-    "metadata",
+    "statistics.type",
   ],
-  /**
-   * Se i tentativi ricchi falliscono (depth include / piano), restano dati core + formazioni.
-   * Evita il caso “fixture ok ma lineups=[]” che svuota il campo in MatchDetail.
-   */
-  [
-    "league",
-    "season",
-    "round",
-    "state",
-    "participants",
-    "venue",
-    "scores",
-    "lineups",
-    "formations",
-    "metadata",
-  ],
-  ["league", "season", "round", "state", "participants", "venue", "scores", "events.type"],
 ];
+
+const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDES = [...SPORTMONKS_INCLUDE_POLICY.detailEnrichmentAllowed];
 
 const SPORTMONKS_LIVE_INCLUDE_ATTEMPTS = [
   [
@@ -774,14 +849,77 @@ async function requestSportmonksCollection(pathname, options = {}) {
   return collectionPayload;
 }
 
+function getSportmonksRuntimeIncludeDenylist(scope, pathname) {
+  if (!globalThis.__sportmonksRuntimeIncludeDenylist) {
+    globalThis.__sportmonksRuntimeIncludeDenylist = new Map();
+  }
+  const key = `${scope || "default"}:${pathname || ""}`;
+  if (!globalThis.__sportmonksRuntimeIncludeDenylist.has(key)) {
+    globalThis.__sportmonksRuntimeIncludeDenylist.set(key, new Set());
+  }
+  return globalThis.__sportmonksRuntimeIncludeDenylist.get(key);
+}
+
+function looksLikeUnsupportedIncludeError(message) {
+  const normalized = String(message || "").toLowerCase();
+  return (
+    normalized.includes("include") &&
+    (normalized.includes("unknown") ||
+      normalized.includes("unsupported") ||
+      normalized.includes("invalid") ||
+      normalized.includes("not allowed"))
+  );
+}
+
+function getIncludesFromProviderError(message) {
+  const normalized = String(message || "");
+  const tokens = [];
+  const dottedRegex = /[a-z_]+(?:\.[a-z_]+)+/gi;
+  const quotedRegex = /requested include ['"]([a-z_]+(?:\.[a-z_]+)?)['"]/gi;
+  const plainExpectedRegex = /\bexpected\b/gi;
+  let quoted = quotedRegex.exec(normalized);
+  while (quoted) {
+    tokens.push(quoted[1]);
+    quoted = quotedRegex.exec(normalized);
+  }
+  if (plainExpectedRegex.test(normalized)) {
+    tokens.push("expected");
+    tokens.push("expected.type");
+  }
+  let match = dottedRegex.exec(normalized);
+  while (match) {
+    tokens.push(match[0]);
+    match = dottedRegex.exec(normalized);
+  }
+  return Array.from(new Set(tokens));
+}
+
+function buildAllowedIncludesForScope(include, scope, pathname) {
+  const staticDenylist = SPORTMONKS_INCLUDE_DENYLIST_BY_SCOPE[scope] || new Set();
+  const runtimeDenylist = getSportmonksRuntimeIncludeDenylist(scope, pathname);
+  return asArray(include).filter(
+    (entry) => !staticDenylist.has(entry) && !runtimeDenylist.has(entry)
+  );
+}
+
 async function requestSportmonksWithIncludeFallback(pathname, attempts, options = {}) {
   let lastError = null;
   const startedAt = Date.now();
-  const { telemetry = {}, ...requestOptions } = options || {};
+  const { telemetry = {}, includeScope = "detail_core", ...requestOptions } = options || {};
   let attemptIndex = 0;
+  const attemptedIncludeSets = new Set();
 
   for (const include of attempts) {
     attemptIndex += 1;
+    const scopedInclude = buildAllowedIncludesForScope(include, includeScope, pathname);
+    const includeKey = scopedInclude.join(";");
+    if (!scopedInclude.length) {
+      continue;
+    }
+    if (attemptedIncludeSets.has(includeKey)) {
+      continue;
+    }
+    attemptedIncludeSets.add(includeKey);
     try {
       const requester = requestOptions.expectCollection
         ? requestSportmonksCollection
@@ -789,7 +927,7 @@ async function requestSportmonksWithIncludeFallback(pathname, attempts, options 
 
       const payload = await requester(pathname, {
         ...requestOptions,
-        include,
+        include: scopedInclude,
         telemetry: {
           ...telemetry,
           fallbackTriggered: attemptIndex > 1,
@@ -814,13 +952,19 @@ async function requestSportmonksWithIncludeFallback(pathname, attempts, options 
         dtoTarget: telemetry.dtoTarget || null,
         dtoVersion: telemetry.dtoVersion || "v1",
         providerEndpoint: pathname,
-        includeSet: Array.isArray(include) ? include.join(";") : include || null,
+        includeSet: scopedInclude.join(";"),
         estimatedCallCost: payload?.collectionPagination?.pagesFetched ?? 1,
         status: 200,
       });
       return payload;
     } catch (error) {
       lastError = error;
+      if (looksLikeUnsupportedIncludeError(error?.message)) {
+        const runtimeDenylist = getSportmonksRuntimeIncludeDenylist(includeScope, pathname);
+        getIncludesFromProviderError(error?.message).forEach((includeName) =>
+          runtimeDenylist.add(includeName)
+        );
+      }
     }
   }
 
@@ -3437,7 +3581,7 @@ async function mergePrematchOddsIntoFixture(fixture) {
   return { ...fixture, odds: [...existing, ...extra] };
 }
 
-export async function fetchSportmonksFixtureById(fixtureId, telemetry = {}) {
+export async function fetchSportmonksFixtureCoreById(fixtureId, telemetry = {}) {
   const normalizedFixtureId = String(fixtureId || "").trim();
 
   if (!normalizedFixtureId) {
@@ -3446,13 +3590,14 @@ export async function fetchSportmonksFixtureById(fixtureId, telemetry = {}) {
 
   const response = await requestSportmonksWithIncludeFallback(
     `fixtures/${encodeURIComponent(normalizedFixtureId)}`,
-    SPORTMONKS_FIXTURE_INCLUDE_ATTEMPTS,
+    SPORTMONKS_FIXTURE_CORE_INCLUDE_ATTEMPTS,
     {
       timezone: ROME_TIMEZONE,
       perPage: null,
+      includeScope: "detail_core",
       telemetry: {
         route: telemetry.route || "/api/football/fixtures/[fixtureId]",
-        requestPurpose: telemetry.requestPurpose || "fixture_detail",
+        requestPurpose: telemetry.requestPurpose || "fixture_detail_core",
         days: null,
         fixtureId: normalizedFixtureId,
         dtoTarget: telemetry.dtoTarget || "MatchDetailCoreDTO",
@@ -3467,6 +3612,47 @@ export async function fetchSportmonksFixtureById(fixtureId, telemetry = {}) {
   }
 
   return mergePrematchOddsIntoFixture(raw);
+}
+
+export async function fetchSportmonksFixtureEnrichmentById(fixtureId, telemetry = {}) {
+  const normalizedFixtureId = String(fixtureId || "").trim();
+
+  if (!normalizedFixtureId) {
+    return null;
+  }
+
+  const payload = await requestSportmonksJson(`fixtures/${encodeURIComponent(normalizedFixtureId)}`, {
+    include: SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDES,
+    timezone: ROME_TIMEZONE,
+    perPage: null,
+    telemetry: {
+      route: telemetry.route || "/api/football/fixtures/[fixtureId]",
+      requestPurpose: telemetry.requestPurpose || "fixture_detail_enrichment",
+      days: null,
+      fixtureId: normalizedFixtureId,
+      dtoTarget: telemetry.dtoTarget || "MatchDetailEnrichedDTO",
+      dtoVersion: telemetry.dtoVersion || "v1",
+      fallbackTriggered: false,
+      retryCount: 0,
+    },
+  });
+
+  return payload?.data || null;
+}
+
+export async function fetchSportmonksFixtureById(fixtureId, telemetry = {}) {
+  const core = await fetchSportmonksFixtureCoreById(fixtureId, telemetry);
+  let enrichment = null;
+  try {
+    enrichment = await fetchSportmonksFixtureEnrichmentById(fixtureId, {
+      ...telemetry,
+      requestPurpose: "fixture_detail_enrichment",
+      dtoTarget: "MatchDetailEnrichedDTO",
+    });
+  } catch {
+    enrichment = null;
+  }
+  return enrichment ? { ...core, ...enrichment } : core;
 }
 
 export async function fetchSportmonksSeasonStandings(seasonId, telemetry = {}) {
