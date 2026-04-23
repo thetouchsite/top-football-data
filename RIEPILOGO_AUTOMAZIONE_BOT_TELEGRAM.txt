@@ -1,0 +1,185 @@
+Automazione Bot Telegram - Stato Attuale
+
+Oggi il bot Telegram e gia collegato alla piattaforma e lavora in automatico tramite un backend dedicato su Railway.
+
+Il funzionamento attuale e questo:
+
+1. Il bot legge periodicamente i dati delle partite dal provider Sportmonks.
+2. Analizza quote, probabilita e value bet.
+3. Quando trova una singola o una multipla con EV superiore alla soglia impostata, ad esempio EV > 1.25, genera un alert.
+4. L'alert viene inviato automaticamente sul canale Telegram.
+5. Lo stesso alert viene salvato nel database MongoDB.
+6. Il sito legge questi dati e li mostra nella pagina "Alert inviati".
+7. Quando le partite finiscono, il sistema controlla il risultato e aggiorna l'alert come:
+   - vinto;
+   - perso;
+   - void;
+   - ancora in monitoraggio.
+8. Quando un alert viene chiuso, viene registrato anche nella pagina "Performance Storiche", cosi possiamo calcolare ROI, bilancio e storico reale.
+9. Il bot puo inviare anche un messaggio Telegram quando un alert passa a vinto/perso, cosi gli utenti vengono aggiornati senza dover controllare manualmente il sito.
+
+In sintesi: il bot non e solo un invio manuale di messaggi, ma un sistema automatico che analizza dati, manda alert, salva lo storico e aggiorna le performance.
+
+
+Feature che possiamo aggiungere
+
+1. CTA obbligatoria in ogni alert Telegram
+
+Ogni alert Telegram puo avere sempre una call to action chiara.
+
+Esempio:
+
+Apri analisi completa
+Confronta quote
+Vedi la combo
+
+Se e disponibile un link affiliato del bookmaker, usiamo quello.
+Se non c'e, mandiamo comunque l'utente alla pagina corretta del sito, ad esempio:
+
+/match/123
+/multi-bet
+/performance-storiche
+
+Cosi nessun alert resta senza uscita commerciale.
+
+
+2. UTM tracking sui link Telegram
+
+Possiamo aggiungere parametri UTM a ogni link inviato su Telegram.
+
+Esempio:
+
+?utm_source=telegram&utm_medium=bot&utm_campaign=value_bet
+
+Questo permette di capire:
+
+- quanti utenti arrivano dal canale Telegram;
+- quali alert generano piu click;
+- quali messaggi convertono meglio;
+- quali orari funzionano di piu;
+- quali bookmaker ricevono piu traffico.
+
+E utile per ottimizzare CPA, conversioni e campagne future.
+
+
+3. Bottoni Telegram inline
+
+Invece di mettere solo link testuali, il bot puo inviare bottoni cliccabili direttamente sotto il messaggio.
+
+Esempio:
+
+[Apri analisi] [Confronta quote]
+
+Oppure per una multipla:
+
+[Vedi combo] [Confronta quote]
+
+Questo rende il messaggio piu professionale e aumenta il tasso di click.
+
+
+4. Click tracking interno
+
+Possiamo creare un sistema interno di tracking click.
+
+Invece di mandare direttamente l'utente al bookmaker o alla pagina match, il link passa prima da una route interna tipo:
+
+/r/match
+/r/bookmaker
+/r/combo
+
+Questa route registra il click nel database e poi reindirizza l'utente alla destinazione finale.
+
+Cosi possiamo salvare:
+
+- alert cliccato;
+- bookmaker cliccato;
+- tipo di messaggio;
+- campagna;
+- data e ora;
+- provenienza Telegram.
+
+Questo ci permette di avere statistiche proprietarie, non solo quelle di Telegram.
+
+
+5. Post performance automatico
+
+La parte performance e gia parzialmente automatizzata.
+
+Oggi il sistema puo:
+
+- registrare gli alert inviati;
+- controllare se sono vinti o persi;
+- salvare il risultato;
+- calcolare ROI e bilancio;
+- mostrare tutto nella pagina "Performance Storiche".
+
+Possiamo migliorare questa parte facendo inviare automaticamente al bot un recap periodico.
+
+Esempio:
+
+Performance aggiornate
+
+Alert chiusi oggi: 4
+Vinti: 3
+Persi: 1
+ROI: +18.5%
+Profitto: +2.4 unita
+
+Questo aumenta fiducia e autorevolezza, perche il canale mostra risultati tracciati e non solo pronostici.
+
+
+6. Post Big Match automatico
+
+Possiamo creare un post automatico giornaliero sul match piu importante del feed.
+
+Il sistema sceglie il match in base a:
+
+- competizione;
+- confidence;
+- presenza di value bet;
+- importanza del campionato;
+- dati disponibili.
+
+Esempio:
+
+Big Match del giorno
+
+Inter - Juventus
+Confidence: 82/100
+Dato chiave: valore rilevato su Over 2.5
+Apri analisi completa
+
+Questo serve per alimentare il canale anche quando non ci sono alert immediati.
+
+
+7. Top 3 Value Bet del giorno
+
+Il bot puo pubblicare automaticamente un post con le migliori 3 value bet del giorno.
+
+Esempio:
+
+Top 3 Value Bet del giorno
+
+1. Inter - Juventus | Over 2.5 | EV 1.32
+2. Real Madrid - Betis | 1 | EV 1.28
+3. Arsenal - Chelsea | Goal | EV 1.26
+
+Apri il comparatore quote
+
+Questo trasforma il canale in un feed continuo di opportunita, non solo in un sistema di alert isolati.
+
+
+Obiettivo Finale
+
+L'obiettivo e trasformare Telegram in un canale automatico che fa tre cose:
+
+1. Acquisizione
+Porta utenti sul sito tramite alert, CTA e post programmati.
+
+2. Conversione
+Spinge l'utente a cliccare su bookmaker, comparatore o analisi.
+
+3. Fiducia
+Mostra performance reali, risultati chiusi e storico ROI.
+
+In pratica, il bot diventa una parte attiva della piattaforma: non solo manda messaggi, ma genera traffico, registra dati, aggiorna gli utenti e supporta la conversione.
