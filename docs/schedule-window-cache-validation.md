@@ -18,6 +18,17 @@ Validazione manuale completata su endpoint `GET /api/football/schedules/window?d
 
 Nota operativa locale: in questa sessione `next dev` (Turbopack) ha mostrato 404 intermittenti sulle route `/api/*`; i test sono stati eseguiti in modo stabile con `npx next dev --webpack`.
 
+## Appendice — validazione dettaglio fixtureId (fase 1)
+
+Verificata anche la fase 1 della route `GET /api/football/fixtures/{fixtureId}`:
+
+- prima chiamata: `cache=miss`, `layer=provider`, `ref=rebuild_ok`
+- chiamate successive: `cache=hit`, `layer=L1`, `ref=none`, `ageMs` crescente
+- richieste concorrenti: `source=inflight_shared`, `ref=inflight_wait`
+- separazione chiavi per `view=core` e `view=full` confermata (cache indipendenti)
+
+Questa fase non introduce L2 Redis sul dettaglio fixture; usa L1 + inflight + stale-if-error.
+
 ---
 
 ## Body pubblico `GET /api/football/schedules/window?days=7`

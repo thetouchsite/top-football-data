@@ -33,6 +33,12 @@ DONE (2026-04-23) â€” performance feed 7 giorni (L1 + Upstash L2, builder, 
 - Validazione manuale completata: L2 hit, SWR soft/hard, expired rebuild, stale-if-error (vedi docs/schedule-window-cache-validation.md)
 - Nota locale: con Next 16 in questa macchina alcuni run `next dev` (Turbopack) hanno mostrato 404 su `/api/*`; workaround operativo test = `npx next dev --webpack`
 
+DONE (2026-04-23) â€” fixture detail phase-1 cache hardening (`/api/football/fixtures/[fixtureId]`):
+- L1 cache per chiave `fixtureId:view` (core/full) con TTL dinamico per stato fixture (prematch/live/finished)
+- Inflight coalescing confermato su richieste concorrenti (`inflight_wait` / `inflight_shared`)
+- stale-if-error su dettaglio fixture (senza introdurre L2 Redis in questa fase)
+- Telemetria estesa summary (`layer`, `ageMs`, `ref`, `fstate`) per debug e validazione operativa
+
 OUT OF SCOPE (per la fase performance documentata; non toccare senza decisione prodotto):
 - Cambio contratti API pubblici schedule/detail stabilizzati
 - Refactor UI massivo oltre consumo invariato degli endpoint

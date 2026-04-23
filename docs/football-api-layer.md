@@ -154,6 +154,20 @@ Checklist eseguita e superata su endpoint `GET /api/football/schedules/window?da
 
 Nota operativa locale: in questa macchina `next dev` (Turbopack) ha dato 404 intermittenti su `/api/*`; per test affidabili usare `npx next dev --webpack`. In produzione non cambia l'architettura applicativa descritta sopra.
 
+### Fixture detail (`/api/football/fixtures/[fixtureId]`) — fase 1 ottimizzazione
+
+Implementata una fase 1 leggera (senza L2 Redis) per migliorare latenza e robustezza del dettaglio match:
+
+- **L1 cache per `fixtureId:view`** (`core`/`full`) con TTL dinamico per stato match:
+  - prematch: 5m
+  - live: 20s
+  - finished: 60m
+- **Inflight coalescing** per evitare richieste duplicate concorrenti sullo stesso `fixtureId:view`.
+- **stale-if-error**: se il provider fallisce e la cache locale è ancora entro finestra di sicurezza, viene servito l'ultimo snapshot disponibile.
+- **Telemetria estesa** su summary route: `layer`, `ageMs`, `ref`, `fstate` (oltre a `cache/source`).
+
+Esito test manuali locale: `miss -> L1 hit` confermato, inflight confermato (`inflight_wait`), separazione cache `view=core` e `view=full` confermata.
+
 ---
 
 ## 6. Piano e documentazione
