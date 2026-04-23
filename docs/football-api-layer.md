@@ -2,7 +2,7 @@
 
 Documento operativo per chi lavora sul repository: architettura attuale del feed calcio, cosa è già stato fatto, limiti, prossima fase. **Non sostituisce** le roadmap cliente; integra i punti tecnici football-specific.
 
-*Ultimo aggiornamento: 2026-04-23*
+*Ultimo aggiornamento: 2026-04-24*
 
 ---
 
@@ -208,5 +208,38 @@ Piano: [`.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md`](../.cursor/pl
 | Contratti list/detail, allowlist, telemetria, inflight, clamp 7 giorni | **DONE** (manutenzione evolutiva a parte) |
 | Performance feed 7 giorni (L2, SWR, prewarm) | **DONE** (L1+L2+builder; Hobby = cron **giornaliero** in `vercel.json`; Pro = sost. con example **5m**) |
 | Refactor UI ampio o cambio allowlist prodotto senza processo | **OUT OF SCOPE** finché non deciso (la allowlist in codice resta la fonte) |
+
+---
+
+## 9. Stato operativo prodotto che dipende dal layer football
+
+Aggiornamento 2026-04-24:
+
+- `GET /api/alerts` e `GET /api/performance` sono ormai parte attiva del prodotto:
+  - pagina Alert inviati
+  - pagina Multi-Bet
+  - pagina Performance Storiche
+
+- `/multi-bet` oggi usa:
+  - `type=multibet&status=pending` come fonte primaria
+  - fallback sugli ultimi multibet salvati se non ci sono pending
+
+- Il backend Telegram/worker usa il layer football e Sportmonks per:
+  - scansione fixture
+  - generazione candidate markets
+  - single alerts
+  - multibet alerts
+  - settlement
+  - performance summary
+  - daily post "Top 3 Value Bet del giorno"
+
+- Il layer football frontend e il worker Telegram sono ora coerenti sul concetto di:
+  - value bet
+  - confidence
+  - top value feed
+
+Limite ancora aperto:
+- tracking click proprietario `/r/...` non ancora implementato
+- player props bookmaker context-aware ancora parziali e dipendenti da copertura feed/provider
 
 Per stato lavori globale del repo, includere `TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt` nella lettura.

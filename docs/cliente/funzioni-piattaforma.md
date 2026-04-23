@@ -3,6 +3,26 @@
 Fonte: documento «FUNZIONI PIATTAFORMA» (cliente, Touchsite / Top Football Data).  
 Versione testuale in repository per ricerca e versioning; il file `.docx` originale resta riferimento formale.
 
+## Stato implementazione corrente (aggiornamento 2026-04-24)
+
+Questa pagina resta il riferimento requisiti cliente.
+Lo stato implementato oggi, in sintesi, e questo:
+
+- Sezione A - Modelli predittivi: largamente implementata
+- Sezione B - Deep data: implementata in parte rilevante, ma ancora parziale sui dati avanzati giocatore
+- Sezione C - Multi-Bet: implementata e operativa su 3 modalita
+- Automazione Telegram / performance / retention: implementata in modo sostanziale
+
+Stato reale pratico:
+- Modelli singolo match: circa 85-90%
+- Analisi statistica deep data: circa 65-75%
+- Smart Multi-Bet Engine: circa 85-90%
+- Automazione Telegram: circa 85-90%
+
+Per il dettaglio operativo aggiornato fare riferimento a:
+- `TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt`
+- `RIEPILOGO_AUTOMAZIONE_BOT_TELEGRAM.txt`
+
 ---
 
 ## A. Modelli predittivi — singolo match (prediction engine)
