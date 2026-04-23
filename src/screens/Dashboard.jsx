@@ -30,9 +30,9 @@ const QUICK_LEAGUES = [
   "Tutti",
   "Serie A",
   "Premier League",
-  "Champions League",
   "La Liga",
   "Bundesliga",
+  "Ligue 1",
 ];
 
 function formatAlertTime(value) {
@@ -137,10 +137,14 @@ export default function Dashboard() {
   const feedMatches = Array.isArray(schedulePayload?.matches) ? schedulePayload.matches : [];
 
   const topMatches = useMemo(
-    () =>
-      sortMatchesByFeaturedPriority(
-        feedMatches.filter((match) => matchLeagueFilter(match, activeLeague))
-      ).slice(0, 4),
+    () => {
+      const todayMatches = feedMatches.filter(
+        (match) =>
+          getMatchStatusBucket(match) === "today" &&
+          matchLeagueFilter(match, activeLeague)
+      );
+      return sortMatchesByFeaturedPriority(todayMatches).slice(0, 4);
+    },
     [activeLeague, feedMatches]
   );
   const nextAvailableMatch = useMemo(
@@ -339,19 +343,16 @@ export default function Dashboard() {
                             alt=""
                             size="sm"
                           />
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0 flex-1 text-center md:text-left">
                           <div className="truncate text-sm font-semibold text-foreground">
                             {match.home} vs {match.away}
                           </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <div className="mt-1 flex w-full flex-wrap items-center justify-center gap-1.5 md:justify-start">
                             {match.valueBet && (
-                              <ValueBetBadge match={match} variant="compact" />
+                              <div className="mx-auto flex justify-center origin-center scale-[0.82] md:mx-0 md:origin-left md:scale-100">
+                                <ValueBetBadge match={match} variant="compact" />
+                              </div>
                             )}
-                            <span className="hidden text-[10px] text-muted-foreground sm:inline">
-                              {match.odds_provider === "not_available_with_current_feed"
-                                ? "Quote derivate"
-                                : "Quote provider"}
-                            </span>
                           </div>
                           </div>
                           <FootballMediaImage
@@ -363,7 +364,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="flex w-full items-center justify-between gap-2 border-t border-border/30 pt-2 md:w-auto md:justify-end md:border-0 md:pt-0">
-                        <div className="text-right">
+                        <div className="text-center md:text-left">
                           <div className="text-[10px] text-muted-foreground">Quote 1X2</div>
                           <div className="text-xs font-semibold tabular-nums text-foreground">
                             1: {match.odds.home} · X: {match.odds.draw} · 2: {match.odds.away}
@@ -441,7 +442,7 @@ export default function Dashboard() {
                 <div className="mb-3 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-primary" />
                   <h4 className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
-                    Value bet (derivati)
+                    Value bet
                   </h4>
                 </div>
                 <div className="space-y-2">

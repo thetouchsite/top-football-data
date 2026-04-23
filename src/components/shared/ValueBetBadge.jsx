@@ -42,7 +42,7 @@ export default function ValueBetBadge({ type, edge, match, variant = "default" }
         role="status"
         title={title}
         aria-label={aria}
-        className="inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md border border-primary/25 bg-primary/8 px-2 py-1 text-primary"
+        className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-1 gap-y-0.5 rounded-md border border-primary/25 bg-primary/8 px-2 py-1 text-center text-primary md:justify-start md:text-left"
       >
         <TrendingUp className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
         <span className="text-[10px] font-semibold uppercase tracking-wide">Value bet</span>
