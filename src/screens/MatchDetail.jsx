@@ -24,6 +24,8 @@ import { useApp } from "@/lib/AppContext";
 import { getFixture } from "@/api/football";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
 
+const EMPTY_ARRAY = [];
+
 function createUnknownMatchFallback(fixtureId) {
   return {
     id: fixtureId,
@@ -207,6 +209,42 @@ function derivePressureSupport(match, valueHighlight) {
   };
 }
 
+function buildFallbackPlayerProfile(player, teamName) {
+  if (!player) return null;
+
+  const position = player.position || player.pos || player.role || "--";
+  const number =
+    player.number ??
+    player.jerseyNumber ??
+    player.jersey_number ??
+    player.shirtNumber ??
+    player.shirt_number ??
+    null;
+
+  return {
+    id: player.id ?? player.player_id ?? player.playerId ?? player.name,
+    name: player.name || player.displayName || "Giocatore",
+    team: player.team || teamName || "--",
+    position,
+    pos: position,
+    number,
+    media: player.media || null,
+    xg: player.xg ?? 0,
+    shots: player.shots ?? 0,
+    form: player.form || "Stabile",
+    formHistory: Array.isArray(player.formHistory) ? player.formHistory : [0, 0, 0, 0, 0],
+    scorerOdds: player.scorerOdds ?? player.odds ?? 10,
+    scorerProb: player.scorerProb ?? player.probability ?? 10,
+    goals: player.goals ?? 0,
+    assists: player.assists ?? 0,
+    fouls: player.fouls ?? 0,
+    minutes: player.minutes ?? 0,
+    insight:
+      player.insight ||
+      "Profilo costruito dalla formazione disponibile per questa fixture.",
+  };
+}
+
 export default function MatchDetail() {
   const { id } = useParams();
   const routeId = decodeURIComponent(String(id || ""));
@@ -218,6 +256,7 @@ export default function MatchDetail() {
   const [fixtureLoading, setFixtureLoading] = useState(Boolean(fixtureIdToLoad));
   const [fixtureError, setFixtureError] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [selectedLineupSide, setSelectedLineupSide] = useState("home");
 
   useEffect(() => {
     if (!fixtureIdToLoad) {
@@ -358,7 +397,7 @@ export default function MatchDetail() {
   const match = apiMatch || createUnknownMatchFallback(routeId || Date.now().toString());
   const isFav = favorites.matches.includes(String(match.id));
   const isFollowed = following.matches.includes(String(match.id));
-  const availablePlayers = Array.isArray(match.players) ? match.players : [];
+  const availablePlayers = Array.isArray(match.players) ? match.players : EMPTY_ARRAY;
   const comparisonBookmakers =
     match.odds_provider === "not_available_with_current_feed" ? [] : match.bookmakers;
   const premiumAnalysis = useMemo(() => buildPremiumAnalysis(match), [match]);
@@ -381,16 +420,42 @@ export default function MatchDetail() {
     () => derivePressureSupport(match, valueHighlight),
     [match, valueHighlight]
   );
-  const standingsRows = Array.isArray(match.standings?.rows) ? match.standings.rows : [];
-  const homeCoaches = Array.isArray(match.coaches?.home) ? match.coaches.home : [];
-  const awayCoaches = Array.isArray(match.coaches?.away) ? match.coaches.away : [];
-  const referees = Array.isArray(match.referees) ? match.referees : [];
-  const homeSquad = Array.isArray(match.squads?.home) ? match.squads.home : [];
-  const awaySquad = Array.isArray(match.squads?.away) ? match.squads.away : [];
+  const standingsRows = Array.isArray(match.standings?.rows) ? match.standings.rows : EMPTY_ARRAY;
+  const homeCoaches = Array.isArray(match.coaches?.home) ? match.coaches.home : EMPTY_ARRAY;
+  const awayCoaches = Array.isArray(match.coaches?.away) ? match.coaches.away : EMPTY_ARRAY;
+  const referees = Array.isArray(match.referees) ? match.referees : EMPTY_ARRAY;
+  const homeSquad = Array.isArray(match.squads?.home) ? match.squads.home : EMPTY_ARRAY;
+  const awaySquad = Array.isArray(match.squads?.away) ? match.squads.away : EMPTY_ARRAY;
+  const homeLineup = match.lineups?.home || { formation: "--", players: [] };
+  const awayLineup = match.lineups?.away || { formation: "--", players: [] };
+  const selectedLineup = selectedLineupSide === "away" ? awayLineup : homeLineup;
+  const selectedLineupPlayers = Array.isArray(selectedLineup?.players)
+    ? selectedLineup.players
+    : EMPTY_ARRAY;
+  const selectedLineupTeam = selectedLineupSide === "away" ? match.away : match.home;
+  const selectedSquad = selectedLineupSide === "away" ? awaySquad : homeSquad;
 
   useEffect(() => {
-    setSelectedPlayer(availablePlayers[0] || null);
-  }, [availablePlayers]);
+    const firstLineupPlayer = selectedLineupPlayers[0];
+    const playerFromLineup =
+      firstLineupPlayer &&
+      availablePlayers.find(
+        (candidate) =>
+          candidate.id === firstLineupPlayer.id || candidate.name === firstLineupPlayer.name
+      );
+    const playerFromTeam = availablePlayers.find(
+      (candidate) => normalizeValueToken(candidate.team) === normalizeValueToken(selectedLineupTeam)
+    );
+    const firstSquadPlayer = selectedSquad[0];
+
+    setSelectedPlayer(
+      playerFromLineup ||
+        playerFromTeam ||
+        buildFallbackPlayerProfile(firstLineupPlayer || firstSquadPlayer, selectedLineupTeam) ||
+        availablePlayers[0] ||
+        null
+    );
+  }, [availablePlayers, selectedLineupSide, match.home, match.away, match.lineups, match.squads]);
 
   return (
     <div className="app-page">
@@ -860,56 +925,84 @@ export default function MatchDetail() {
               <TabsContent value="formazioni">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/40 bg-secondary/10 p-1">
+                      {[
+                        { side: "home", team: match.home, lineup: homeLineup },
+                        { side: "away", team: match.away, lineup: awayLineup },
+                      ].map((option) => {
+                        const isActive = selectedLineupSide === option.side;
+                        const playersCount = Array.isArray(option.lineup?.players)
+                          ? option.lineup.players.length
+                          : 0;
+
+                        return (
+                          <button
+                            key={option.side}
+                            type="button"
+                            onClick={() => setSelectedLineupSide(option.side)}
+                            className={`min-w-0 rounded-lg px-3 py-2 text-left transition-all ${
+                              isActive
+                                ? "border border-primary/25 bg-primary/10 text-primary"
+                                : "border border-transparent text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
+                            }`}
+                            title={`Mostra formazione ${option.team}`}
+                          >
+                            <div className="truncate text-xs font-bold">{option.team}</div>
+                            <div className="mt-0.5 text-[11px] opacity-80">
+                              {option.lineup?.formation || "--"} - {playersCount} giocatori
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                     <FormationPitch
-                      homeLineup={match.lineups?.home || { formation: "--", players: [] }}
-                      homeTeam={match.home}
-                      awayTeam={match.away}
+                      homeLineup={selectedLineup}
+                      homeTeam={selectedLineupTeam}
+                      awayTeam={selectedLineupSide === "away" ? match.home : match.away}
                       onPlayerClick={(player) => {
                         const nextPlayer =
                           availablePlayers.find(
                             (candidate) =>
                               candidate.id === player.id || candidate.name === player.name
-                          ) || availablePlayers[0] || null;
+                          ) || buildFallbackPlayerProfile(player, selectedLineupTeam);
                         setSelectedPlayer(nextPlayer);
                       }}
                     />
-                    {!match.lineups?.home?.players?.length && (
+                    {!selectedLineupPlayers.length && (
                       <GlassCard>
                         <p className="text-xs text-muted-foreground">
-                          Nessuna formazione caricata dal feed corrente per questa fixture.
+                          Nessuna formazione caricata dal feed corrente per {selectedLineupTeam}.
                         </p>
                       </GlassCard>
                     )}
-                    {!match.lineups?.home?.players?.length && (homeSquad.length > 0 || awaySquad.length > 0) && (
+                    {!selectedLineupPlayers.length && selectedSquad.length > 0 && (
                       <Accordion type="single" collapsible className="rounded-xl border border-border/40 bg-secondary/10 px-3">
                         <AccordionItem value="rose-md" className="border-0">
                           <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">
-                            Rose squadra (lista compatta)
+                            Rosa {selectedLineupTeam} (lista compatta)
                           </AccordionTrigger>
                           <AccordionContent>
-                            <div className="grid md:grid-cols-2 gap-3 pb-2">
-                              <div className="space-y-2">
-                                <div className="text-xs font-semibold text-primary">{match.home}</div>
-                                {homeSquad.slice(0, 11).map((player) => (
-                                  <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
-                                    <span className="text-foreground">{player.name}</span>
-                                    <span className="text-muted-foreground">
-                                      #{player.number || "--"} - {player.position}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="space-y-2">
-                                <div className="text-xs font-semibold text-primary">{match.away}</div>
-                                {awaySquad.slice(0, 11).map((player) => (
-                                  <div key={player.id} className="flex items-center justify-between text-xs p-2 rounded-lg bg-secondary/30">
-                                    <span className="text-foreground">{player.name}</span>
-                                    <span className="text-muted-foreground">
-                                      #{player.number || "--"} - {player.position}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
+                            <div className="space-y-2 pb-2">
+                              {selectedSquad.slice(0, 16).map((player) => (
+                                <button
+                                  key={player.id || player.name}
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedPlayer(
+                                      availablePlayers.find(
+                                        (candidate) =>
+                                          candidate.id === player.id || candidate.name === player.name
+                                      ) || buildFallbackPlayerProfile(player, selectedLineupTeam)
+                                    )
+                                  }
+                                  className="flex w-full items-center justify-between rounded-lg bg-secondary/30 p-2 text-left text-xs transition-colors hover:bg-secondary/50"
+                                >
+                                  <span className="min-w-0 truncate text-foreground">{player.name}</span>
+                                  <span className="ml-2 shrink-0 text-muted-foreground">
+                                    #{player.number || "--"} - {player.position || player.pos || "--"}
+                                  </span>
+                                </button>
+                              ))}
                             </div>
                           </AccordionContent>
                         </AccordionItem>

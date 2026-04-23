@@ -132,7 +132,15 @@ export const SPORTMONKS_INCLUDE_POLICY = {
     "expected",
     "expected.type",
   ],
-  detailEnrichmentAllowed: ["lineups", "lineups.details.type", "events.type", "formations", "coaches", "referees"],
+  detailEnrichmentAllowed: [
+    "lineups",
+    "lineups.player",
+    "lineups.details.type",
+    "events.type",
+    "formations",
+    "coaches",
+    "referees",
+  ],
   detailEnrichmentForbidden: [
     "expected",
     "expected.type",
@@ -448,6 +456,33 @@ function formatShortCode(participant) {
 
 const SPORTMONKS_MEDIA_BASE_DEFAULT = "https://cdn.sportmonks.com";
 
+function pickImageCandidate(value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const candidate = String(value).trim();
+    return candidate ? candidate : null;
+  }
+
+  if (typeof value !== "object") {
+    return null;
+  }
+
+  return (
+    pickImageCandidate(value.image_path) ||
+    pickImageCandidate(value.imagePath) ||
+    pickImageCandidate(value.path) ||
+    pickImageCandidate(value.url) ||
+    pickImageCandidate(value.src) ||
+    pickImageCandidate(value.cdn_url) ||
+    pickImageCandidate(value.cdnUrl) ||
+    pickImageCandidate(value.photo) ||
+    null
+  );
+}
+
 function pickRawImagePath(source) {
   if (!source || typeof source !== "object") {
     return null;
@@ -459,24 +494,36 @@ function pickRawImagePath(source) {
   const nestedParticipant =
     source.participant && typeof source.participant === "object" ? source.participant : null;
 
-  return (
-    source.image_path ||
-    source.imagePath ||
-    source.logo_path ||
-    source.logoPath ||
-    source.logo ||
-    source.photo ||
-    source.image ||
-    source?.meta?.image_path ||
-    nestedPlayer?.image_path ||
-    nestedPlayer?.imagePath ||
-    nestedPlayer?.photo ||
-    nestedTeam?.image_path ||
-    nestedTeam?.imagePath ||
-    nestedParticipant?.image_path ||
-    nestedParticipant?.imagePath ||
-    null
-  );
+  const candidates = [
+    source.image_path,
+    source.imagePath,
+    source.logo_path,
+    source.logoPath,
+    source.logo,
+    source.photo,
+    source.image,
+    source?.meta?.image_path,
+    source?.meta?.image,
+    nestedPlayer?.image_path,
+    nestedPlayer?.imagePath,
+    nestedPlayer?.photo,
+    nestedPlayer?.image,
+    nestedTeam?.image_path,
+    nestedTeam?.imagePath,
+    nestedTeam?.image,
+    nestedParticipant?.image_path,
+    nestedParticipant?.imagePath,
+    nestedParticipant?.image,
+  ];
+
+  for (const candidate of candidates) {
+    const raw = pickImageCandidate(candidate);
+    if (raw) {
+      return raw;
+    }
+  }
+
+  return null;
 }
 
 function resolveSportmonksMediaUrl(raw) {
@@ -1860,6 +1907,77 @@ function normalizeSquadPlayers(teamSquadEntries = [], teamName = "") {
     weight: entry?.player?.weight || null,
     media: buildMediaBundle(entry?.player || entry),
   }));
+}
+
+function hasMediaImage(media) {
+  return Boolean(media?.imageUrl || media?.thumbUrl);
+}
+
+function addPlayerMediaIndexEntry(index, key, media) {
+  const normalizedKey = String(key || "").trim();
+  if (!normalizedKey || !hasMediaImage(media) || index.has(normalizedKey)) {
+    return;
+  }
+
+  index.set(normalizedKey, media);
+}
+
+function buildPlayerMediaIndex(players = []) {
+  const index = new Map();
+
+  asArray(players).forEach((player) => {
+    if (!hasMediaImage(player?.media)) {
+      return;
+    }
+
+    const id = player?.id ?? player?.player_id ?? player?.playerId;
+    const name = normalizeName(player?.name || player?.displayName);
+    const team = normalizeName(player?.team);
+
+    addPlayerMediaIndexEntry(index, id, player.media);
+    addPlayerMediaIndexEntry(index, `${team}:${name}`, player.media);
+    addPlayerMediaIndexEntry(index, name, player.media);
+  });
+
+  return index;
+}
+
+function findPlayerMediaFallback(player, mediaIndex, teamName = "") {
+  if (!player || hasMediaImage(player.media)) {
+    return player?.media || null;
+  }
+
+  const id = player?.id ?? player?.player_id ?? player?.playerId;
+  const name = normalizeName(player?.name || player?.displayName || player?.player_name);
+  const team = normalizeName(player?.team || teamName);
+
+  return (
+    mediaIndex.get(String(id || "").trim()) ||
+    mediaIndex.get(`${team}:${name}`) ||
+    mediaIndex.get(name) ||
+    null
+  );
+}
+
+function applyPlayerMediaFallback(players = [], mediaIndex, teamName = "") {
+  return asArray(players).map((player) => {
+    const fallbackMedia = findPlayerMediaFallback(player, mediaIndex, teamName);
+    if (!fallbackMedia || hasMediaImage(player?.media)) {
+      return player;
+    }
+
+    return {
+      ...player,
+      media: fallbackMedia,
+    };
+  });
+}
+
+function applyLineupMediaFallback(lineup, mediaIndex, teamName = "") {
+  return {
+    ...lineup,
+    players: applyPlayerMediaFallback(lineup?.players, mediaIndex, teamName),
+  };
 }
 
 function buildDerivedProbabilities(xg, homeForm, awayForm) {
@@ -3401,8 +3519,25 @@ export function normalizeSportmonksFixture(fixture = {}) {
     home: normalizeSquadPlayers(fixture?.teamSquads?.home, core.homeParticipant?.name || "Home"),
     away: normalizeSquadPlayers(fixture?.teamSquads?.away, core.awayParticipant?.name || "Away"),
   };
-  const playerProfiles = lineupPlayerProfiles.length
-    ? lineupPlayerProfiles
+  const squadMediaIndex = buildPlayerMediaIndex([...squadPlayers.home, ...squadPlayers.away]);
+  const enrichedRenderedLineups = {
+    home: applyLineupMediaFallback(
+      renderedLineups.home,
+      squadMediaIndex,
+      core.homeParticipant?.name || "Home"
+    ),
+    away: applyLineupMediaFallback(
+      renderedLineups.away,
+      squadMediaIndex,
+      core.awayParticipant?.name || "Away"
+    ),
+  };
+  const enrichedLineupPlayerProfiles = applyPlayerMediaFallback(
+    lineupPlayerProfiles,
+    squadMediaIndex
+  );
+  const playerProfiles = enrichedLineupPlayerProfiles.length
+    ? enrichedLineupPlayerProfiles
     : [...squadPlayers.home, ...squadPlayers.away];
   const coachAssignments = buildCoachAssignments(
     fixture?.coaches,
@@ -3428,8 +3563,8 @@ export function normalizeSportmonksFixture(fixture = {}) {
         : null,
     events: normalizedEvents,
     lineups: {
-      home: renderedLineups.home,
-      away: renderedLineups.away,
+      home: enrichedRenderedLineups.home,
+      away: enrichedRenderedLineups.away,
     },
     formations: formationOverrides,
     squads: squadPlayers,
