@@ -296,11 +296,6 @@ def format_top_value_day_message(
                 f"{index}. {pick['home']} - {pick['away']} | {pick['type']} | EV {round(float(pick['edge']), 2)}{confidence}"
             )
 
-    base = (app_base_url or "").strip().rstrip("/")
-    if base:
-        lines.append("")
-        lines.append(f"Apri il comparatore quote: {base}/modelli-predittivi?utm_source=telegram&utm_medium=bot&utm_campaign=top_value_day")
-
     return "\n".join(lines).strip()
 
 

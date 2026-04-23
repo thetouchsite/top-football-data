@@ -27,6 +27,7 @@ from app.telegram import (
     build_performance_buttons,
     build_settlement_buttons,
     build_single_alert_buttons,
+    build_top_value_day_buttons,
     format_multibet_alert,
     format_performance_summary,
     format_settlement_alert,
@@ -332,7 +333,10 @@ class AlertWorker:
             matches = await self.site_feed.fetch_schedule_matches(days=1, hydrate_details=False)
             picks = build_top_value_day_picks(matches, max_picks=3)
             message = format_top_value_day_message(picks, self.settings.app_base_url, now_local)
-            await self.telegram.send_message(message)
+            await self.telegram.send_message(
+                message,
+                buttons=build_top_value_day_buttons(picks, self.settings.app_base_url),
+            )
             return 1
         except Exception as error:
             logger.warning("Daily Top 3 Value Bet post failed: %s", error)

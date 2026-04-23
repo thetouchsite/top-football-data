@@ -164,6 +164,23 @@ def build_performance_buttons(app_base_url: str = "") -> list[list[dict[str, str
     return [[{"text": "Apri performance", "url": performance_url}]]
 
 
+def build_top_value_day_buttons(picks: list[dict], app_base_url: str = "") -> list[list[dict[str, str]]]:
+    rows: list[list[dict[str, str]]] = []
+    for index, pick in enumerate(picks[:3], start=1):
+        fixture_id = str(pick.get("matchId") or "").strip()
+        if not fixture_id:
+            continue
+        pick_url = _site_url(
+            app_base_url,
+            f"/match/{fixture_id}",
+            campaign="top_value_day",
+            content=f"pick_{index}",
+        )
+        if pick_url:
+            rows.append([{"text": f"Apri pick {index}", "url": pick_url}])
+    return rows
+
+
 def format_single_alert(
     market: FixtureMarket,
     cta_label: str,
@@ -185,23 +202,10 @@ def format_single_alert(
     if market.comparator:
         lines.extend(["", "Comparatore quote (CTA):"])
         for odd in market.comparator:
-            tracked_affiliate = _tracked_url(
-                odd.affiliate_url or "",
-                campaign="value_bet",
-                content=f"{market.fixture_id}_{market.market}_{market.selection}_{odd.bookmaker}",
-            )
-            suffix = f" - {cta_label}: {tracked_affiliate}" if tracked_affiliate else ""
+            suffix = f" - {cta_label}" if odd.affiliate_url else ""
             lines.append(f"- {odd.bookmaker}: {odd.odd}{suffix}")
 
-    analysis_url = _site_url(
-        app_base_url,
-        f"/match/{market.fixture_id}",
-        campaign="value_bet",
-        content=f"{market.fixture_id}_{market.market}_{market.selection}",
-    )
-    if analysis_url:
-        lines.extend(["", f"Apri analisi completa: {analysis_url}"])
-    elif not market.comparator:
+    if not market.comparator:
         lines.extend(["", f"Comparatore: configura APP_BASE_URL e link book ({cta_label})."])
 
     return "\n".join(lines)
@@ -244,24 +248,10 @@ def format_multibet_alert(
     if first and first.comparator:
         lines.extend(["", "Comparatore quote - 1a gamba (CTA):"])
         for odd in first.comparator:
-            tracked_affiliate = _tracked_url(
-                odd.affiliate_url or "",
-                campaign="multibet",
-                content=f"{multibet.modus}_{first.fixture_id}_{first.selection}_{odd.bookmaker}",
-            )
-            suffix = f" - {cta_label}: {tracked_affiliate}" if tracked_affiliate else ""
+            suffix = f" - {cta_label}" if odd.affiliate_url else ""
             lines.append(f"- {odd.bookmaker}: {odd.odd}{suffix}")
 
-    combo_path = f"/multi-bet?ref={multibet.alert_key}" if multibet.alert_key else "/multi-bet"
-    combo_url = _site_url(
-        app_base_url,
-        combo_path,
-        campaign="multibet",
-        content=multibet.modus,
-    )
-    if combo_url:
-        lines.extend(["", f"Vedi la combo: {combo_url}"])
-    elif not (first and first.comparator):
+    if not (first and first.comparator):
         lines.extend(["", f"Comparatore: configura APP_BASE_URL e link book ({cta_label})."])
 
     return "\n".join(lines)
@@ -287,15 +277,6 @@ def format_performance_summary(summary: dict, settled_count: int, app_base_url: 
             settled_at = point.get("settledAt")
             label = settled_at.strftime("%d/%m %H:%M") if hasattr(settled_at, "strftime") else "N/D"
             lines.append(f"- {label}: {point.get('profitUnits', 0)} unita, ROI {point.get('roiPercent', 0)}%")
-
-    performance_url = _site_url(
-        app_base_url,
-        "/performance-storiche",
-        campaign="performance",
-        content="summary",
-    )
-    if performance_url:
-        lines.extend(["", f"Apri performance storiche: {performance_url}"])
 
     return "\n".join(lines)
 
@@ -325,23 +306,6 @@ def format_settlement_alert(alert: dict, status: str, legs: list[dict], app_base
             score = _leg_score_label(leg)
             leg_status = _settlement_result_label(leg.get("status")).lower()
             lines.append(f"{index}. {selection} - {leg_status}{score}")
-
-    path = "/performance-storiche"
-    content = "settlement"
-    if alert.get("type") == "single":
-        fixture_id = ((alert.get("single") or {}).get("fixtureId") or "").strip()
-        if fixture_id:
-            path = f"/match/{fixture_id}"
-            content = f"single_{fixture_id}"
-    else:
-        alert_key = alert.get("alertKey") or ""
-        if alert_key:
-            path = f"/multi-bet?ref={alert_key}"
-            content = "multibet"
-
-    cta_url = _site_url(app_base_url, path, campaign="settlement", content=content)
-    if cta_url:
-        lines.extend(["", f"Apri dettaglio: {cta_url}"])
 
     return "\n".join(lines)
 
