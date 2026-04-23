@@ -135,19 +135,47 @@ def _extract_probabilities(fixture: dict[str, Any]) -> dict[str, float]:
     for entry in _as_list(fixture.get("predictions")):
         if not isinstance(entry, dict):
             continue
-        label = _norm(
-            entry.get("type", {}).get("name") if isinstance(entry.get("type"), dict) else entry.get("type")
-        )
+        type_info = entry.get("type") if isinstance(entry.get("type"), dict) else {}
+        type_name = type_info.get("name") if isinstance(type_info, dict) else entry.get("type")
+        developer_name = _norm(type_info.get("developer_name")) if isinstance(type_info, dict) else ""
+        label = _norm(type_name)
         label = "_".join(
             part
             for part in [
                 label,
+                developer_name,
                 _norm(entry.get("name")),
                 _norm(entry.get("market")),
                 _norm(entry.get("prediction")),
             ]
             if part
         )
+        predictions_payload = entry.get("predictions") if isinstance(entry.get("predictions"), dict) else {}
+
+        if developer_name == "fulltime_result_probability":
+            for selection, key in (("1", "home"), ("X", "draw"), ("2", "away")):
+                prob = _probability_from_value(predictions_payload.get(key))
+                if math.isfinite(prob):
+                    probabilities[selection] = prob
+            continue
+
+        if developer_name == "over_under_2_5_probability":
+            over_prob = _probability_from_value(predictions_payload.get("yes"))
+            under_prob = _probability_from_value(predictions_payload.get("no"))
+            if math.isfinite(over_prob):
+                probabilities["Over 2.5"] = over_prob
+            if math.isfinite(under_prob):
+                probabilities["Under 2.5"] = under_prob
+            continue
+
+        if developer_name == "btts_probability":
+            gg_prob = _probability_from_value(predictions_payload.get("yes"))
+            ng_prob = _probability_from_value(predictions_payload.get("no"))
+            if math.isfinite(gg_prob):
+                probabilities["GG"] = gg_prob
+            if math.isfinite(ng_prob):
+                probabilities["NG"] = ng_prob
+            continue
 
         for selection, aliases in OUTCOME_ALIASES.items():
             if selection in probabilities:
@@ -169,33 +197,28 @@ def _extract_probabilities(fixture: dict[str, Any]) -> dict[str, float]:
 
 def _market_matches(selection: str, odd_entry: dict[str, Any]) -> bool:
     aliases = OUTCOME_ALIASES[selection]
-    text = " ".join(
-        _norm(part)
-        for part in [
-            odd_entry.get("market"),
-            odd_entry.get("market_name"),
-            odd_entry.get("market_description"),
-            odd_entry.get("label"),
-            odd_entry.get("name"),
-            odd_entry.get("total"),
-            odd_entry.get("handicap"),
-        ]
-    )
+    market_info = odd_entry.get("market") if isinstance(odd_entry.get("market"), dict) else {}
+    developer_name = _norm(market_info.get("developer_name") or odd_entry.get("market_name"))
+    market_name = _norm(market_info.get("name") or odd_entry.get("market_description"))
+    label = _norm(odd_entry.get("label"))
+    name = _norm(odd_entry.get("name"))
+    total = str(odd_entry.get("total") or "").replace(",", ".").strip()
 
     if selection in {"1", "X", "2"}:
-        return ("fulltime_result" in text or "1x2" in text or "match_winner" in text) and any(
-            alias == text or alias in text.split("_") for alias in aliases
-        )
+        if developer_name != "fulltime_result":
+            return False
+        target = {"1": {"home", "1"}, "X": {"draw", "x", "tie"}, "2": {"away", "2"}}[selection]
+        return label in target or name in target
     if selection in {"Over 2.5", "Under 2.5"}:
+        if developer_name != "goals_over_under" or total != "2.5":
+            return False
         direction = "over" if selection.startswith("Over") else "under"
-        return direction in text and ("2_5" in text or "25" in text)
+        return label == direction or name == direction
     if selection in {"GG", "NG"}:
+        if developer_name not in {"both_teams_to_score", "both_teams_to_score_2"}:
+            return False
         expected = "yes" if selection == "GG" else "no"
-        return (
-            "both_teams_to_score" in text
-            or "btts" in text
-            or "goal_no_goal" in text
-        ) and (expected in text or selection.lower() in text)
+        return label == expected or name == expected
     return False
 
 
