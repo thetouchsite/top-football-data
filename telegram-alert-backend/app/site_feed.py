@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -108,6 +109,13 @@ def _safe_float(value: Any) -> float | None:
     return None
 
 
+def _positive_edge(value: Any) -> float | None:
+    parsed = _safe_float(value)
+    if parsed is None or parsed <= 0:
+        return None
+    return parsed
+
+
 def build_high_probability_picks(
     matches: list[dict[str, Any]],
     min_probability: float,
@@ -197,6 +205,103 @@ def build_high_probability_picks(
         ),
         reverse=True,
     )[:max_picks]
+
+
+def get_top_value_candidate(match: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(match, dict):
+        return None
+
+    value_bet = match.get("valueBet") or {}
+    vb_edge = _positive_edge(value_bet.get("edge"))
+    if vb_edge is not None:
+        return {
+            "type": str(value_bet.get("type") or "").strip(),
+            "market": str(value_bet.get("market") or "").strip(),
+            "edge": vb_edge,
+            "source": match.get("valueBetSource") or "feed+modello",
+        }
+
+    primary = ((match.get("valueMarkets") or {}).get("primary") or {})
+    primary_edge = _positive_edge(primary.get("edge"))
+    if primary_edge is not None:
+        return {
+            "type": str(primary.get("type") or "").strip(),
+            "market": str(primary.get("market") or "").strip(),
+            "edge": primary_edge,
+            "source": "feed+modello",
+        }
+
+    return None
+
+
+def build_top_value_day_picks(matches: list[dict[str, Any]], max_picks: int = 3) -> list[dict[str, Any]]:
+    picks: list[dict[str, Any]] = []
+
+    for match in matches:
+        candidate = get_top_value_candidate(match)
+        if not candidate:
+            continue
+
+        picks.append(
+            {
+                "matchId": str(match.get("id") or match.get("sportEventId") or "").strip(),
+                "home": match.get("home") or "Home",
+                "away": match.get("away") or "Away",
+                "league": match.get("league") or "Competizione",
+                "date": match.get("date") or "",
+                "time": match.get("time") or "",
+                "confidence": _safe_float(match.get("confidence")),
+                "type": candidate.get("type") or candidate.get("market") or "Segnale value",
+                "market": candidate.get("market") or "",
+                "edge": candidate["edge"],
+                "source": candidate.get("source") or "feed+modello",
+            }
+        )
+
+    return sorted(
+        picks,
+        key=lambda item: (
+            item.get("edge") or 0,
+            item.get("confidence") or 0,
+        ),
+        reverse=True,
+    )[:max_picks]
+
+
+def format_top_value_day_message(
+    picks: list[dict[str, Any]],
+    app_base_url: str = "",
+    reference_date: datetime | None = None,
+) -> str:
+    day_label = (reference_date or datetime.utcnow()).strftime("%d/%m/%Y")
+    lines = [
+        "📈 Top 3 Value Bet del giorno",
+        day_label,
+        "",
+    ]
+
+    if not picks:
+        lines.extend(
+            [
+                "Nessuna value bet forte disponibile nel feed corrente.",
+                "",
+            ]
+        )
+    else:
+        for index, pick in enumerate(picks, start=1):
+            confidence = ""
+            if pick.get("confidence") is not None:
+                confidence = f" | Confidence {round(float(pick['confidence']))}/100"
+            lines.append(
+                f"{index}. {pick['home']} - {pick['away']} | {pick['type']} | EV {round(float(pick['edge']), 2)}{confidence}"
+            )
+
+    base = (app_base_url or "").strip().rstrip("/")
+    if base:
+        lines.append("")
+        lines.append(f"Apri il comparatore quote: {base}/modelli-predittivi?utm_source=telegram&utm_medium=bot&utm_campaign=top_value_day")
+
+    return "\n".join(lines).strip()
 
 
 def _build_value_bet_pick(match: dict[str, Any], min_probability: float) -> dict[str, Any] | None:

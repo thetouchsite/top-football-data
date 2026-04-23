@@ -1,6 +1,8 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Query
 
@@ -10,7 +12,13 @@ from app.engine import build_all_modus_multibets, build_fixture_markets, build_o
 from app.models import MultibetModus
 from app.mongodb import MongoAlertRepository
 from app.results import is_fixture_final, settle_alert_from_fixtures
-from app.site_feed import SiteFeedClient, build_high_probability_picks, format_demo_picks_message
+from app.site_feed import (
+    SiteFeedClient,
+    build_high_probability_picks,
+    build_top_value_day_picks,
+    format_demo_picks_message,
+    format_top_value_day_message,
+)
 from app.sportmonks import SportmonksClient
 from app.storage import AlertStore
 from app.telegram import (
@@ -148,6 +156,8 @@ class AlertWorker:
             "mongodb_error": self.repository.error or "",
             "mongodb_db": self.repository.database_name,
         }
+        top_value_sent = await self.send_daily_top_value_post()
+        result["daily_top_value_sent"] = top_value_sent
         self.last_result = result
         return result
 
@@ -306,6 +316,28 @@ class AlertWorker:
         self.last_result = result
         return result
 
+    async def send_daily_top_value_post(self) -> int:
+        if not self.telegram.configured:
+            return 0
+
+        try:
+            now_local = datetime.now(ZoneInfo(self.settings.sportmonks_timezone or "Europe/Rome"))
+        except Exception:
+            now_local = datetime.utcnow()
+        daily_key = f"daily:top_value:{now_local.strftime('%Y-%m-%d')}"
+        if not self.store.mark_once(daily_key):
+            return 0
+
+        try:
+            matches = await self.site_feed.fetch_schedule_matches(days=1, hydrate_details=False)
+            picks = build_top_value_day_picks(matches, max_picks=3)
+            message = format_top_value_day_message(picks, self.settings.app_base_url, now_local)
+            await self.telegram.send_message(message)
+            return 1
+        except Exception as error:
+            logger.warning("Daily Top 3 Value Bet post failed: %s", error)
+            return 0
+
     async def loop(self) -> None:
         self.running = True
         while self.running:
@@ -406,3 +438,9 @@ async def demo_pronostici() -> dict[str, object]:
 @app.get("/demo-pronostici")
 async def demo_pronostici_get() -> dict[str, object]:
     return await worker.send_demo_predictions()
+
+
+@app.post("/top-value-day")
+async def top_value_day() -> dict[str, object]:
+    sent = await worker.send_daily_top_value_post()
+    return {"ok": True, "sent": sent}
