@@ -71,6 +71,8 @@ class AlertWorker:
             min_total_ev=self.settings.notification_ev_threshold,
             algorithmic_min_leg_prob=self.settings.multibet_algorithmic_min_leg_prob,
             algorithmic_min_value_percent=self.settings.multibet_algorithmic_min_value_percent,
+            min_leg_ev=self.settings.multibet_min_leg_ev,
+            max_total_odd=self.settings.multibet_max_total_odd,
         )
         multibets = self._flatten_multibets_by_modus(by_modus)
 
@@ -181,7 +183,6 @@ class AlertWorker:
             MultibetModus.ALGORITHMIC,
             MultibetModus.SAFE,
             MultibetModus.VALUE,
-            MultibetModus.GOLD,
         )
         out: list[MultiBet] = []
         seen: set[str] = set()
@@ -206,11 +207,15 @@ class AlertWorker:
                 fixture=fixture,
                 candidate_edge_threshold=self.settings.candidate_edge_threshold,
                 affiliate_links=affiliate_links,
+                max_single_edge=self.settings.max_single_edge,
+                max_single_odd=self.settings.max_single_odd,
             )
             derived_markets = build_fixture_markets(
                 fixture=fixture,
                 candidate_edge_threshold=self.settings.candidate_edge_threshold,
                 affiliate_links=affiliate_links,
+                max_single_edge=self.settings.max_single_edge,
+                max_single_odd=self.settings.max_single_odd,
             )
 
             for market in [*official_markets, *derived_markets]:

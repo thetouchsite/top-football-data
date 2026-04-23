@@ -12,7 +12,6 @@ def _pct(value: float) -> str:
 
 
 def _edge_to_plus_pct(ev: float) -> str:
-    """EV 1,25 -> stringa 25% per titolo '...+25%!' (coerente con NOTIFICATION_EV_THRESHOLD=1,25)."""
     return f"{round((ev - 1) * 100, 1)}"
 
 
@@ -29,7 +28,7 @@ def format_single_alert(
 ) -> str:
     pct = _edge_to_plus_pct(market.edge)
     lines = [
-        f"🎯 Alert: trovata value bet +{pct}%!",
+        f"🎯 Singola · Value Bet · +{pct}%",
         "",
         f"{market.title}",
         f"{market.league} - {_kickoff_label(market)}",
@@ -48,25 +47,19 @@ def format_single_alert(
     else:
         base = (app_base_url or "").strip().rstrip("/")
         if base:
-            lines.extend(
-                [
-                    "",
-                    f"Comparatore / CTA: {base}/match/{market.fixture_id}",
-                ]
-            )
+            lines.extend(["", f"Comparatore / CTA: {base}/match/{market.fixture_id}"])
         else:
             lines.extend(["", f"Comparatore: configura APP_BASE_URL e link book ({cta_label})."])
 
     return "\n".join(lines)
 
 
-def _modus_label(m: str) -> str:
+def _modus_label(modus: str) -> str:
     return {
-        "algorithmic": "Algoritmico (High prob + value)",
-        "safe": "Safe (conf. gambe ≥ 80%)",
-        "value": "Value (book vs modello)",
-        "gold": "Gold (esatti / speciali)",
-    }.get(m, m)
+        "algorithmic": "Algoritmico",
+        "safe": "Safe",
+        "value": "Value",
+    }.get(modus, modus)
 
 
 def format_multibet_alert(
@@ -75,9 +68,9 @@ def format_multibet_alert(
     app_base_url: str = "",
 ) -> str:
     pct = _edge_to_plus_pct(multibet.total_ev)
+    label = _modus_label(multibet.modus)
     lines = [
-        f"🎯 Alert: trovata value combo +{pct}%!",
-        f"({_modus_label(multibet.modus)})",
+        f"🔥 Multipla · {label} · +{pct}%",
         "",
         f"Eventi: {len(multibet.events)}",
         f"Quota totale: {multibet.total_odd}",
@@ -96,7 +89,7 @@ def format_multibet_alert(
 
     first = multibet.events[0] if multibet.events else None
     if first and first.comparator:
-        lines.extend(["", "Comparatore quote — 1ª gamba (CTA):"])
+        lines.extend(["", "Comparatore quote - 1a gamba (CTA):"])
         for odd in first.comparator:
             suffix = f" - {cta_label}: {odd.affiliate_url}" if odd.affiliate_url else ""
             lines.append(f"- {odd.bookmaker}: {odd.odd}{suffix}")
@@ -130,9 +123,7 @@ def format_performance_summary(summary: dict, settled_count: int) -> str:
         for point in last_points:
             settled_at = point.get("settledAt")
             label = settled_at.strftime("%d/%m %H:%M") if hasattr(settled_at, "strftime") else "N/D"
-            lines.append(
-                f"- {label}: {point.get('profitUnits', 0)} unita, ROI {point.get('roiPercent', 0)}%"
-            )
+            lines.append(f"- {label}: {point.get('profitUnits', 0)} unita, ROI {point.get('roiPercent', 0)}%")
 
     return "\n".join(lines)
 

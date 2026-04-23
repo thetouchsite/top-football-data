@@ -341,6 +341,9 @@ def build_official_value_markets(
     fixture: dict[str, Any],
     candidate_edge_threshold: float,
     affiliate_links: dict[str, str],
+    *,
+    max_single_edge: float | None = None,
+    max_single_odd: float | None = None,
 ) -> list[FixtureMarket]:
     fixture_id = str(fixture.get("id") or "")
     if not fixture_id:
@@ -391,6 +394,10 @@ def build_official_value_markets(
         edge = round(model_probability * best.odd, 3)
         if edge < candidate_edge_threshold:
             continue
+        if max_single_edge is not None and edge > max_single_edge:
+            continue
+        if max_single_odd is not None and best.odd > max_single_odd:
+            continue
 
         value_percent = round(((best.odd - fair_odd) / fair_odd) * 100, 1)
         markets.append(
@@ -431,6 +438,9 @@ def build_fixture_markets(
     fixture: dict[str, Any],
     candidate_edge_threshold: float,
     affiliate_links: dict[str, str],
+    *,
+    max_single_edge: float | None = None,
+    max_single_odd: float | None = None,
 ) -> list[FixtureMarket]:
     fixture_id = str(fixture.get("id") or "")
     home, away = _participant_names(fixture)
@@ -451,6 +461,10 @@ def build_fixture_markets(
         model_odd = round(1 / probability, 2)
         edge = round(probability * best.odd, 3)
         if edge < candidate_edge_threshold:
+            continue
+        if max_single_edge is not None and edge > max_single_edge:
+            continue
+        if max_single_odd is not None and best.odd > max_single_odd:
             continue
 
         value_percent = round(((best.odd - model_odd) / model_odd) * 100, 1)
@@ -511,7 +525,11 @@ def build_multibets_for_modus(
     max_events: int,
     min_total_ev: float,
     modus: str,
+    *,
+    min_leg_ev: float = 1.0,
+    max_total_odd: float | None = None,
 ) -> list[MultiBet]:
+    pool = [market for market in pool if market.edge >= min_leg_ev]
     if len(pool) < min_events:
         return []
 
@@ -529,6 +547,8 @@ def build_multibets_for_modus(
     for size in range(min_events, max_events + 1):
         for combo in itertools.combinations(unique_markets, size):
             total_odd = math.prod(item.best_odd for item in combo)
+            if max_total_odd is not None and total_odd > max_total_odd:
+                continue
             probability = math.prod(item.model_probability for item in combo)
             total_ev = math.prod(item.edge for item in combo)
             if total_ev < min_total_ev:
@@ -556,13 +576,14 @@ def build_all_modus_multibets(
     *,
     algorithmic_min_leg_prob: float = 0.32,
     algorithmic_min_value_percent: float = 1.0,
+    min_leg_ev: float = 1.0,
+    max_total_odd: float | None = None,
 ) -> dict[str, list[MultiBet]]:
     out: dict[str, list[MultiBet]] = {}
     for modus in (
         MultibetModus.ALGORITHMIC,
         MultibetModus.SAFE,
         MultibetModus.VALUE,
-        MultibetModus.GOLD,
     ):
         pool = filter_markets_for_modus(
             markets,
@@ -570,5 +591,13 @@ def build_all_modus_multibets(
             algorithmic_min_leg_prob=algorithmic_min_leg_prob,
             algorithmic_min_value_percent=algorithmic_min_value_percent,
         )
-        out[modus] = build_multibets_for_modus(pool, min_events, max_events, min_total_ev, modus)
+        out[modus] = build_multibets_for_modus(
+            pool,
+            min_events,
+            max_events,
+            min_total_ev,
+            modus,
+            min_leg_ev=min_leg_ev,
+            max_total_odd=max_total_odd,
+        )
     return out

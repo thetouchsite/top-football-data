@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     multibet_algorithmic_min_value_percent: float = Field(
         default=1.0, alias="MULTIBET_ALGORITHMIC_MIN_VALUE_PERCENT"
     )
+    max_single_edge: float = Field(default=2.5, alias="MAX_SINGLE_EDGE")
+    max_single_odd: float = Field(default=8.0, alias="MAX_SINGLE_ODD")
+    multibet_min_leg_ev: float = Field(default=1.15, alias="MULTIBET_MIN_LEG_EV")
+    multibet_max_total_odd: float = Field(default=50.0, alias="MULTIBET_MAX_TOTAL_ODD")
     max_alerts_per_run: int = Field(default=8, alias="MAX_ALERTS_PER_RUN")
     demo_min_probability: float = Field(default=0.8, alias="DEMO_MIN_PROBABILITY")
     demo_max_picks: int = Field(default=5, alias="DEMO_MAX_PICKS")
@@ -90,6 +94,26 @@ class Settings(BaseSettings):
     @classmethod
     def clamp_multibet_per_modus_max(cls, value: int) -> int:
         return max(1, min(value, 10))
+
+    @field_validator("max_single_edge")
+    @classmethod
+    def clamp_max_single_edge(cls, value: float) -> float:
+        return max(1.01, min(value, 20.0))
+
+    @field_validator("max_single_odd")
+    @classmethod
+    def clamp_max_single_odd(cls, value: float) -> float:
+        return max(1.01, min(value, 100.0))
+
+    @field_validator("multibet_min_leg_ev")
+    @classmethod
+    def clamp_multibet_min_leg_ev(cls, value: float) -> float:
+        return max(1.0, min(value, 10.0))
+
+    @field_validator("multibet_max_total_odd")
+    @classmethod
+    def clamp_multibet_max_total_odd(cls, value: float) -> float:
+        return max(1.5, min(value, 10000.0))
 
     @field_validator("app_base_url")
     @classmethod

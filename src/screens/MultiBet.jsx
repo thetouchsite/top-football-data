@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Crown, Cpu, Lightbulb, Lock, Shield, Sparkles } from "lucide-react";
+import { Crown, Cpu, Lightbulb, Lock, Shield } from "lucide-react";
 
 import { getAlerts } from "@/api/alerts";
 import MultibetComboCard from "@/components/betting/MultibetComboCard";
@@ -29,7 +29,7 @@ const COMBO_TABS = [
     label: "Safe",
     kicker: "Data selection",
     icon: Shield,
-    description: "Sotto-insieme a basso rischio: confidenza engine >= 80% (esclusi i match Gold).",
+    description: "Sotto-insieme a basso rischio: confidenza engine >= 80%.",
   },
   {
     key: "value",
@@ -38,14 +38,6 @@ const COMBO_TABS = [
     icon: Lightbulb,
     description:
       "Dove c'e discrepanza a favore del modello: data edge, EV composto o value% per gamba oltre le soglie minime.",
-  },
-  {
-    key: "gold",
-    label: "Gold",
-    kicker: "Accuracy",
-    icon: Sparkles,
-    description:
-      "Risultati esatti, scorecast, HT/FT e mercati combo avanzati: rischio piu alto, proposte sui segnali piu ricercati nel dato.",
   },
 ];
 
@@ -141,7 +133,7 @@ export default function MultiBet() {
         <PageIntro
           title="SMART MULTI-BET ENGINE"
           accentWord="MULTI-BET"
-          subtitle="Quattro modi: Generator (tutte le combo engine), Safe (>80% confidenza), Value (edge sui book) e Gold (esatti e mercati avanzati). Dati = stessi documenti betAlerts e Telegram."
+          subtitle="Tre modi: Algoritmico (tutte le combo engine), Safe (>80% confidenza) e Value (edge sui book). Dati = stessi documenti betAlerts e Telegram."
           icon={Crown}
         >
           <span className="hidden items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-[11px] font-semibold text-amber-600 dark:inline-flex dark:text-amber-400">
@@ -173,20 +165,12 @@ export default function MultiBet() {
               {COMBO_TABS.map((tab) => (
                 <div key={tab.key} className="rounded-lg border border-border/25 bg-background/20 p-3">
                   <div className="mb-1.5 flex items-center gap-2.5">
-                    <tab.icon
-                      className={`h-4 w-4 shrink-0 ${tab.key === "gold" ? "text-amber-500" : "text-accent"}`}
-                    />
+                    <tab.icon className="h-4 w-4 shrink-0 text-accent" />
                     <div>
                       <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                         {tab.kicker}
                       </div>
-                      <h3
-                        className={`text-sm font-semibold ${
-                          tab.key === "gold" ? "text-amber-600 dark:text-amber-400" : "text-accent"
-                        }`}
-                      >
-                        {tab.label}
-                      </h3>
+                      <h3 className="text-sm font-semibold text-accent">{tab.label}</h3>
                     </div>
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground">{tab.description}</p>
@@ -209,11 +193,9 @@ export default function MultiBet() {
                 <TabsTrigger
                   key={tab.key}
                   value={tab.key}
-                  className={`text-xs font-semibold data-[state=active]:bg-accent/10 data-[state=active]:text-accent ${
-                    tab.key === "gold" ? "data-[state=active]:text-amber-500" : ""
-                  }`}
+                  className="text-xs font-semibold data-[state=active]:bg-accent/10 data-[state=active]:text-accent"
                 >
-                  <tab.icon className={`mr-1.5 h-3.5 w-3.5 shrink-0 ${tab.key === "gold" ? "text-amber-500" : ""}`} />
+                  <tab.icon className="mr-1.5 h-3.5 w-3.5 shrink-0" />
                   {tab.label}
                 </TabsTrigger>
               ))}
@@ -272,7 +254,7 @@ export default function MultiBet() {
                             Smart Multi-Bet
                           </h3>
                           <p className="mb-6 max-w-sm text-sm text-muted-foreground">
-                            Comparatore quote, link affiliato e le quattro modalita (Generator, Safe, Value, Gold) sono
+                            Comparatore quote, link affiliato e le tre modalita (Algoritmico, Safe, Value) sono
                             riservate agli <span className="font-semibold text-foreground">abbonati</span>.
                           </p>
                           <a href="/premium">
