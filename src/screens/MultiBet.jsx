@@ -54,6 +54,7 @@ export default function MultiBet() {
   const searchParams = useSearchParams();
   const refKey = (searchParams.get("ref") || "").trim() || null;
   const [combos, setCombos] = useState([]);
+  const [feedMode, setFeedMode] = useState("pending");
   const [loadState, setLoadState] = useState("loading");
   const [loadError, setLoadError] = useState("");
   const highlightRef = useRef(null);
@@ -66,16 +67,33 @@ export default function MultiBet() {
       setLoadError("");
 
       try {
-        const { alerts } = await getAlerts({ type: "multibet", status: "pending", limit: 30 });
+        const pendingPayload = await getAlerts({ type: "multibet", status: "pending", limit: 30 });
         if (!active) {
           return;
         }
 
-        const mapped = (alerts || [])
+        const pendingMapped = (pendingPayload.alerts || [])
           .map(mapMultibetAlertToCombo)
           .filter(Boolean);
 
-        setCombos(mapped);
+        if (pendingMapped.length > 0) {
+          setCombos(pendingMapped);
+          setFeedMode("pending");
+          setLoadState("ready");
+          return;
+        }
+
+        const recentPayload = await getAlerts({ type: "multibet", limit: 30 });
+        if (!active) {
+          return;
+        }
+
+        const recentMapped = (recentPayload.alerts || [])
+          .map(mapMultibetAlertToCombo)
+          .filter(Boolean);
+
+        setCombos(recentMapped);
+        setFeedMode(recentMapped.length > 0 ? "history" : "pending");
         setLoadState("ready");
       } catch (e) {
         if (!active) {
@@ -234,7 +252,10 @@ export default function MultiBet() {
                               Mongo e variabili Sportmonks.
                             </>
                           ) : tab.key === "algorithmic" ? (
-                            <>Nessun elemento (il tab &quot;Algoritmico&quot; elenca tutte le card pending).</>
+                            <>
+                              Nessuna multipla disponibile in elenco completo.
+                              {feedMode === "history" ? " Anche lo storico recente e` vuoto." : ""}
+                            </>
                           ) : (
                             <>
                               Nessuna multipla soddisfa <strong className="text-foreground">{tab.label}</strong> in

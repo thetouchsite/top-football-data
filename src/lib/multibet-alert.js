@@ -223,7 +223,7 @@ export function mapMultibetAlertToCombo(alert) {
 export function filterCombosByMode(combos, modeKey) {
   const list = combos || [];
   if (modeKey === "algorithmic") {
-    return list.filter((c) => c?.modeFilters?.algorithmic || c?.tabFilters?.algoritmiche);
+    return list;
   }
   if (modeKey === "safe") {
     return list.filter((c) => c?.modeFilters?.safe || c?.tabFilters?.safe);
