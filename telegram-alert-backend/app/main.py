@@ -256,16 +256,17 @@ class AlertWorker:
 
         settled_count = self.repository.bulk_settle(settled)
         if settled_count:
+            app_url = self.settings.app_base_url or ""
             for alert, status, legs in settled:
                 try:
-                    await self.telegram.send_message(format_settlement_alert(alert, status, legs))
+                    await self.telegram.send_message(format_settlement_alert(alert, status, legs, app_url))
                 except Exception as error:
                     logger.warning("Settlement Telegram alert failed: %s", error)
 
             summary = self.repository.get_performance_summary()
             if summary:
                 try:
-                    await self.telegram.send_message(format_performance_summary(summary, settled_count))
+                    await self.telegram.send_message(format_performance_summary(summary, settled_count, app_url))
                 except Exception as error:
                     logger.warning("Performance Telegram summary failed: %s", error)
         return settled_count
