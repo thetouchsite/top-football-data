@@ -1,8 +1,13 @@
+import { READ_META } from "./schedule-window-constants";
+
 const DEBUG_FOOTBALL_TELEMETRY = ["1", "true", "yes"].includes(
   String(process.env.DEBUG_FOOTBALL_TELEMETRY || "").toLowerCase()
 );
 
-export function mapTelemetrySource(source, { cacheState, fallbackTriggered } = {}) {
+export function mapTelemetrySource(source, { cacheState, fallbackTriggered, cacheLayer } = {}) {
+  if (cacheLayer === "L2" && source === "sportmonks_cache" && cacheState === "hit" && !fallbackTriggered) {
+    return "l2_cache";
+  }
   if (source === "sportmonks_cache" && cacheState === "hit" && !fallbackTriggered) {
     return "memory_cache";
   }
@@ -40,12 +45,20 @@ export function logFootballServiceTelemetry(payload = {}) {
   console.info("[football][service]", payload);
 }
 
-export function getScheduleCacheStore() {
-  if (!globalThis.__footballScheduleWindowCache) {
-    globalThis.__footballScheduleWindowCache = new Map();
+/**
+ * L1: latest snapshot per logical key `days:policyVersion` (final JSON body + fetchedAt)
+ */
+export function getScheduleL1WindowStore() {
+  if (!globalThis.__footballScheduleWindowL1) {
+    globalThis.__footballScheduleWindowL1 = new Map();
   }
 
-  return globalThis.__footballScheduleWindowCache;
+  return globalThis.__footballScheduleWindowL1;
+}
+
+/** @deprecated use getScheduleL1WindowStore; kept for any legacy reads */
+export function getScheduleCacheStore() {
+  return getScheduleL1WindowStore();
 }
 
 export function getScheduleInflightStore() {
@@ -74,4 +87,28 @@ export function getFixtureInflightStore() {
 
 export function isRateLimitError(error) {
   return String(error?.message || "").toLowerCase().includes("too many requests");
+}
+
+/**
+ * Non-enumerable meta for route/telemetry; excluded from JSON responses.
+ * @param {object} payload
+ * @param {object} meta
+ */
+export function attachScheduleReadMeta(payload, meta) {
+  if (payload && typeof payload === "object" && meta && typeof meta === "object") {
+    Object.defineProperty(payload, READ_META, {
+      value: meta,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return payload;
+}
+
+export function getScheduleReadMeta(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const d = Object.getOwnPropertyDescriptor(payload, READ_META);
+  return d?.value ?? null;
 }

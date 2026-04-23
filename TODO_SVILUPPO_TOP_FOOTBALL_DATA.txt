@@ -1,11 +1,11 @@
 ﻿TOP FOOTBALL DATA
 TODO SVILUPPO OPERATIVO
 
-Data aggiornamento: 2026-04-22
+Data aggiornamento: 2026-04-23
 Stato documento: allineato al codice, al documento cliente Â«Funzioni piattaformaÂ» e al layer football (vedi sotto)
 
 ====================================================================
-FOOTBALL API LAYER â€” STATUS (AGGIORNAMENTO 2026-04-22)
+FOOTBALL API LAYER â€” STATUS (AGGIORNAMENTO 2026-04-23)
 ====================================================================
 
 Documento tecnico unificato: docs/football-api-layer.md
@@ -26,12 +26,12 @@ DONE (football / feed list + detail, senza lavori performance architetturale):
 - SPORTMONKS_SCHEDULE_LEAGUE_IDS e SPORTMONKS_SCHEDULE_MAX_PAGES documentate come override/costo
 
 IN PROGRESS (nessun task football bloccante codificato qui):
-- n/a â€” implementazione performance feed non ancora iniziata in questo tracciato
+- n/a
 
-NEXT (prossima priorita football â€” da roadmap tecnica, non from-scratch API):
-- P0: rendere il feed 7 giorni "veloce a freddo" â€” snapshot normalizzato in store condiviso, chiave
-  versionata policy, SWR fresh/stale/hard-expired, lock anti-stampede, stale-if-error, prewarm
-  stesso builder del runtime (piano: feed_7_giorni_velocissimo_vfinale.plan.md)
+DONE (2026-04-23) â€” performance feed 7 giorni (L1 + Upstash L2, builder, SWR, lock, stale-if-error, route prewarm; Vercel Hobby: vercel.json cron 1x/giorno; Pro: example ogni 5m in docs/vercel-cron-pro.example.json):
+- Vedi docs/football-api-layer.md (Hobby vs Pro, vercel.json)
+- Validazione manuale completata: L2 hit, SWR soft/hard, expired rebuild, stale-if-error (vedi docs/schedule-window-cache-validation.md)
+- Nota locale: con Next 16 in questa macchina alcuni run `next dev` (Turbopack) hanno mostrato 404 su `/api/*`; workaround operativo test = `npx next dev --webpack`
 
 OUT OF SCOPE (per la fase performance documentata; non toccare senza decisione prodotto):
 - Cambio contratti API pubblici schedule/detail stabilizzati

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { SPORTMONKS_DEFAULT_SCHEDULE_DAYS } from "@/lib/providers/sportmonks";
 import { createProviderFreshness } from "@/lib/domain/freshness";
+import { getScheduleReadMeta } from "@/server/football/runtime";
 import { getScheduleWindowPayload } from "@/server/football/service";
 
 export const runtime = "nodejs";
@@ -17,7 +18,11 @@ function clampScheduleWindowDays(days) {
   return Math.min(days, MAX_SCHEDULE_WINDOW_DAYS);
 }
 
-function deriveRouteTelemetryFromSource(source, isFallback) {
+function deriveRouteTelemetryFromSource(source, isFallback, readMeta) {
+  const layer = readMeta?.cacheLayer;
+  if (layer === "L2" && source === "sportmonks_cache" && !isFallback) {
+    return { cacheHit: true, cacheState: "hit", source: "l2_cache" };
+  }
   if (source === "sportmonks_cache" && !isFallback) {
     return { cacheHit: true, cacheState: "hit", source: "memory_cache" };
   }
@@ -47,7 +52,12 @@ export async function GET(request) {
   try {
     const payload = await getScheduleWindowPayload(safeDays);
     const e2eMs = Date.now() - startedAt;
-    const derived = deriveRouteTelemetryFromSource(payload?.source, Boolean(payload?.isFallback));
+    const readMeta = getScheduleReadMeta(payload);
+    const derived = deriveRouteTelemetryFromSource(
+      payload?.source,
+      Boolean(payload?.isFallback),
+      readMeta
+    );
     const routeLog = {
       route: "/api/football/schedules/window",
       requestPurpose: "schedule_window",
@@ -55,6 +65,10 @@ export async function GET(request) {
       fixtureId: null,
       cacheHit: derived.cacheHit,
       cacheState: derived.cacheState,
+      cacheLayer: readMeta?.cacheLayer ?? null,
+      policyVersion: readMeta?.policyVersion ?? null,
+      snapshotAgeMs: readMeta?.snapshotAgeMs ?? null,
+      refreshState: readMeta?.refreshState ?? null,
       providerLatencyMs: null,
       pagesFetched: payload?.rawSchedules?.schedulePagination?.pagesFetched ?? null,
       itemsFetched: Array.isArray(payload?.matches) ? payload.matches.length : 0,
@@ -71,7 +85,7 @@ export async function GET(request) {
       source: derived.source,
     };
     console.info(
-      `[football][summary] route=${routeLog.route} days=${routeLog.days} cache=${routeLog.cacheState} pages=${routeLog.pagesFetched ?? 0} items=${routeLog.itemsFetched} payloadBytes=${routeLog.payloadBytes} e2eMs=${routeLog.e2eMs} callCost=${routeLog.estimatedCallCost ?? 0} fallback=${routeLog.fallbackTriggered} source=${routeLog.source}`
+      `[football][summary] route=${routeLog.route} days=${routeLog.days} cache=${routeLog.cacheState} layer=${routeLog.cacheLayer ?? "-"} pages=${routeLog.pagesFetched ?? 0} items=${routeLog.itemsFetched} payloadBytes=${routeLog.payloadBytes} e2eMs=${routeLog.e2eMs} callCost=${routeLog.estimatedCallCost ?? 0} fallback=${routeLog.fallbackTriggered} source=${routeLog.source} ageMs=${routeLog.snapshotAgeMs ?? "na"} ref=${routeLog.refreshState ?? "-"} policy=${routeLog.policyVersion ?? "-"}`
     );
     if (DEBUG_FOOTBALL_TELEMETRY) {
       console.info("[football][route]", routeLog);

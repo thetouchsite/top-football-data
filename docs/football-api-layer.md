@@ -2,7 +2,7 @@
 
 Documento operativo per chi lavora sul repository: architettura attuale del feed calcio, cosa è già stato fatto, limiti, prossima fase. **Non sostituisce** le roadmap cliente; integra i punti tecnici football-specific.
 
-*Ultimo aggiornamento: 2026-04-22*
+*Ultimo aggiornamento: 2026-04-23*
 
 ---
 
@@ -35,8 +35,11 @@ Client unificato: `src/api/football.js` (coalescing inflight su stessa URL, ness
 
 ### Orchestrazione
 
-- `src/server/football/service.js` - entrypoint pubblico: re-export di `getScheduleWindowPayload`, `getFixturePayload` e contratti usati dal resto dell'app.
-- `src/server/football/schedule.js` - orchestration calendario/list feed.
+- `src/server/football/service.js` - entrypoint pubblico: re-export di `getScheduleWindowPayload`, `prewarmScheduleWindowSnapshot`, `getFixturePayload` e contratti.
+- `src/server/football/schedule.js` - orchestration calendario (L1/L2, SWR) e re-export prewarm.
+- `src/server/football/schedule-window-builder.js` - builder unico `buildScheduleWindowFromProvider`.
+- `src/server/football/schedule-snapshot-l2.js` - Redis/Upstash + envelope.
+- `src/server/football/schedule-window-policy.js` - `policyVersion` e chiavi.
 - `src/server/football/fixture.js` - orchestration dettaglio fixture, core/enrichment e fallback.
 - `src/server/football/payloads.js` - builder DTO/payload e notice Sportmonks.
 - `src/server/football/runtime.js` - cache inflight/memory e telemetria service.
@@ -104,31 +107,58 @@ Gli **override** tramite variabili d’ambiente sono **opzionali** (vedi sezione
 | `SPORTMONKS_MEDIA_BASE_URL` | Base CDN immagini | Default `https://cdn.sportmonks.com` |
 | `DEBUG_FOOTBALL_TELEMETRY` | Log dettagliato route/football | `1` / `true` / `yes` |
 
+**Cache L2 (Upstash Redis) — feed schedule `days=7` (produzione consigliata):**
+
+| Variabile | Ruolo | Note |
+|-----------|--------|------|
+| `UPSTASH_REDIS_REST_URL` | **Obbligatoria** se si usa L2 | URL REST fornita da Upstash. |
+| `UPSTASH_REDIS_REST_TOKEN` | **Obbligatoria** se si usa L2 | Token read/write. |
+| `CRON_PREWARM_SECRET` o `SCHEDULE_PREWARM_CRON_SECRET` o `CRON_SECRET` | **Per proteggere** le chiamate a `GET /api/cron/prewarm-schedule-window` in produzione | In produzione, senza nessun secret impostato → **401**. Vercel invia `Authorization: Bearer <valore>` usando la variabile **`CRON_SECRET`** nelle [Cron native](https://vercel.com/docs/cron-jobs) (impostala a un token lungo; la stessa rotta accetta anche `CRON_PREWARM_SECRET` / `SCHEDULE_PREWARM_CRON_SECRET` per allineo manuale). **Non** richiesto per `GET /api/football/schedules/window`. Dev locale: permesso se non `VERCEL`+`production`. |
+
 **Nota su `SPORTMONKS_SCHEDULE_LEAGUE_FILTER_STRICT`:** compare nel **testo informativo** (notice) in `service.js` quando è attivo un filtro leghe via API, ma **non** esiste un `process.env` omonimo letto nel codice al momento. Comportamento reale: filtro attivo se `getSportmonksFixtureLeaguesFilterParam()` produce una stringa `fixtureLeagues:...` (default allowlist; disattivabile solo con override `all`/`global`/`*`).
 
+### Vercel Hobby vs Pro (prewarm e cron)
+
+| Aspetto | **Hobby (piano attuale)** | **Pro (migrazione futura)** |
+|--------|----------------------------|------------------------------|
+| **Cron in repo** | [vercel.json](../vercel.json) — **1 esecuzione al giorno** (`0 5 * * *` ≈ 05:00 **UTC**), stessa route `/api/cron/prewarm-schedule-window`. Rispetta il **limite Hobby = un run/giorno**; serve a **test/integrazione** reale (route, secret, builder, scrittura L2), **non** sostituisce ancora il prewarm ogni 5 min previsto a regime. | Sostituire il blocco `crons` in `vercel.json` (o sostituire l’`schedule`) con l’esempio in [vercel-cron-pro.example.json](vercel-cron-pro.example.json) — **ogni 5 min**. Stessa route, stessi meccanismi di autenticazione. |
+| **Prewarm** | Stessa funzione: no-op se snapshot già *fresh*; con traffico poco frequente, il run giornaliero mantiene comunque Redis “calda” a intervallo largo. | A regime: hit frequenti a snapshot, costo API più prevedibile, UX più allineata al design originale. |
+| **Feed schedule** | Invariato: nessun cambio contratti JSON. | Uguale. |
+
+Checklist manuale / staging: [schedule-window-cache-validation.md](schedule-window-cache-validation.md).
+
 ---
 
-## 5. Limiti attuali e problema aperto principale
+## 5. Architettura performance feed 7 giorni (implementata)
 
-- Il feed **7 giorni** è **funzionalmente e policy-corretto** (allowlist, DTO, split core/enrichment, telemetria).
-- I **hit caldi** (memory in-process, stesso worker, entro TTL ~60s) vanno bene.
-- Il **problema residuo** è **architetturale / performance**: cache solo in memoria per processo, TTL breve, istanze serverless non condividono la Map → **cold path** lento (decine di secondi possibili) su primo hit dopo deploy, altra istanza, o scadenza TTL.
-- **Prossima fase prioritaria (football list)** non è ulteriore “API cleanup” del contratto, bensì **performance del feed `days=7`**: store condiviso, SWR, prewarm, come da piano dedicato.
+- **L1** (`Map` per worker): chiave `days:policyVersion` — stesso body JSON pronto.
+- **L2** (Upstash Redis, `src/server/football/schedule-snapshot-l2.js`): valore = envelope JSON (snapshot finale + metadati), **non** raw provider.
+- **Builder unico** `buildScheduleWindowFromProvider` in `src/server/football/schedule-window-builder.js` — usato da `getScheduleWindowPayload`, SWR, stale-if-error, prewarm.
+- **Policy version** (`getScheduleWindowPolicyVersion`): hash SHA-256 16 char di `SPORTMONKS_SCHEDULE_*` (via `getSportmonksFixtureLeaguesFilterParam`) + schema; chiave dato: `football:schedule:window:{days}:policy:{policyVersion}:data`.
+- **SWR:** fresh &lt; **3 min**; soft stale **3–15 min** e hard stale **15 min–6 h** servono subito + background refresh (lock SWR o guard locale); oltre **6 h** si forza rebuild (o attesa L2) prima di considerare risposta da solo snapshot.
+- **Lock rebuild:** `...:lock` (Redis `SET` NX) ~90s; SWR: `...:lock:swr` ~60s. **Coalescing** in-process: `inflight` sulla stessa chiave rebuild.
+- **stale-if-error** se `fetch` fallisce e c’è envelope &lt; 6 h: non sovrascrive con failure.
+- **Prewarm** `GET /api/cron/prewarm-schedule-window`: stesso builder; se già *fresh* → skip. In **Hobby** c’è un **cron Vercel giornaliero** in [vercel.json](../vercel.json) (test integrazione, non 5m). In **Pro** sostituire con [vercel-cron-pro.example.json](vercel-cron-pro.example.json) per **ogni 5 min** quando vorrete il target finale.
+
+Telemetria route/ service: `cacheLayer`, `policyVersion`, `snapshotAgeMs`, `refreshState` (meta non serializzata nel body JSON, solo log).
+
+### Esito test manuali (2026-04-23, locale)
+
+Checklist eseguita e superata su endpoint `GET /api/football/schedules/window?days=7`:
+
+- L2 hit dopo restart processo (cold L1) verificato.
+- SWR verificato su finestre stale soft/hard (`ref=swr_async`) con refresh provider in background.
+- Expired (>6h) verificato con rebuild provider (`ref=rebuild_ok`).
+- stale-if-error verificato con errore provider simulato (snapshot servita senza blocco UX).
+- Confermata lettura L2 robusta su payload Upstash stringa/oggetto.
+
+Nota operativa locale: in questa macchina `next dev` (Turbopack) ha dato 404 intermittenti su `/api/*`; per test affidabili usare `npx next dev --webpack`. In produzione non cambia l'architettura applicativa descritta sopra.
 
 ---
 
-## 6. Prossima fase (pianificata, non implementata in questo blocco)
+## 6. Piano e documentazione
 
-Piano unico: [`.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md`](../.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md)
-
-In sintesi:
-
-- Snapshot **finale normalizzato** in cache condivisa (non raw Sportmonks).
-- **Chiave versionata** per policy/allowlist.
-- SWR con stati **fresh / stale / hard-expired**, **anti-stampede** (lock + refresh unico), **stale-if-error**.
-- **Prewarm** (cron) che invoca **lo stesso builder** del path runtime.
-
-Nessun impegno a implementare in questo file; solo tracciamento intent.
+Piano: [`.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md`](../.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md) — fase **implementata**.
 
 ---
 
@@ -137,8 +167,15 @@ Nessun impegno a implementare in questo file; solo tracciamento intent.
 | Cosa | Dove |
 |------|------|
 | Service entrypoint | `src/server/football/service.js` |
-| Service calendario | `src/server/football/schedule.js` |
+| Service calendario, L1/L2 | `src/server/football/schedule.js` |
+| Builder list schedule | `src/server/football/schedule-window-builder.js` |
+| L2 Upstash / envelope | `src/server/football/schedule-snapshot-l2.js` |
+| Policy + chiavi Redis | `src/server/football/schedule-window-policy.js` |
+| Constants TTL schedule | `src/server/football/schedule-window-constants.js` |
 | Service fixture | `src/server/football/fixture.js` |
+| Prewarm (route HTTP) | `src/app/api/cron/prewarm-schedule-window/route.js` |
+| Cron Vercel (Hobby: 1x/giorno) | [vercel.json](../vercel.json) (schedule giornaliero UTC) |
+| Esempio cron Vercel Pro (5 min) | [vercel-cron-pro.example.json](vercel-cron-pro.example.json) (sostituisce lo `schedule` in `vercel.json`) |
 | Payload, cache e contratti service | `src/server/football/payloads.js`, `src/server/football/runtime.js`, `src/server/football/contracts.js` |
 | Provider + include policy | `src/lib/providers/sportmonks/index.js` |
 | Allowlist e priorità | `src/lib/sportmonks-priority-league-ids.js` |
@@ -155,7 +192,7 @@ Nessun impegno a implementare in questo file; solo tracciamento intent.
 | Area | Stato |
 |------|--------|
 | Contratti list/detail, allowlist, telemetria, inflight, clamp 7 giorni | **DONE** (manutenzione evolutiva a parte) |
-| Performance feed 7 giorni (L2, SWR, prewarm) | **NEXT** (piano in `.cursor/plans/feed_7_giorni_velocissimo_vfinale.plan.md`) |
+| Performance feed 7 giorni (L2, SWR, prewarm) | **DONE** (L1+L2+builder; Hobby = cron **giornaliero** in `vercel.json`; Pro = sost. con example **5m**) |
 | Refactor UI ampio o cambio allowlist prodotto senza processo | **OUT OF SCOPE** finché non deciso (la allowlist in codice resta la fonte) |
 
 Per stato lavori globale del repo, includere `TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt` nella lettura.

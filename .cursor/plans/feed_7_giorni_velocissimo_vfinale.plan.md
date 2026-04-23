@@ -1,34 +1,34 @@
 ---
 name: Feed 7 giorni velocissimo (v.finale)
-overview: "Piano di implementazione (solo design, no codice) per GET /api/football/schedules/window?days=7: store condiviso con snapshot del payload finale normalizzato, chiave versionata per policy/allowlist, SWR a tre stati (fresh/stale/hard-expired), lock anti-stampede, stale-if-error, prewarm che riusa il builder del runtime. Contratti e allowlist invariati in questa fase."
+overview: "Implementato: L2, L1, builder unico, SWR, lock, stale-if-error, prewarm. Hobby: vercel.json cron 1x/giorno. Pro: example 5m in docs/vercel-cron-pro.example.json."
 todos:
   - id: policy-version-key
     content: Definire policyVersion (hash allowlist ordinata o costante) e struttura chiave football:schedule:window:7:policy:{policyVersion}
-    status: pending
+    status: completed
   - id: single-builder
     content: "Un solo builder buildScheduleWindowPayload (o equivalente) usato da route runtime, read path e prewarm"
-    status: pending
+    status: completed
   - id: l2-snapshot-adapter
     content: "Modulo store L2: solo JSON snapshot finale (no raw Sportmonks), metadata fetchedAt/stale, scrittura atomica"
-    status: pending
+    status: completed
   - id: read-path-ttl
     content: "getScheduleWindowPayload: L1 → L2, classificazione fresh/stale/hard-expired, stale-if-error"
-    status: pending
+    status: completed
   - id: lock-refresh
     content: "Lock distribuito + single refresh per key; opzione A serve stale agli altri; coalescing dove possibile"
-    status: pending
+    status: completed
   - id: prewarm-cron
     content: "Cron 5–15m (Vercel o altro) che invoca stesso entrypoint del builder; se già fresh → no-op o touch"
-    status: pending
+    status: completed
   - id: telemetry-kpi
     content: "Estendere log con cacheLayer, snapshotAgeMs, refreshState; allineare route e KPI accettazione"
-    status: pending
+    status: completed
 isProject: true
 ---
 
-# Feed 7 giorni «velocissimo» — piano definitivo (pre-implementazione)
+# Feed 7 giorni «velocissimo» — piano definitivo
 
-**Stato del documento:** solo planning; nessun codice, nessun refactor UI, nessuna modifica ai contratti API del schedule in questa fase.
+**Stato del documento:** implementato (L2, `schedule.js`, route prewarm; `vercel.json` = 1x/giorno su Hobby; Pro: sostituire schedule con `docs/vercel-cron-pro.example.json` per 5m).
 
 **Direzione approvata:** shared cache persistente + SWR lato service + prewarm leggero, con i guardrail sotto vincolanti.
 

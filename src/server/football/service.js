@@ -6,4 +6,4 @@ export {
   MATCH_DETAIL_ENRICHMENT_DTO_CONTRACT,
 } from "./contracts";
 export { getFixturePayload } from "./fixture";
-export { getScheduleWindowPayload } from "./schedule";
+export { getScheduleWindowPayload, prewarmScheduleWindowSnapshot } from "./schedule";
