@@ -135,6 +135,10 @@ class MongoAlertRepository:
             "stakeUnits": 1,
         }
         update_fields = {
+            "type": "single",
+            "status": "pending",
+            "fixtureIds": [market.fixture_id],
+            "stakeUnits": 1,
             "updatedAt": now,
             "single": _market_to_doc(market),
         }
@@ -171,6 +175,10 @@ class MongoAlertRepository:
             "stakeUnits": 1,
         }
         update_fields = {
+            "type": "multibet",
+            "status": "pending",
+            "fixtureIds": body["fixtureIds"],
+            "stakeUnits": 1,
             "updatedAt": now,
             "multibet": body,
         }
