@@ -48,26 +48,47 @@ function getDisplayedRows(bookmakers = []) {
     .filter((entry) => !byReference.some((ref) => ref.name === entry.name))
     .sort((left, right) => bookmakerPeak(right) - bookmakerPeak(left));
 
-  return [top, ...byReference, ...fallback].slice(0, 4);
+  return [top, ...byReference, ...fallback].slice(0, 4).map((entry, index) => ({
+    ...entry,
+    topValue: index === 0,
+  }));
+}
+
+function computeValuePercent(modelOdd, bookOdd) {
+  const model = Number(modelOdd);
+  const book = Number(bookOdd);
+  if (!Number.isFinite(model) || model <= 0 || !Number.isFinite(book) || book <= 0) {
+    return null;
+  }
+  return Number((((book - model) / model) * 100).toFixed(1));
 }
 
 function pickRowBestValue(row, valueMarkets) {
-  if (!row || !valueMarkets?.oneXTwo) {
+  if (!row || !valueMarkets?.modelOdds) {
     return null;
   }
   const outcomes = [
-    { key: "home", label: "1", odd: safeOdd(row.home) },
-    { key: "draw", label: "X", odd: safeOdd(row.draw) },
-    { key: "away", label: "2", odd: safeOdd(row.away) },
-  ].sort((left, right) => right.odd - left.odd);
-  const topOutcome = outcomes[0];
-  if (!topOutcome?.odd) {
-    return null;
-  }
-  const market = valueMarkets.oneXTwo[topOutcome.key];
-  return Number.isFinite(market?.valuePct) && market.valuePct > 0
-    ? { outcome: topOutcome.label, valuePct: market.valuePct }
-    : null;
+    {
+      key: "home",
+      label: "1",
+      edge: computeValuePercent(valueMarkets.modelOdds.home, safeOdd(row.home)),
+    },
+    {
+      key: "draw",
+      label: "X",
+      edge: computeValuePercent(valueMarkets.modelOdds.draw, safeOdd(row.draw)),
+    },
+    {
+      key: "away",
+      label: "2",
+      edge: computeValuePercent(valueMarkets.modelOdds.away, safeOdd(row.away)),
+    },
+  ]
+    .filter((entry) => Number.isFinite(entry.edge))
+    .sort((left, right) => right.edge - left.edge);
+
+  const bestPositive = outcomes.find((entry) => entry.edge > 0);
+  return bestPositive ? { outcome: bestPositive.label, valuePct: bestPositive.edge } : null;
 }
 
 export default function OddsComparison({ bookmakers, valueMarkets }) {
@@ -124,8 +145,16 @@ export default function OddsComparison({ bookmakers, valueMarkets }) {
             const rowValue = pickRowBestValue(bk, valueMarkets);
             const ctaUrl = buildAffiliateUrl(bk.name);
             return (
-            <div key={i} className={`grid grid-cols-6 gap-0 border-b border-border/10 p-2.5 transition-all last:border-0 hover:bg-secondary/20 ${i === 0 || bk.best ? "bg-primary/5" : ""}`}>
-              <span className={`min-w-0 truncate text-xs font-bold ${bk.best ? "text-primary" : "text-foreground"}`}>{bk.name}</span>
+            <div
+              key={i}
+              className={`grid grid-cols-6 gap-0 border-b border-border/10 p-2.5 transition-all last:border-0 hover:bg-secondary/20 ${
+                bk.topValue ? "bg-primary/10 ring-1 ring-primary/20" : i === 0 || bk.best ? "bg-primary/5" : ""
+              }`}
+            >
+              <span className={`min-w-0 truncate text-xs font-bold ${bk.best || bk.topValue ? "text-primary" : "text-foreground"}`}>
+                {bk.name}
+                {bk.topValue ? " (Top Value)" : ""}
+              </span>
               <span className={`text-center text-xs font-semibold ${bk.home === best1 ? "text-primary" : "text-foreground"}`}>{bk.home}</span>
               <span className={`text-center text-xs font-semibold ${bk.draw === bestX ? "text-primary" : "text-foreground"}`}>{bk.draw}</span>
               <span className={`text-center text-xs font-semibold ${bk.away === best2 ? "text-primary" : "text-foreground"}`}>{bk.away}</span>

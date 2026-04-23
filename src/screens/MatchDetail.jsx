@@ -93,7 +93,7 @@ function buildPremiumAnalysis(match) {
     return "Il modello derivato vede un match molto equilibrato, senza un lato nettamente dominante.";
   }
 
-  return `Il modello derivato assegna un vantaggio principale a ${leader}, con xG stimato ${match.xg.home} - ${match.xg.away}.`;
+  return `Il modello derivato attribuisce a ${leader} una proiezione xG piu alta (${match.xg.home} - ${match.xg.away}).`;
 }
 
 function normalizeValueToken(value) {
@@ -147,6 +147,66 @@ function deriveValueHighlight(valueBet) {
   return highlight;
 }
 
+function getPressureBarValue(preview, key) {
+  const bars = Array.isArray(preview?.bars) ? preview.bars : [];
+  const entry = bars.find((bar) => bar?.key === key);
+  const value = Number(entry?.value);
+  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+}
+
+function derivePressureSupport(match, valueHighlight) {
+  const preview = match?.pressure_preview;
+  if (!preview || !match?.valueBet) {
+    return null;
+  }
+
+  const under = getPressureBarValue(preview, "under");
+  const noGoal = getPressureBarValue(preview, "no_goal");
+  const homeAtk = getPressureBarValue(preview, "home_atk");
+  const awayAtk = getPressureBarValue(preview, "away_atk");
+  const attackAvg = Math.round((homeAtk + awayAtk) / 2);
+  const xgTotal = Number(match?.xg?.home || 0) + Number(match?.xg?.away || 0);
+  const isOuUnder = valueHighlight?.ou === "under25";
+  const isOuOver = valueHighlight?.ou === "over25";
+  const isGgGoal = valueHighlight?.gg === "goal";
+  const isGgNoGoal = valueHighlight?.gg === "noGoal";
+  const isOneXTwo = !isOuUnder && !isOuOver && !isGgGoal && !isGgNoGoal;
+
+  let score = 0;
+  if (isOuUnder) {
+    score += (under - 50) * 0.9 + (noGoal - 50) * 0.6 + (2.45 - xgTotal) * 24;
+  } else if (isOuOver) {
+    score += (50 - under) * 0.9 + (50 - noGoal) * 0.5 + (xgTotal - 2.45) * 24;
+  } else if (isGgNoGoal) {
+    score += (noGoal - 50) * 1.0 + (under - 50) * 0.45 + (2.35 - xgTotal) * 14;
+  } else if (isGgGoal) {
+    score += (50 - noGoal) * 1.0 + (attackAvg - 52) * 0.35 + (xgTotal - 2.35) * 14;
+  } else if (isOneXTwo) {
+    const pressureBalance = (under - 50) * 0.3 + (noGoal - 50) * 0.3;
+    score += Math.max(-8, Math.min(8, -pressureBalance));
+    if (attackAvg >= 65) score += 4;
+    if (xgTotal >= 2.6) score += 3;
+    if (xgTotal <= 2.0) score -= 3;
+  }
+
+  if (score >= 12) {
+    return {
+      level: "alto",
+      reason: `Contesto coerente (attacco ${attackAvg}/100, under ${Math.round(under)}/100, no-goal ${Math.round(noGoal)}/100, xG ${xgTotal.toFixed(2)}).`,
+    };
+  }
+  if (score <= -12) {
+    return {
+      level: "basso",
+      reason: `Contesto in contrasto (attacco ${attackAvg}/100, under ${Math.round(under)}/100, no-goal ${Math.round(noGoal)}/100, xG ${xgTotal.toFixed(2)}).`,
+    };
+  }
+  return {
+    level: "medio",
+    reason: `Contesto neutro (attacco ${attackAvg}/100, under ${Math.round(under)}/100, no-goal ${Math.round(noGoal)}/100, xG ${xgTotal.toFixed(2)}).`,
+  };
+}
+
 export default function MatchDetail() {
   const { id } = useParams();
   const routeId = decodeURIComponent(String(id || ""));
@@ -197,6 +257,48 @@ export default function MatchDetail() {
       isActive = false;
     };
   }, [fixtureIdToLoad]);
+
+  useEffect(() => {
+    if (!fixtureIdToLoad) {
+      return undefined;
+    }
+
+    const kickoffAt = fixtureBundle?.fixture?.kickoff_at;
+    const lineupStatus = fixtureBundle?.fixture?.lineup_status;
+    if (!kickoffAt || lineupStatus === "official") {
+      return undefined;
+    }
+
+    const kickoffTs = Date.parse(kickoffAt);
+    if (!Number.isFinite(kickoffTs)) {
+      return undefined;
+    }
+
+    const msToKickoff = kickoffTs - Date.now();
+    const withinAutoRefreshWindow = msToKickoff <= 90 * 60_000 && msToKickoff >= -15 * 60_000;
+    if (!withinAutoRefreshWindow) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const payload = await getFixture(fixtureIdToLoad);
+        if (!cancelled) {
+          setFixtureBundle(payload);
+          setApiMatch(payload.fixture);
+        }
+      } catch {
+        // silent refresh: keep last good payload
+      }
+    };
+
+    const timer = setInterval(refresh, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [fixtureIdToLoad, fixtureBundle?.fixture?.kickoff_at, fixtureBundle?.fixture?.lineup_status]);
 
   useEffect(() => {
     if (!fixtureBundle?.fixture) {
@@ -275,6 +377,10 @@ export default function MatchDetail() {
     return `${src}: ${match.valueBet.type}${qLabel} · edge +${match.valueBet.edge}%`;
   }, [match]);
   const valueHighlight = useMemo(() => deriveValueHighlight(match?.valueBet), [match?.valueBet]);
+  const pressureSupport = useMemo(
+    () => derivePressureSupport(match, valueHighlight),
+    [match, valueHighlight]
+  );
   const standingsRows = Array.isArray(match.standings?.rows) ? match.standings.rows : [];
   const homeCoaches = Array.isArray(match.coaches?.home) ? match.coaches.home : [];
   const awayCoaches = Array.isArray(match.coaches?.away) ? match.coaches.away : [];
@@ -436,6 +542,22 @@ export default function MatchDetail() {
                     </h3>
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       {match.valueBet && <ValueBetBadge match={match} variant="compact" />}
+                      {match.valueBet && pressureSupport?.level && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/30">
+                          Supporto tattico:{" "}
+                          <span
+                            className={`font-semibold ${
+                              pressureSupport.level === "alto"
+                                ? "text-primary"
+                                : pressureSupport.level === "basso"
+                                  ? "text-amber-400"
+                                  : "text-foreground"
+                            }`}
+                          >
+                            {pressureSupport.level}
+                          </span>
+                        </span>
+                      )}
                       {match.odds_provider === "not_available_with_current_feed" && (
                         <span className="text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
                           Quote stimate, non bookmaker
@@ -496,24 +618,28 @@ export default function MatchDetail() {
                         key: "over25",
                         odd: match.ou.over25,
                         prob: match.ouProb?.over25,
+                        modelOdd: match.modelOddsOu?.over25,
                       },
                       {
                         label: "Under 2.5",
                         key: "under25",
                         odd: match.ou.under25,
                         prob: match.ouProb?.under25,
+                        modelOdd: match.modelOddsOu?.under25,
                       },
                       {
                         label: "Goal",
                         key: "goal",
                         odd: match.gg.goal,
                         prob: match.ggProb?.goal,
+                        modelOdd: match.modelOddsGg?.goal,
                       },
                       {
                         label: "No Goal",
                         key: "noGoal",
                         odd: match.gg.noGoal,
                         prob: match.ggProb?.noGoal,
+                        modelOdd: match.modelOddsGg?.noGoal,
                       },
                     ].map((row) => (
                       (() => {
@@ -535,6 +661,11 @@ export default function MatchDetail() {
                                 {row.prob}%
                               </div>
                               <div className="text-xs font-semibold text-accent">{row.odd}</div>
+                              {Number.isFinite(row.modelOdd) && (
+                                <div className="text-[11px] text-muted-foreground">
+                                  Quota modello {row.modelOdd}
+                                </div>
+                              )}
                             </>
                           ) : (
                             <span className="text-xs font-bold text-foreground">{row.odd}</span>
@@ -554,48 +685,111 @@ export default function MatchDetail() {
 
                 {match.pressure_preview?.bars?.length > 0 && (
                   <GlassCard>
-                    <PressurePreviewChart preview={match.pressure_preview} />
+                    <PressurePreviewChart preview={match.pressure_preview} supportInsight={pressureSupport} />
                   </GlassCard>
                 )}
 
                 <GlassCard>
-                  <div className="grid md:grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-secondary/30 p-3">
-                      <h3 className="font-semibold text-sm text-foreground mb-2">xG Pre-Match</h3>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{match.home}</span>
-                          <span className="font-bold text-primary">{match.xg.home}</span>
+                  <h3 className="font-semibold text-sm text-foreground mb-3">xG Pre-Match</h3>
+                  {(() => {
+                    const homeXg = Number(match.xg?.home || 0);
+                    const awayXg = Number(match.xg?.away || 0);
+                    const maxXg = Math.max(homeXg, awayXg, 0.1);
+                    const homePct = Math.max(0, Math.min(100, (homeXg / maxXg) * 100));
+                    const awayPct = Math.max(0, Math.min(100, (awayXg / maxXg) * 100));
+                    const delta = Math.abs(homeXg - awayXg).toFixed(2);
+                    const leader =
+                      homeXg > awayXg ? match.home : awayXg > homeXg ? match.away : "Equilibrio";
+
+                    return (
+                      <div className="rounded-xl bg-secondary/30 p-3">
+                        <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Confronto xG</span>
+                          <span className="font-semibold text-foreground">
+                            Diff. xG {delta} {leader !== "Equilibrio" ? `· Proiezione ${leader}` : "· Equilibrio"}
+                          </span>
                         </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{match.away}</span>
-                          <span className="font-bold text-foreground">{match.xg.away}</span>
+
+                        <div className="space-y-3">
+                          <div>
+                            <div className="mb-1 flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{match.home}</span>
+                              <span className="font-bold text-primary">{homeXg.toFixed(2)}</span>
+                            </div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/50">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500"
+                                style={{ width: `${homePct}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-1 flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{match.away}</span>
+                              <span className="font-bold text-foreground">{awayXg.toFixed(2)}</span>
+                            </div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/50">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-cyan-500"
+                                style={{ width: `${awayPct}%` }}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    );
+                  })()}
+                </GlassCard>
+
+                <GlassCard>
+                  <h3 className="font-semibold text-sm text-foreground mb-3">Risultati Probabili</h3>
+                  {match.scores.length > 0 ? (
                     <div className="rounded-xl bg-secondary/30 p-3">
-                      <h3 className="font-semibold text-sm text-foreground mb-2">
-                        Risultati Probabili
-                      </h3>
-                      {match.scores.length > 0 ? (
-                        <div className="space-y-2">
-                          {match.scores.map((score, index) => (
-                            <div
-                              key={`${score.score}-${index}`}
-                              className="flex items-center justify-between rounded-lg bg-secondary/40 px-2.5 py-1.5 text-xs"
-                            >
+                      {(() => {
+                        const topProb = Math.max(
+                          ...match.scores.map((entry) =>
+                            Number.isFinite(Number(entry?.prob)) ? Number(entry.prob) : 0
+                          )
+                        );
+                        return (
+                      <div className="space-y-2">
+                        {match.scores.map((score, index) => (
+                          (() => {
+                            const rowProb = Number.isFinite(Number(score?.prob)) ? Number(score.prob) : 0;
+                            const isTop = rowProb === topProb;
+                            return (
+                          <div
+                            key={`${score.score}-${index}`}
+                            className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs ${
+                              isTop
+                                ? "border border-primary/25 bg-primary/12 ring-1 ring-primary/20"
+                                : "bg-secondary/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
                               <span className="font-semibold text-foreground">{score.score}</span>
-                              <span className="text-primary font-bold">{score.prob}%</span>
+                              {isTop && (
+                                <span className="rounded-full border border-primary/30 bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                  Piu probabile
+                                </span>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Nessun risultato esatto disponibile nel feed corrente.
-                        </p>
-                      )}
+                            <span className={`font-bold ${isTop ? "text-primary" : "text-foreground"}`}>
+                              {score.prob}%
+                            </span>
+                          </div>
+                            );
+                          })()
+                        ))}
+                      </div>
+                        );
+                      })()}
                     </div>
-                  </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Nessun risultato esatto disponibile nel feed corrente.
+                    </p>
+                  )}
                 </GlassCard>
               </TabsContent>
 
@@ -618,6 +812,29 @@ export default function MatchDetail() {
                       <span className="text-sm font-semibold text-foreground">{match.lineup_status}</span>
                     </div>
                   </div>
+                  {Array.isArray(match.lineup_penalty?.penalties) && match.lineup_penalty.penalties.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-amber-400/25 bg-amber-400/10 p-3">
+                      <div className="text-xs font-semibold text-amber-300">Impact lineup adjustment</div>
+                      <div className="mt-1 text-[11px] text-amber-100/80">
+                        Livello: {match.lineup_penalty?.mode || "unknown"}
+                        {match.lineup_penalty?.mode === "probable"
+                          ? " (penalizzazione ridotta)"
+                          : match.lineup_penalty?.mode === "expected"
+                            ? " (solo warning, senza impatto probabilita)"
+                            : ""}
+                      </div>
+                      <div className="mt-1 space-y-1">
+                        {match.lineup_penalty.penalties.map((entry, index) => (
+                          <div key={`${entry.side}-${index}`} className="text-xs text-amber-100/90">
+                            {entry.side === "home" ? match.home : match.away}: -{entry.appliedPenaltyPct ?? entry.penaltyPct}% potenziale offensivo
+                            {Array.isArray(entry.missingPlayers) && entry.missingPlayers.length > 0
+                              ? ` (assenze key player: ${entry.missingPlayers.join(", ")})`
+                              : ""}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </GlassCard>
                 <GlassCard>
                   <h3 className="font-semibold text-sm text-foreground mb-3">Impact Players</h3>

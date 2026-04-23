@@ -5,9 +5,10 @@ import { Activity } from "lucide-react";
  * Grafico a barre orizzontali (scala 0–100) per la preview pressione pre-match.
  *
  * @param {{ bars?: Array<{ key: string; label: string; value: number }>; narrative?: string }} preview
+ * @param {{ level: "alto" | "medio" | "basso"; reason?: string } | null} [props.supportInsight]
  * @param {boolean} [props.showHeader] - titolo e icona (default true)
  */
-export default function PressurePreviewChart({ preview, showHeader = true }) {
+export default function PressurePreviewChart({ preview, showHeader = true, supportInsight = null }) {
   const bars = Array.isArray(preview?.bars) ? preview.bars : [];
   if (!bars.length) {
     return null;
@@ -21,6 +22,18 @@ export default function PressurePreviewChart({ preview, showHeader = true }) {
           <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
             Pressione prevista
           </h3>
+        </div>
+      ) : null}
+      <p className="mb-3 text-[11px] text-muted-foreground/90">
+        Indice pre-match 0-100: piu alto = segnale piu forte.
+      </p>
+      {supportInsight?.level ? (
+        <div className="mb-3 rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-2 text-xs">
+          <span className="font-semibold text-primary">Supporto tattico alla Value Bet:</span>{" "}
+          <span className="font-semibold text-foreground capitalize">{supportInsight.level}</span>
+          {supportInsight.reason ? (
+            <span className="text-muted-foreground"> · {supportInsight.reason}</span>
+          ) : null}
         </div>
       ) : null}
 

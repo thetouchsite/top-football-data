@@ -118,6 +118,7 @@ export const SPORTMONKS_INCLUDE_POLICY = {
     "participants",
     "scores",
     "odds",
+    "odds.bookmaker",
     "predictions.type",
     "statistics.type",
   ],
@@ -228,6 +229,7 @@ const SPORTMONKS_FIXTURE_CORE_INCLUDE_ATTEMPTS = [
     "participants",
     "scores",
     "odds",
+    "odds.bookmaker",
     "predictions.type",
     "statistics.type",
   ],
@@ -237,6 +239,7 @@ const SPORTMONKS_FIXTURE_CORE_INCLUDE_ATTEMPTS = [
     "participants",
     "scores",
     "odds",
+    "odds.bookmaker",
     "predictions.type",
     "statistics.type",
   ],
@@ -1873,6 +1876,162 @@ function buildDerivedProbabilities(xg, homeForm, awayForm) {
   });
 }
 
+function extractLineupAttackScore(entry) {
+  const details = asArray(entry?.details);
+  const expected = asArray(entry?.expected);
+
+  const readMetric = (aliases = []) => {
+    const normalizedAliases = aliases.map((alias) => normalizeLookupKey(alias));
+    const fromExpected = expected.find((item) => {
+      const typeKey = normalizeLookupKey(
+        item?.type?.name || item?.type?.code || item?.type_id || item?.name || ""
+      );
+      return normalizedAliases.some((alias) => typeKey.includes(alias));
+    });
+    if (Number.isFinite(safeNumber(fromExpected?.value, Number.NaN))) {
+      return safeNumber(fromExpected?.value, 0);
+    }
+
+    const fromDetails = details.find((item) => {
+      const typeKey = normalizeLookupKey(
+        item?.type?.name || item?.type?.code || item?.type_id || item?.name || ""
+      );
+      return normalizedAliases.some((alias) => typeKey.includes(alias));
+    });
+    return safeNumber(
+      fromDetails?.value ??
+        fromDetails?.data?.value ??
+        fromDetails?.amount ??
+        fromDetails?.total,
+      0
+    );
+  };
+
+  const xg = readMetric(["expected_goals", "5304", "xg"]);
+  const goals = readMetric(["goals", "goal"]);
+  const assists = readMetric(["assists", "assist"]);
+  const shots = readMetric(["shots_on_target", "shots_total", "shots"]);
+  return roundTo(xg * 3.2 + goals * 1.3 + assists * 1.1 + shots * 0.35, 3);
+}
+
+function buildLineupPenaltyAdjustments(fixture, homeParticipant, awayParticipant, lineupStatus) {
+  if (!["official", "probable", "expected"].includes(lineupStatus)) {
+    return {
+      mode: "disabled",
+      penalties: [],
+    };
+  }
+  const multiplierByStatus = {
+    official: 1,
+    probable: 0.4,
+    expected: 0,
+  };
+  const multiplier = multiplierByStatus[lineupStatus] ?? 0;
+
+  const lineups = asArray(fixture?.lineups);
+  if (!lineups.length) {
+    return {
+      mode: lineupStatus,
+      penalties: [],
+    };
+  }
+
+  const byTeam = {
+    home: lineups.filter(
+      (entry) =>
+        resolveLineupTeamLocation(entry, homeParticipant, awayParticipant, fixture?.formations) === "home"
+    ),
+    away: lineups.filter(
+      (entry) =>
+        resolveLineupTeamLocation(entry, homeParticipant, awayParticipant, fixture?.formations) === "away"
+    ),
+  };
+
+  const penalties = ["home", "away"]
+    .map((side) => {
+      const entries = byTeam[side];
+      if (!entries.length) return null;
+
+      const starters = entries.filter((entry) => entry?.formation_position || entry?.formation_field);
+      if (starters.length < 9) return null;
+
+      const starterIds = new Set(
+        starters.map((entry) => String(entry?.player_id || entry?.id || "")).filter(Boolean)
+      );
+
+      const ranked = entries
+        .map((entry) => ({
+          id: String(entry?.player_id || entry?.id || ""),
+          name:
+            entry?.player_name ||
+            entry?.player?.display_name ||
+            entry?.player?.common_name ||
+            entry?.player?.name ||
+            "Giocatore",
+          score: extractLineupAttackScore(entry),
+        }))
+        .filter((entry) => entry.id && entry.score > 0.5)
+        .sort((left, right) => right.score - left.score);
+
+      const keyCandidates = ranked.slice(0, 3);
+      if (!keyCandidates.length) return null;
+
+      const missing = keyCandidates.filter((candidate) => !starterIds.has(candidate.id));
+      if (!missing.length) return null;
+
+      const penaltyPct = Math.min(10, missing.reduce((acc, candidate) => acc + (candidate.score >= 3 ? 5 : 3), 0));
+      const appliedPenaltyPct = Math.round(penaltyPct * multiplier * 10) / 10;
+      return {
+        side,
+        penaltyPct,
+        appliedPenaltyPct,
+        missingPlayers: missing.map((entry) => entry.name),
+      };
+    })
+    .filter(Boolean);
+
+  if (!penalties.length) {
+    return {
+      mode: lineupStatus,
+      penalties: [],
+    };
+  }
+
+  return {
+    mode: lineupStatus,
+    penalties,
+  };
+}
+
+function applyLineupPenaltyToProbabilities(probabilities, penalties = []) {
+  if (!penalties.length) {
+    return ensureProbabilitySum(probabilities);
+  }
+
+  const updated = {
+    home: safeNumber(probabilities?.home, 0),
+    draw: safeNumber(probabilities?.draw, 0),
+    away: safeNumber(probabilities?.away, 0),
+  };
+
+  penalties.forEach((entry) => {
+    const side = entry.side === "away" ? "away" : "home";
+    const opposite = side === "home" ? "away" : "home";
+    const rawPenalty = Number.isFinite(safeNumber(entry.appliedPenaltyPct, Number.NaN))
+      ? entry.appliedPenaltyPct
+      : entry.penaltyPct;
+    const penalty = Math.max(0, Math.min(10, safeNumber(rawPenalty, 0)));
+    if (!penalty) return;
+
+    const reducible = Math.min(updated[side], penalty);
+    updated[side] = Math.max(1, updated[side] - reducible);
+    updated[opposite] += reducible * 0.72;
+    updated.draw += reducible * 0.28;
+  });
+
+  return ensureProbabilitySum(updated);
+}
+
 function buildDerivedValueBet(probabilities, xg) {
   if (probabilities.home >= 46 && xg.home - xg.away >= 0.25) {
     return {
@@ -2828,7 +2987,7 @@ function normalizeCoreSportmonksFixture(fixture = {}) {
       awayParticipant?.last_5 ||
       awayParticipant?.recent_form
   );
-  const probabilities =
+  const baseProbabilities =
     predictionBundle.probabilities ||
     buildDerivedProbabilities(
       {
@@ -2841,19 +3000,29 @@ function normalizeCoreSportmonksFixture(fixture = {}) {
   const derivedXg =
     expectedGoals.home > 0 || expectedGoals.away > 0
       ? expectedGoals
-      : buildExpectedGoalsFromProbabilities(probabilities);
+      : buildExpectedGoalsFromProbabilities(baseProbabilities);
   const markets = buildGoalMarkets(derivedXg);
   const coverage = buildCoverageSummary(fixture);
   const scores = pickScoreSet(fixture?.scores, homeParticipant, awayParticipant);
   const predictionProvider = coverage.hasPredictions ? "sportmonks_predictions" : "derived_internal_model";
   const oddsBundle = extractOddsBundle(fixture?.odds);
-  const valueMarkets = buildOneXTwoValueMarkets(probabilities, oddsBundle.oneXTwoBest);
   const formationOverrides = getFormationOverrides(
     fixture?.formations,
     homeParticipant,
     awayParticipant
   );
   const lineupStatus = buildLineupStatus(fixture, fixture?.lineups, formationOverrides);
+  const lineupPenalty = buildLineupPenaltyAdjustments(
+    fixture,
+    homeParticipant,
+    awayParticipant,
+    lineupStatus
+  );
+  const probabilities = applyLineupPenaltyToProbabilities(
+    baseProbabilities,
+    lineupPenalty.penalties
+  );
+  const valueMarkets = buildOneXTwoValueMarkets(probabilities, oddsBundle.oneXTwoBest);
   const confidenceBundle = buildConfidence({
     probabilities,
     coverage,
@@ -2891,6 +3060,7 @@ function normalizeCoreSportmonksFixture(fixture = {}) {
     confidenceSource: confidenceBundle.source,
     reliabilityScore: confidenceBundle.reliabilityScore,
     lineupStatus,
+    lineupPenalty,
     predictionProvider,
     info: getCompetitionInfo(fixture),
     venue: getVenueInfo(fixture),
@@ -3271,6 +3441,7 @@ export function normalizeSportmonksFixture(fixture = {}) {
     metadata: buildMetadata(fixture, core.coverage, core.stateInfo),
     lineup_status: lineupStatus,
     lineupConfirmed: lineupStatus === "official",
+    lineup_penalty: core.lineupPenalty || null,
     bestOdds: core.oddsBundle.bestOdds,
     bestBookmaker: core.oddsBundle.bestBookmaker,
     movement: core.oddsBundle.movement,
