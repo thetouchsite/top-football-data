@@ -9,6 +9,23 @@ def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _zone_info(tz_name: str) -> ZoneInfo:
+    """
+    Windows / Python senza DB IANA: serve il pacchetto `tzdata` (vedi requirements.txt).
+    Dopo 'import tzdata' ZoneInfo trova es. Europe/Rome.
+    """
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        try:
+            import tzdata  # noqa: F401
+        except ImportError as e:
+            raise RuntimeError(
+                f'Fuso IANA "{tz_name}" non disponibile. Installa: pip install tzdata'
+            ) from e
+        return ZoneInfo(tz_name)
+
+
 class SportmonksClient:
     def __init__(self, api_token: str, base_url: str, timezone: str):
         self.api_token = api_token
@@ -19,7 +36,7 @@ class SportmonksClient:
         if not self.api_token:
             raise RuntimeError("SPORTMONKS_API_TOKEN/SPORTMONKS_API_KEY non configurato.")
 
-        tz = ZoneInfo(self.timezone)
+        tz = _zone_info(self.timezone)
         start = datetime.now(tz).date()
         end = start + timedelta(days=max(0, days - 1))
         fixtures: list[dict[str, Any]] = []

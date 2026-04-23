@@ -2,10 +2,12 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 
+from app.alert_webhook import post_from_multibet, post_from_single
 from app.config import get_settings
-from app.engine import build_fixture_markets, build_multibets, build_official_value_markets, load_affiliate_links
+from app.engine import build_all_modus_multibets, build_fixture_markets, build_official_value_markets, load_affiliate_links
+from app.models import MultibetModus
 from app.mongodb import MongoAlertRepository
 from app.results import settle_alert_from_fixtures
 from app.site_feed import SiteFeedClient, build_high_probability_picks, format_demo_picks_message
@@ -60,29 +62,38 @@ class AlertWorker:
             for market in markets
             if market.edge >= self.settings.notification_ev_threshold
         ]
-        multibets = [
-            multibet
-            for multibet in build_multibets(
-                markets,
-                min_events=self.settings.multibet_min_events,
-                max_events=self.settings.multibet_max_events,
-            )
-            if multibet.total_ev >= self.settings.notification_ev_threshold
-        ]
+        by_modus = build_all_modus_multibets(
+            markets,
+            min_events=self.settings.multibet_min_events,
+            max_events=self.settings.multibet_max_events,
+            min_total_ev=self.settings.notification_ev_threshold,
+            algorithmic_min_leg_prob=self.settings.multibet_algorithmic_min_leg_prob,
+            algorithmic_min_value_percent=self.settings.multibet_algorithmic_min_value_percent,
+        )
+        multibets = self._flatten_multibets_by_modus(by_modus)
 
         sent = 0
+        app_url = self.settings.app_base_url or ""
         for market in singles[: self.settings.max_alerts_per_run]:
             should_send = self.store.mark_once(market.alert_key)
-            if should_send:
-                await self.telegram.send_message(format_single_alert(market, self.settings.cta_label))
+            if should_send and self.settings.alerts_webhook_url:
+                await post_from_single(self.settings.alerts_webhook_url, market)
+            if should_send and self.telegram.configured:
+                await self.telegram.send_message(
+                    format_single_alert(market, self.settings.cta_label, app_url)
+                )
                 sent += 1
             self.repository.save_single_alert(market, telegram_sent=should_send)
 
         remaining_slots = max(0, self.settings.max_alerts_per_run - sent)
         for multibet in multibets[:remaining_slots]:
             should_send = self.store.mark_once(multibet.alert_key)
-            if should_send:
-                await self.telegram.send_message(format_multibet_alert(multibet, self.settings.cta_label))
+            if should_send and self.settings.alerts_webhook_url:
+                await post_from_multibet(self.settings.alerts_webhook_url, multibet)
+            if should_send and self.telegram.configured:
+                await self.telegram.send_message(
+                    format_multibet_alert(multibet, self.settings.cta_label, app_url)
+                )
                 sent += 1
             self.repository.save_multibet_alert(multibet, telegram_sent=should_send)
 
@@ -131,9 +142,31 @@ class AlertWorker:
 
         return hydrated
 
+    def _flatten_multibets_by_modus(self, by_modus: dict[str, list]) -> list:
+        """Fino a N multibet per ogni `modus`, ordine fisso, senza sovrapposizione di alertKey."""
+        order = (
+            MultibetModus.ALGORITHMIC,
+            MultibetModus.SAFE,
+            MultibetModus.VALUE,
+            MultibetModus.GOLD,
+        )
+        out: list[MultiBet] = []
+        seen: set[str] = set()
+        for modus in order:
+            n = 0
+            for multibet in by_modus.get(modus) or []:
+                if n >= self.settings.multibet_per_modus_max:
+                    break
+                if multibet.alert_key in seen:
+                    continue
+                seen.add(multibet.alert_key)
+                out.append(multibet)
+                n += 1
+        return out
+
     def build_markets(self, fixtures: list[dict], affiliate_links: dict[str, str]):
         markets = []
-        seen: set[tuple[str, str, str]] = set()
+        seen: set[tuple[str, str, str, str]] = set()
 
         for fixture in fixtures:
             official_markets = build_official_value_markets(
@@ -148,7 +181,7 @@ class AlertWorker:
             )
 
             for market in [*official_markets, *derived_markets]:
-                key = (market.fixture_id, market.market, market.selection)
+                key = (market.fixture_id, market.market, market.selection, market.leg_profile)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -276,6 +309,41 @@ async def test_telegram() -> dict[str, object]:
         "Test Top Football Data: backend Telegram collegato correttamente."
     )
     return {"ok": True, "sent": 1}
+
+
+@app.post("/admin/reset-alerts")
+async def admin_reset_alerts(
+    secret: str = Query(default=""),
+    clear_local_store: bool = Query(default=True),
+    clear_performance: bool = Query(default=True),
+) -> dict[str, object]:
+    """
+    Svuota `betAlerts` (e opzionalmente `betPerformance`) e il file mark_once locale.
+    Richiede `ALERTS_RESET_SECRET` in .env e stesso `secret` in query, es. ?secret=…
+    """
+    expected = (worker.settings.alerts_reset_secret or "").strip()
+    if not expected:
+        return {
+            "ok": False,
+            "error": "Impostare ALERTS_RESET_SECRET in .env per abilitare l'azzeramento.",
+        }
+    if secret != expected:
+        return {"ok": False, "error": "Secret non valido."}
+
+    deleted_alerts = worker.repository.delete_all_bet_alerts()
+    deleted_perf = worker.repository.delete_all_performance() if clear_performance else 0
+    if clear_local_store and worker.settings.storage_path:
+        try:
+            worker.store.clear()
+        except OSError as e:
+            return {"ok": False, "error": f"File store: {e}"}
+
+    return {
+        "ok": True,
+        "deletedBetAlerts": deleted_alerts,
+        "deletedPerformance": deleted_perf,
+        "localStoreCleared": clear_local_store,
+    }
 
 
 @app.post("/demo-pronostici")

@@ -9,6 +9,19 @@ class BookmakerOdd:
     affiliate_url: str | None = None
 
 
+class LegProfile:
+    """
+    Categoria gamba lato generazione (quattro modi in UI).
+    - model_value: probabilita modello + quote (convergenza)
+    - book_discrepancy: value bet ufficiale API (fair odd vs book)
+    - exotic: risultati esatti, HT/FT, special — pool Gold
+    """
+
+    MODEL_VALUE = "model_value"
+    BOOK_DISCREPANCY = "book_discrepancy"
+    EXOTIC = "exotic"
+
+
 @dataclass(frozen=True)
 class FixtureMarket:
     fixture_id: str
@@ -26,6 +39,7 @@ class FixtureMarket:
     edge: float
     comparator: tuple[BookmakerOdd, ...] = field(default_factory=tuple)
     source: str = "sportmonks_predictions_odds"
+    leg_profile: str = LegProfile.MODEL_VALUE
 
     @property
     def title(self) -> str:
@@ -39,6 +53,15 @@ class FixtureMarket:
         )
 
 
+class MultibetModus:
+    """Deve allineare UI Next.js e `multibet.modus` in Mongo."""
+
+    ALGORITHMIC = "algorithmic"
+    SAFE = "safe"
+    VALUE = "value"
+    GOLD = "gold"
+
+
 @dataclass(frozen=True)
 class MultiBet:
     events: tuple[FixtureMarket, ...]
@@ -46,6 +69,7 @@ class MultiBet:
     statistical_probability: float
     total_ev: float
     confidence_score: int
+    modus: str = MultibetModus.ALGORITHMIC
 
     @property
     def data_edge_percent(self) -> float:
@@ -53,4 +77,6 @@ class MultiBet:
 
     @property
     def alert_key(self) -> str:
-        return "multi:" + "|".join(event.alert_key for event in self.events)
+        return f"multi:{self.modus}:" + "|".join(
+            f"{e.fixture_id}:{e.market}:{e.selection}" for e in self.events
+        )

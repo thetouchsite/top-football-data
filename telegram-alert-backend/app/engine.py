@@ -7,7 +7,13 @@ import re
 from datetime import datetime
 from typing import Any
 
-from app.models import BookmakerOdd, FixtureMarket, MultiBet
+from app.models import (
+    BookmakerOdd,
+    FixtureMarket,
+    LegProfile,
+    MultiBet,
+    MultibetModus,
+)
 
 
 OUTCOME_ALIASES = {
@@ -264,6 +270,21 @@ def _selection_from_value_bet(value_bet: dict[str, Any]) -> str | None:
     return None
 
 
+_GOLD_EXOTIC_PATTERN = re.compile(
+    r"(?i)correct|esatt|cs\b|ht\s*[/\s]\s*ft|scorecast|risultat|anytime|primo_?gol|multi_?scorer|corners?|gialli|cartell"
+)
+_SCORELINE = re.compile(r"^\d+\s*[-:]\s*\d+$")
+
+
+def _is_gold_exotic_label(raw: str) -> bool:
+    s = (raw or "").strip()
+    if len(s) < 2:
+        return False
+    if _SCORELINE.match(s):
+        return True
+    return bool(_GOLD_EXOTIC_PATTERN.search(s))
+
+
 def _market_name_for_selection(selection: str) -> str:
     if selection in {"1", "X", "2"}:
         return "1X2"
@@ -309,23 +330,39 @@ def build_official_value_markets(
 
     for value_bet in _extract_value_bet_items(fixture):
         predictions = value_bet.get("predictions") if isinstance(value_bet.get("predictions"), dict) else {}
-        selection = _selection_from_value_bet(value_bet)
-        if not selection:
+        standard_sel = _selection_from_value_bet(value_bet)
+        raw_bet = str(
+            predictions.get("bet") or value_bet.get("bet") or value_bet.get("label") or value_bet.get("name") or ""
+        ).strip()
+
+        if standard_sel is not None:
+            selection = standard_sel
+            leg_profile = LegProfile.BOOK_DISCREPANCY
+            market_name = _market_name_for_selection(selection)
+        elif _is_gold_exotic_label(raw_bet):
+            selection = raw_bet[:200]
+            leg_profile = LegProfile.EXOTIC
+            market_name = "Exact / Special / Combo"
+        else:
             continue
 
         fair_odd = _safe_float(predictions.get("fair_odd") or predictions.get("fairOdd") or value_bet.get("fair_odd"))
-        official_odd = _official_bookmaker_odd(value_bet, selection, affiliate_links)
+        official_odd = _official_bookmaker_odd(value_bet, "1", affiliate_links)
         if not math.isfinite(fair_odd) or fair_odd <= 1 or official_odd is None:
             continue
 
-        comparator = _extract_bookmaker_odds(fixture, selection, affiliate_links)
-        if not comparator:
+        if leg_profile == LegProfile.BOOK_DISCREPANCY and standard_sel is not None:
+            comparator = _extract_bookmaker_odds(fixture, standard_sel, affiliate_links)
+            if not comparator:
+                comparator = [official_odd]
+            else:
+                best0 = comparator[0]
+                if official_odd.odd > best0.odd:
+                    comparator = sorted([official_odd, *comparator], key=lambda item: item.odd, reverse=True)
+        else:
             comparator = [official_odd]
 
         best = comparator[0]
-        if official_odd.odd > best.odd:
-            comparator = sorted([official_odd, *comparator], key=lambda item: item.odd, reverse=True)
-            best = comparator[0]
 
         model_probability = 1 / fair_odd
         edge = round(model_probability * best.odd, 3)
@@ -340,7 +377,7 @@ def build_official_value_markets(
                 away=away,
                 league=league,
                 kickoff=kickoff,
-                market=_market_name_for_selection(selection),
+                market=market_name,
                 selection=selection,
                 model_probability=round(model_probability, 4),
                 model_odd=round(fair_odd, 2),
@@ -350,6 +387,7 @@ def build_official_value_markets(
                 edge=edge,
                 comparator=tuple(comparator[:4]),
                 source="sportmonks_value_bets",
+                leg_profile=leg_profile,
             )
         )
 
@@ -412,20 +450,57 @@ def build_fixture_markets(
                 value_percent=value_percent,
                 edge=edge,
                 comparator=comparator,
+                leg_profile=LegProfile.MODEL_VALUE,
             )
         )
 
     return sorted(markets, key=lambda item: item.edge, reverse=True)
 
 
-def build_multibets(markets: list[FixtureMarket], min_events: int, max_events: int) -> list[MultiBet]:
+def filter_markets_for_modus(
+    markets: list[FixtureMarket],
+    modus: str,
+    *,
+    algorithmic_min_leg_prob: float = 0.32,
+    algorithmic_min_value_percent: float = 1.0,
+) -> list[FixtureMarket]:
+    """Pool di gambe per generatore multipla (quattro modi, pool disgiunti)."""
+    if modus == MultibetModus.ALGORITHMIC:
+        return [
+            m
+            for m in markets
+            if m.leg_profile == LegProfile.MODEL_VALUE
+            and m.model_probability >= algorithmic_min_leg_prob
+            and m.value_percent >= algorithmic_min_value_percent
+        ]
+    if modus == MultibetModus.SAFE:
+        return [m for m in markets if m.leg_profile == LegProfile.MODEL_VALUE and m.model_probability >= 0.80]
+    if modus == MultibetModus.VALUE:
+        return [m for m in markets if m.leg_profile == LegProfile.BOOK_DISCREPANCY]
+    if modus == MultibetModus.GOLD:
+        return [m for m in markets if m.leg_profile == LegProfile.EXOTIC]
+    return []
+
+
+def build_multibets_for_modus(
+    pool: list[FixtureMarket],
+    min_events: int,
+    max_events: int,
+    min_total_ev: float,
+    modus: str,
+) -> list[MultiBet]:
+    if len(pool) < min_events:
+        return []
+
     by_fixture: dict[str, FixtureMarket] = {}
-    for market in markets:
+    for market in pool:
         current = by_fixture.get(market.fixture_id)
         if current is None or market.edge > current.edge:
             by_fixture[market.fixture_id] = market
 
-    unique_markets = sorted(by_fixture.values(), key=lambda item: item.edge, reverse=True)[:12]
+    unique_markets = sorted(by_fixture.values(), key=lambda item: item.edge, reverse=True)[:16]
+    if len(unique_markets) < min_events:
+        return []
     multibets: list[MultiBet] = []
 
     for size in range(min_events, max_events + 1):
@@ -433,6 +508,8 @@ def build_multibets(markets: list[FixtureMarket], min_events: int, max_events: i
             total_odd = math.prod(item.best_odd for item in combo)
             probability = math.prod(item.model_probability for item in combo)
             total_ev = math.prod(item.edge for item in combo)
+            if total_ev < min_total_ev:
+                continue
             confidence_score = max(1, min(100, round(55 + (total_ev - 1) * 100)))
             multibets.append(
                 MultiBet(
@@ -441,7 +518,34 @@ def build_multibets(markets: list[FixtureMarket], min_events: int, max_events: i
                     statistical_probability=round(probability, 4),
                     total_ev=round(total_ev, 3),
                     confidence_score=confidence_score,
+                    modus=modus,
                 )
             )
 
     return sorted(multibets, key=lambda item: item.total_ev, reverse=True)
+
+
+def build_all_modus_multibets(
+    markets: list[FixtureMarket],
+    min_events: int,
+    max_events: int,
+    min_total_ev: float,
+    *,
+    algorithmic_min_leg_prob: float = 0.32,
+    algorithmic_min_value_percent: float = 1.0,
+) -> dict[str, list[MultiBet]]:
+    out: dict[str, list[MultiBet]] = {}
+    for modus in (
+        MultibetModus.ALGORITHMIC,
+        MultibetModus.SAFE,
+        MultibetModus.VALUE,
+        MultibetModus.GOLD,
+    ):
+        pool = filter_markets_for_modus(
+            markets,
+            modus,
+            algorithmic_min_leg_prob=algorithmic_min_leg_prob,
+            algorithmic_min_value_percent=algorithmic_min_value_percent,
+        )
+        out[modus] = build_multibets_for_modus(pool, min_events, max_events, min_total_ev, modus)
+    return out

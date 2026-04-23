@@ -11,15 +11,25 @@ def _pct(value: float) -> str:
     return f"{round(value * 100, 1)}%"
 
 
+def _edge_to_plus_pct(ev: float) -> str:
+    """EV 1,25 -> stringa 25% per titolo '...+25%!' (coerente con NOTIFICATION_EV_THRESHOLD=1,25)."""
+    return f"{round((ev - 1) * 100, 1)}"
+
+
 def _kickoff_label(market: FixtureMarket) -> str:
     if not market.kickoff:
         return "Orario non disponibile"
     return market.kickoff.astimezone(timezone.utc).strftime("%d/%m %H:%M UTC")
 
 
-def format_single_alert(market: FixtureMarket, cta_label: str) -> str:
+def format_single_alert(
+    market: FixtureMarket,
+    cta_label: str,
+    app_base_url: str = "",
+) -> str:
+    pct = _edge_to_plus_pct(market.edge)
     lines = [
-        f"🔥 Alert Value Bet +{round((market.edge - 1) * 100, 1)}%",
+        f"🎯 Alert: trovata value bet +{pct}%!",
         "",
         f"{market.title}",
         f"{market.league} - {_kickoff_label(market)}",
@@ -31,17 +41,43 @@ def format_single_alert(market: FixtureMarket, cta_label: str) -> str:
     ]
 
     if market.comparator:
-        lines.extend(["", "Comparatore quote:"])
+        lines.extend(["", "Comparatore quote (CTA):"])
         for odd in market.comparator:
             suffix = f" - {cta_label}: {odd.affiliate_url}" if odd.affiliate_url else ""
             lines.append(f"- {odd.bookmaker}: {odd.odd}{suffix}")
+    else:
+        base = (app_base_url or "").strip().rstrip("/")
+        if base:
+            lines.extend(
+                [
+                    "",
+                    f"Comparatore / CTA: {base}/match/{market.fixture_id}",
+                ]
+            )
+        else:
+            lines.extend(["", f"Comparatore: configura APP_BASE_URL e link book ({cta_label})."])
 
     return "\n".join(lines)
 
 
-def format_multibet_alert(multibet: MultiBet, cta_label: str) -> str:
+def _modus_label(m: str) -> str:
+    return {
+        "algorithmic": "Algoritmico (High prob + value)",
+        "safe": "Safe (conf. gambe ≥ 80%)",
+        "value": "Value (book vs modello)",
+        "gold": "Gold (esatti / speciali)",
+    }.get(m, m)
+
+
+def format_multibet_alert(
+    multibet: MultiBet,
+    cta_label: str,
+    app_base_url: str = "",
+) -> str:
+    pct = _edge_to_plus_pct(multibet.total_ev)
     lines = [
-        f"🔥 Alert Value Combo +{multibet.data_edge_percent}%",
+        f"🎯 Alert: trovata value combo +{pct}%!",
+        f"({_modus_label(multibet.modus)})",
         "",
         f"Eventi: {len(multibet.events)}",
         f"Quota totale: {multibet.total_odd}",
@@ -58,15 +94,19 @@ def format_multibet_alert(multibet: MultiBet, cta_label: str) -> str:
             f"({event.best_bookmaker}, EV {event.edge})"
         )
 
-    top_links = [
-        odd.affiliate_url
-        for event in multibet.events
-        for odd in event.comparator[:1]
-        if odd.affiliate_url
-    ]
-    if top_links:
-        lines.extend(["", f"{cta_label}:"])
-        lines.extend(f"- {link}" for link in top_links)
+    first = multibet.events[0] if multibet.events else None
+    if first and first.comparator:
+        lines.extend(["", "Comparatore quote — 1ª gamba (CTA):"])
+        for odd in first.comparator:
+            suffix = f" - {cta_label}: {odd.affiliate_url}" if odd.affiliate_url else ""
+            lines.append(f"- {odd.bookmaker}: {odd.odd}{suffix}")
+    else:
+        base = (app_base_url or "").strip().rstrip("/")
+        key_q = f"?ref={multibet.alert_key}" if multibet.alert_key else ""
+        if base:
+            lines.extend(["", f"Comparatore / CTA: {base}/multi-bet{key_q}"])
+        else:
+            lines.extend(["", f"Comparatore: configura APP_BASE_URL e link book ({cta_label})."])
 
     return "\n".join(lines)
 

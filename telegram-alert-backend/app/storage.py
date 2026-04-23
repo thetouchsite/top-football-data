@@ -40,3 +40,7 @@ class AlertStore:
         self._seen[key] = now
         self._save()
         return True
+
+    def clear(self) -> None:
+        self._seen = {}
+        self._save()

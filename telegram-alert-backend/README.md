@@ -122,6 +122,10 @@ DEMO_SCHEDULE_DAYS=14
 
 BOOKMAKER_AFFILIATE_LINKS_JSON={"Bet365":"https://example.com/bet365","Snai":"https://example.com/snai"}
 CTA_LABEL=Vedi quota
+
+# Opzionali: reset dati, webhook push
+ALERTS_RESET_SECRET=una-stringa-segreta
+ALERTS_WEBHOOK_URL=
 ```
 
 Note:
@@ -134,6 +138,41 @@ Note:
 - `SPORTMONKS_FETCH_DIRECT_VALUE_BETS=true` usa le value-bets ufficiali Sportmonks come fonte primaria dei segnali EV.
 - `SPORTMONKS_FETCH_DIRECT_ODDS=true` usa il feed quote pre-match per costruire il comparatore bookmaker a 4 slot.
 - `SPORTMONKS_DIRECT_FIXTURE_LIMIT` limita quante fixture della schedule vengono arricchite con chiamate dirette a ogni ciclo.
+
+- **Notifiche value (requisito EV ≥ 1,25):** `NOTIFICATION_EV_THRESHOLD=1.25` filtra **singole** (`edge ≥ soglia`) e **multiple** (`EV composto ≥ soglia`). Messaggi Telegram: titolo *«Alert: trovata value bet/combo +X%»* (X = (EV−1)·100), comparatore/CTA (quote book + link) o `APP_BASE_URL/...` se manca il comparatore.
+- **ALERTS_WEBHOOK_URL:** stesso istante del primo “invio” (dedup `mark_once`), body JSON: `event`, `kind` (`single`|`multibet`), `alertKey`, `ev`, `edgePercent`, …
+- **Reset Mongo + dedup:** vedi sotto «Pulizia alert DB».
+
+## Pulizia alert DB (un solo comando consigliato)
+
+Dalla cartella `telegram-alert-backend`, con dipendenze installate e `.env` con `MONGODB_URI`:
+
+```powershell
+cd telegram-alert-backend
+.\.venv\Scripts\python.exe reset_alerts.py
+```
+
+Cancella `betAlerts`, `betPerformance` e azzera il file di dedup locale (`STORAGE_PATH`). Non serve il server acceso.
+
+**Alternativa** (server HTTP in esecuzione, stessa pulizia via API): `POST /admin/reset-alerts?secret=ALERTS_RESET_SECRET&clear_local_store=true&clear_performance=true` (richiede `ALERTS_RESET_SECRET` nel `.env` del processo).
+
+## Test reale (nessun mock: Sportmonks + Mongo + Telegram)
+
+Non usare `/test-telegram` per questo: manda solo una stringa di prova.
+
+**Scansione vera** (value bet e multibit, salvataggio Mongo, messaggi Telegram se sopra soglia):
+
+- Con **server** su `http://127.0.0.1:8000`:
+  ```powershell
+  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/run-once"
+  ```
+- Oppure **senza** avviare uvicorn (stesso codice del worker):
+  ```powershell
+  cd telegram-alert-backend
+  .\.venv\Scripts\python.exe -c "import asyncio; from app.main import worker; print(asyncio.run(worker.run_once()))"
+  ```
+
+Servono token Sportmonks validi, `TELEGRAM_*` se vuoi i messaggi in chat, e Mongo se vuoi persistere; in risposta vedi `sent`, `candidate_markets`, ecc.
 
 ## Endpoint
 

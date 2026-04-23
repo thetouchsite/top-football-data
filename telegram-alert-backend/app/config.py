@@ -1,7 +1,14 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Sempre `telegram-alert-backend/.env` (non dipende dalla CWD di uvicorn)
+_BACKENV = Path(__file__).resolve().parent.parent / ".env"
+_SETTINGS_DICT: dict = {"env_file_encoding": "utf-8", "extra": "ignore"}
+if _BACKENV.is_file():
+    _SETTINGS_DICT["env_file"] = str(_BACKENV)
 
 
 class Settings(BaseSettings):
@@ -31,6 +38,11 @@ class Settings(BaseSettings):
     notification_ev_threshold: float = Field(default=1.25, alias="NOTIFICATION_EV_THRESHOLD")
     multibet_min_events: int = Field(default=3, alias="MULTIBET_MIN_EVENTS")
     multibet_max_events: int = Field(default=4, alias="MULTIBET_MAX_EVENTS")
+    multibet_per_modus_max: int = Field(default=2, alias="MULTIBET_PER_MODUS_MAX")
+    multibet_algorithmic_min_leg_prob: float = Field(default=0.32, alias="MULTIBET_ALGORITHMIC_MIN_LEG_PROB")
+    multibet_algorithmic_min_value_percent: float = Field(
+        default=1.0, alias="MULTIBET_ALGORITHMIC_MIN_VALUE_PERCENT"
+    )
     max_alerts_per_run: int = Field(default=8, alias="MAX_ALERTS_PER_RUN")
     demo_min_probability: float = Field(default=0.8, alias="DEMO_MIN_PROBABILITY")
     demo_max_picks: int = Field(default=5, alias="DEMO_MAX_PICKS")
@@ -39,8 +51,12 @@ class Settings(BaseSettings):
     storage_path: str = Field(default=".data/telegram-alerts.json", alias="STORAGE_PATH")
     bookmaker_affiliate_links_json: str = Field(default="{}", alias="BOOKMAKER_AFFILIATE_LINKS_JSON")
     cta_label: str = Field(default="Vedi quota", alias="CTA_LABEL")
+    # POST /admin/reset-alerts: body o query `secret` deve coincidere; vuoto = endpoint disattivato
+    alerts_reset_secret: str = Field(default="", alias="ALERTS_RESET_SECRET")
+    # Opzionale: POST JSON a ogni alert salvato (singles + multibet sopra NOTIFICATION_EV_THRESHOLD)
+    alerts_webhook_url: str = Field(default="", alias="ALERTS_WEBHOOK_URL")
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(**_SETTINGS_DICT)
 
     @field_validator("sportmonks_base_url")
     @classmethod
@@ -69,6 +85,11 @@ class Settings(BaseSettings):
     @classmethod
     def clamp_multibet_events(cls, value: int) -> int:
         return max(2, min(value, 4))
+
+    @field_validator("multibet_per_modus_max")
+    @classmethod
+    def clamp_multibet_per_modus_max(cls, value: int) -> int:
+        return max(1, min(value, 10))
 
     @field_validator("app_base_url")
     @classmethod

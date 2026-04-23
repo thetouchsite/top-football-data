@@ -38,6 +38,7 @@ def _market_to_doc(market: FixtureMarket) -> dict[str, Any]:
         "edge": market.edge,
         "comparator": [_bookmaker_odd_to_doc(item) for item in market.comparator],
         "source": market.source,
+        "legProfile": market.leg_profile,
     }
 
 
@@ -50,6 +51,7 @@ def _multibet_to_doc(multibet: MultiBet) -> dict[str, Any]:
         "totalEv": multibet.total_ev,
         "dataEdgePercent": multibet.data_edge_percent,
         "confidenceScore": multibet.confidence_score,
+        "modus": multibet.modus,
     }
 
 
@@ -107,6 +109,9 @@ class MongoAlertRepository:
             self.alerts.create_index([("alertKey", ASCENDING)], unique=True)
             self.alerts.create_index([("status", ASCENDING), ("createdAt", DESCENDING)])
             self.alerts.create_index([("fixtureIds", ASCENDING), ("status", ASCENDING)])
+            self.alerts.create_index(
+                [("type", ASCENDING), ("status", ASCENDING), ("multibet.modus", ASCENDING)]
+            )
             self.performance.create_index([("alertKey", ASCENDING)], unique=True)
             self.performance.create_index([("settledAt", DESCENDING)])
             self._indexes_ready = True
@@ -181,6 +186,28 @@ class MongoAlertRepository:
             )
         except Exception as error:
             self._mark_unavailable(error)
+
+    def delete_all_bet_alerts(self) -> int:
+        self.ensure_indexes()
+        if not self.enabled or self.alerts is None:
+            return 0
+        try:
+            result = self.alerts.delete_many({})
+            return int(result.deleted_count)
+        except Exception as error:
+            self._mark_unavailable(error)
+            return 0
+
+    def delete_all_performance(self) -> int:
+        self.ensure_indexes()
+        if not self.enabled or self.performance is None:
+            return 0
+        try:
+            result = self.performance.delete_many({})
+            return int(result.deleted_count)
+        except Exception as error:
+            self._mark_unavailable(error)
+            return 0
 
     def get_open_alerts(self, limit: int = 200) -> list[dict[str, Any]]:
         self.ensure_indexes()
