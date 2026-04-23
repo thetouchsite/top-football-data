@@ -20,6 +20,7 @@ export async function GET(request) {
     const limit = Math.min(Math.max(Number.parseInt(searchParams.get("limit") || "20", 10), 1), 100);
     const status = searchParams.get("status");
     const type = searchParams.get("type");
+    const fixtureId = searchParams.get("fixtureId");
     const query = {};
 
     if (status) {
@@ -28,6 +29,16 @@ export async function GET(request) {
 
     if (type) {
       query.type = type;
+    }
+
+    if (fixtureId) {
+      const raw = String(fixtureId).trim();
+      const asNum = Number.parseInt(raw, 10);
+      const candidates = [raw];
+      if (Number.isFinite(asNum) && String(asNum) === raw) {
+        candidates.push(asNum);
+      }
+      query.fixtureIds = { $in: candidates };
     }
 
     const db = await getDatabase();

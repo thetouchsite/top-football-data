@@ -22,6 +22,7 @@ import OddsComparison from "@/components/match/OddsComparison";
 import PressurePreviewChart from "@/components/match/PressurePreviewChart";
 import { useApp } from "@/lib/AppContext";
 import { getFixture, getPlayerProps, getTeamMomentum } from "@/api/football";
+import { getAlerts } from "@/api/alerts";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
 
 const EMPTY_ARRAY = [];
@@ -314,6 +315,7 @@ export default function MatchDetail() {
   const [teamMomentumPayload, setTeamMomentumPayload] = useState(null);
   const [teamMomentumLoading, setTeamMomentumLoading] = useState(false);
   const [teamMomentumError, setTeamMomentumError] = useState("");
+  const [fixtureMultibetAlerts, setFixtureMultibetAlerts] = useState([]);
 
   useEffect(() => {
     if (!fixtureIdToLoad) {
@@ -718,6 +720,28 @@ export default function MatchDetail() {
     };
   }, [activeMainTab, formationsDeepTab, match.id, teamMomentumPayload?.fixtureId]);
 
+  useEffect(() => {
+    if (!fixtureIdToLoad) {
+      return undefined;
+    }
+    let cancelled = false;
+    getAlerts({ fixtureId: String(fixtureIdToLoad), type: "multibet", status: "pending", limit: 8 })
+      .then(({ alerts }) => {
+        if (cancelled) {
+          return;
+        }
+        setFixtureMultibetAlerts((alerts || []).filter((a) => a.type === "multibet"));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFixtureMultibetAlerts([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtureIdToLoad]);
+
   return (
     <div className="app-page">
       <div className="app-content">
@@ -727,6 +751,27 @@ export default function MatchDetail() {
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Torna ai modelli
         </Link>
+
+        {fixtureMultibetAlerts.length > 0 && (
+          <GlassCard className="mb-4 border-primary/25 bg-primary/5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-foreground">Multipla orchestratore</div>
+                <p className="text-xs text-muted-foreground">
+                  {fixtureMultibetAlerts.length === 1
+                    ? "Questa partita è in 1 segnalazione multi-bet aperta (Mongo / Telegram)."
+                    : `Questa partita compare in ${fixtureMultibetAlerts.length} segnalazioni multi-bet aperte (Mongo / Telegram).`}
+                </p>
+              </div>
+              <Link
+                to={`/multi-bet?ref=${encodeURIComponent(fixtureMultibetAlerts[0].alertKey || "")}`}
+                className="shrink-0 text-xs font-bold text-primary hover:text-primary/90"
+              >
+                Apri pagina multi-bet →
+              </Link>
+            </div>
+          </GlassCard>
+        )}
 
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <GlassCard className={`mb-6 ${match.valueBet ? "border-primary/20" : ""}`}>

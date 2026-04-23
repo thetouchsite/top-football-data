@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [activeLeague, setActiveLeague] = useState("Tutti");
   const [schedulePayload, setSchedulePayload] = useState(null);
   const [orchestratorAlerts, setOrchestratorAlerts] = useState([]);
+  const [pendingMultibetCount, setPendingMultibetCount] = useState(0);
   const [performanceSummary, setPerformanceSummary] = useState(null);
   const [dashboardNotice, setDashboardNotice] = useState("");
 
@@ -104,18 +105,23 @@ export default function Dashboard() {
 
     async function loadOrchestratorFeeds() {
       try {
-        const [alertsResponse, performanceResponse] = await Promise.all([
-          fetch("/api/alerts?limit=5", { cache: "no-store" }),
+        const [alertsResponse, multibetResponse, performanceResponse] = await Promise.all([
+          fetch("/api/alerts?limit=8", { cache: "no-store" }),
+          fetch("/api/alerts?type=multibet&status=pending&limit=30", { cache: "no-store" }),
           fetch("/api/performance", { cache: "no-store" }),
         ]);
-        const [alertsPayload, performancePayload] = await Promise.all([
+        const [alertsPayload, multibetPayload, performancePayload] = await Promise.all([
           alertsResponse.json(),
+          multibetResponse.json(),
           performanceResponse.json(),
         ]);
 
         if (!isActive) return;
 
         setOrchestratorAlerts(Array.isArray(alertsPayload.alerts) ? alertsPayload.alerts : []);
+        setPendingMultibetCount(
+          Array.isArray(multibetPayload.alerts) ? multibetPayload.alerts.length : 0
+        );
         setPerformanceSummary(performancePayload.summary || null);
       } catch {
         if (isActive) {
@@ -214,14 +220,14 @@ export default function Dashboard() {
       },
     ];
     cards.push({
-      label: "Combo Premium",
-      value: isPremium ? "Preview" : "Locked",
+      label: "Multi-bet aperte",
+      value: pendingMultibetCount,
       icon: Crown,
       color: "text-accent",
       path: "/multi-bet",
     });
     return cards;
-  }, [today, valueBets.length, orchestratorAlerts.length, isPremium]);
+  }, [today, valueBets.length, orchestratorAlerts.length, pendingMultibetCount]);
 
   const feedSummary = useMemo(() => {
     const p = schedulePayload?.provider || "—";
@@ -459,9 +465,16 @@ export default function Dashboard() {
                         : `${single.selection || "Value"} @ ${single.bestOdd || "—"}`;
 
                     return (
-                      <div
+                      <Link
                         key={alert._id}
-                        className="rounded-lg border border-primary/10 bg-primary/5 p-2.5"
+                        to={
+                          alert.type === "multibet" && alert.alertKey
+                            ? `/multi-bet?ref=${encodeURIComponent(alert.alertKey)}`
+                            : single.fixtureId
+                              ? `/match/${single.fixtureId}`
+                              : "/modelli-predittivi"
+                        }
+                        className="block rounded-lg border border-primary/10 bg-primary/5 p-2.5 transition-colors hover:border-primary/30"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
@@ -474,7 +487,7 @@ export default function Dashboard() {
                             {alert.status}
                           </span>
                         </div>
-                      </div>
+                      </Link>
                     );
                   })}
                   {valueBets.slice(0, 3).map((match) => (

@@ -59,8 +59,17 @@ function getAlertMetrics(alert) {
   }
 
   const events = alert.multibet?.events || [];
+  const modus = alert.multibet?.modus;
+  const modusLabel = {
+    algorithmic: "Algoritmico",
+    safe: "Safe",
+    value: "Value",
+    gold: "Gold",
+  }[String(modus || "").toLowerCase()];
   return {
-    title: `Value Combo ${events.length} eventi`,
+    title: modusLabel
+      ? `Multipla ${modusLabel} · ${events.length} eventi`
+      : `Value Combo ${events.length} eventi`,
     subtitle: `Quota totale ${alert.multibet?.totalOdd || "--"} · EV composto ${alert.multibet?.totalEv || "--"}`,
     ev: alert.multibet?.totalEv,
     odd: alert.multibet?.totalOdd,
