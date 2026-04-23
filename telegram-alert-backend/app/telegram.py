@@ -45,6 +45,125 @@ def _site_url(app_base_url: str, path: str, *, campaign: str, content: str | Non
     return _tracked_url(f"{base}{route}", campaign=campaign, content=content)
 
 
+def _tracked_affiliate_url(
+    raw_url: str,
+    *,
+    campaign: str,
+    content: str | None = None,
+) -> str:
+    return _tracked_url(raw_url, campaign=campaign, content=content)
+
+
+def build_single_alert_buttons(
+    market: FixtureMarket,
+    app_base_url: str = "",
+) -> list[list[dict[str, str]]]:
+    analysis_url = _site_url(
+        app_base_url,
+        f"/match/{market.fixture_id}",
+        campaign="value_bet",
+        content=f"{market.fixture_id}_{market.market}_{market.selection}",
+    )
+    compare_url = analysis_url
+    bookmaker_url = ""
+    if market.comparator:
+        top = market.comparator[0]
+        bookmaker_url = _tracked_affiliate_url(
+            top.affiliate_url or "",
+            campaign="value_bet",
+            content=f"{market.fixture_id}_{market.market}_{market.selection}_{top.bookmaker}",
+        )
+
+    rows: list[list[dict[str, str]]] = []
+    first_row: list[dict[str, str]] = []
+    if analysis_url:
+        first_row.append({"text": "Apri analisi", "url": analysis_url})
+    if compare_url:
+        first_row.append({"text": "Confronta quote", "url": compare_url})
+    if first_row:
+        rows.append(first_row[:2])
+    if bookmaker_url:
+        rows.append([{"text": "Vedi quota", "url": bookmaker_url}])
+    return rows
+
+
+def build_multibet_alert_buttons(
+    multibet: MultiBet,
+    app_base_url: str = "",
+) -> list[list[dict[str, str]]]:
+    combo_path = f"/multi-bet?ref={multibet.alert_key}" if multibet.alert_key else "/multi-bet"
+    combo_url = _site_url(
+        app_base_url,
+        combo_path,
+        campaign="multibet",
+        content=multibet.modus,
+    )
+    compare_url = combo_url
+    bookmaker_url = ""
+    first = multibet.events[0] if multibet.events else None
+    if first and first.comparator:
+        top = first.comparator[0]
+        bookmaker_url = _tracked_affiliate_url(
+            top.affiliate_url or "",
+            campaign="multibet",
+            content=f"{multibet.modus}_{first.fixture_id}_{first.selection}_{top.bookmaker}",
+        )
+
+    rows: list[list[dict[str, str]]] = []
+    first_row: list[dict[str, str]] = []
+    if combo_url:
+        first_row.append({"text": "Vedi combo", "url": combo_url})
+    if compare_url:
+        first_row.append({"text": "Confronta quote", "url": compare_url})
+    if first_row:
+        rows.append(first_row[:2])
+    if bookmaker_url:
+        rows.append([{"text": "Vedi quota", "url": bookmaker_url}])
+    return rows
+
+
+def build_settlement_buttons(alert: dict, app_base_url: str = "") -> list[list[dict[str, str]]]:
+    path = "/performance-storiche"
+    content = "settlement"
+    if alert.get("type") == "single":
+        fixture_id = str((alert.get("single") or {}).get("fixtureId") or "").strip()
+        if fixture_id:
+            path = f"/match/{fixture_id}"
+            content = f"single_{fixture_id}"
+    else:
+        alert_key = alert.get("alertKey") or ""
+        if alert_key:
+            path = f"/multi-bet?ref={alert_key}"
+            content = "multibet"
+
+    detail_url = _site_url(app_base_url, path, campaign="settlement", content=content)
+    performance_url = _site_url(
+        app_base_url,
+        "/performance-storiche",
+        campaign="performance",
+        content="summary",
+    )
+
+    row: list[dict[str, str]] = []
+    if detail_url:
+        row.append({"text": "Apri dettaglio", "url": detail_url})
+    if performance_url:
+        row.append({"text": "Performance", "url": performance_url})
+    return [row] if row else []
+
+
+def build_performance_buttons(app_base_url: str = "") -> list[list[dict[str, str]]]:
+    performance_url = _site_url(
+        app_base_url,
+        "/performance-storiche",
+        campaign="performance",
+        content="summary",
+    )
+    if not performance_url:
+        return []
+    return [[{"text": "Apri performance", "url": performance_url}]]
+
+
 def format_single_alert(
     market: FixtureMarket,
     cta_label: str,
@@ -297,19 +416,22 @@ class TelegramClient:
     def configured(self) -> bool:
         return bool(self.bot_token and self.chat_id)
 
-    async def send_message(self, text: str) -> None:
+    async def send_message(self, text: str, buttons: list[list[dict[str, str]]] | None = None) -> None:
         if not self.configured:
             raise RuntimeError("TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID non configurati.")
 
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        payload = {
+            "chat_id": self.chat_id,
+            "text": text,
+            "disable_web_page_preview": True,
+        }
+        if buttons:
+            payload["reply_markup"] = {"inline_keyboard": buttons}
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
                 url,
-                json={
-                    "chat_id": self.chat_id,
-                    "text": text,
-                    "disable_web_page_preview": True,
-                },
+                json=payload,
             )
             try:
                 response.raise_for_status()

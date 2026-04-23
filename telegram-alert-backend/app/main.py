@@ -15,6 +15,10 @@ from app.sportmonks import SportmonksClient
 from app.storage import AlertStore
 from app.telegram import (
     TelegramClient,
+    build_multibet_alert_buttons,
+    build_performance_buttons,
+    build_settlement_buttons,
+    build_single_alert_buttons,
     format_multibet_alert,
     format_performance_summary,
     format_settlement_alert,
@@ -98,7 +102,8 @@ class AlertWorker:
                 await post_from_single(self.settings.alerts_webhook_url, market)
             if should_send and self.telegram.configured:
                 await self.telegram.send_message(
-                    format_single_alert(market, self.settings.cta_label, app_url)
+                    format_single_alert(market, self.settings.cta_label, app_url),
+                    buttons=build_single_alert_buttons(market, app_url),
                 )
                 self.repository.mark_telegram_sent(market.alert_key)
                 sent += 1
@@ -122,7 +127,8 @@ class AlertWorker:
                 await post_from_multibet(self.settings.alerts_webhook_url, multibet)
             if should_send and self.telegram.configured:
                 await self.telegram.send_message(
-                    format_multibet_alert(multibet, self.settings.cta_label, app_url)
+                    format_multibet_alert(multibet, self.settings.cta_label, app_url),
+                    buttons=build_multibet_alert_buttons(multibet, app_url),
                 )
                 self.repository.mark_telegram_sent(multibet.alert_key)
                 sent += 1
@@ -259,14 +265,20 @@ class AlertWorker:
             app_url = self.settings.app_base_url or ""
             for alert, status, legs in settled:
                 try:
-                    await self.telegram.send_message(format_settlement_alert(alert, status, legs, app_url))
+                    await self.telegram.send_message(
+                        format_settlement_alert(alert, status, legs, app_url),
+                        buttons=build_settlement_buttons(alert, app_url),
+                    )
                 except Exception as error:
                     logger.warning("Settlement Telegram alert failed: %s", error)
 
             summary = self.repository.get_performance_summary()
             if summary:
                 try:
-                    await self.telegram.send_message(format_performance_summary(summary, settled_count, app_url))
+                    await self.telegram.send_message(
+                        format_performance_summary(summary, settled_count, app_url),
+                        buttons=build_performance_buttons(app_url),
+                    )
                 except Exception as error:
                     logger.warning("Performance Telegram summary failed: %s", error)
         return settled_count
