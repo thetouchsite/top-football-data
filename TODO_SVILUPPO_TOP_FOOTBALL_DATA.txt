@@ -221,7 +221,75 @@ P2
 - questo file
 
 ====================================================================
-6. VERITA' OPERATIVA DI OGGI
+6. TASK DA ASSEGNARE AL COLLEGA - PARTE FUNZIONALE / CLIENTE
+====================================================================
+
+Owner suggerito:
+- collega che segue parte funzionale, commerciale e raccolta requisiti dal cliente
+
+Obiettivo:
+- chiudere le decisioni prodotto/commerciali che non possono essere inventate lato sviluppo
+
+Task da raccogliere e confermare con il cliente:
+
+1. CTA ufficiale approvata
+- Definire il testo finale da usare su sito e Telegram.
+- Esempi possibili:
+  - Vedi quota
+  - Apri quota
+  - Confronta quote
+- Nota: evitare copy non conforme lato legale (es. "Gioca ora") se non approvato.
+
+2. Bookmaker partner ufficiali
+- Elenco bookmaker da usare come riferimento prodotto.
+- Elenco bookmaker da mostrare nel comparatore.
+- Conferma dei bookmaker prioritari per:
+  - modelli singolo match
+  - multi-bet
+  - player props futuri
+
+3. Link affiliazione definitivi
+- Fornire i link affiliazione reali per ogni bookmaker.
+- Confermare eventuali parametri tracking gia richiesti lato partner.
+- Confermare eventuali differenze per paese / canale / campagna.
+
+4. Priorita campionati / leghe
+- Definire l'ordine prodotto/commerciale delle competizioni da privilegiare.
+- Questo impatta:
+  - dashboard
+  - feed modelli
+  - alert
+  - big match
+  - multi-bet
+
+5. Vincoli legali / copy marketing
+- Confermare:
+  - termini ammessi
+  - termini vietati
+  - copy CTA ammessa in pagina
+  - copy CTA ammessa in Telegram
+
+6. Scope premium vs free
+- Chiarire al cliente quali funzioni devono restare:
+  - free
+  - premium
+- Utile soprattutto per:
+  - comparatore
+  - multi-bet
+  - player props
+  - contenuti Telegram
+
+Output atteso da questa sezione:
+- documento breve approvato cliente con:
+  - CTA finale
+  - bookmaker partner
+  - affiliate link
+  - ranking leghe
+  - vincoli legali copy
+  - confini free/premium
+
+====================================================================
+7. VERITA' OPERATIVA DI OGGI
 ====================================================================
 
 Il progetto oggi non e piu in fase "prototype".
