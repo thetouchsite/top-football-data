@@ -120,24 +120,53 @@ class MongoAlertRepository:
         except Exception as error:
             self._mark_unavailable(error)
 
+    def _load_existing_alert(self, alert_key: str) -> dict[str, Any] | None:
+        self.ensure_indexes()
+        if not self.enabled or self.alerts is None:
+            return None
+
+        try:
+            return self.alerts.find_one(
+                {"alertKey": alert_key},
+                {
+                    "status": 1,
+                    "result.status": 1,
+                    "settledAt": 1,
+                    "telegramSent": 1,
+                    "createdAt": 1,
+                },
+            )
+        except Exception as error:
+            self._mark_unavailable(error)
+            return None
+
     def save_single_alert(self, market: FixtureMarket, telegram_sent: bool) -> bool:
         self.ensure_indexes()
         if not self.enabled:
             return False
 
         now = _now()
+        existing = self._load_existing_alert(market.alert_key)
+        is_terminal = bool(
+            existing
+            and (
+                existing.get("settledAt")
+                or existing.get("status") in {"won", "lost", "void"}
+            )
+        )
         doc = {
             "alertKey": market.alert_key,
             "createdAt": now,
         }
         update_fields = {
             "type": "single",
-            "status": "pending",
             "fixtureIds": [market.fixture_id],
             "stakeUnits": 1,
             "updatedAt": now,
             "single": _market_to_doc(market),
         }
+        if not is_terminal:
+            update_fields["status"] = "pending"
         if telegram_sent:
             update_fields["telegramSent"] = True
 
@@ -161,6 +190,14 @@ class MongoAlertRepository:
             return False
 
         now = _now()
+        existing = self._load_existing_alert(multibet.alert_key)
+        is_terminal = bool(
+            existing
+            and (
+                existing.get("settledAt")
+                or existing.get("status") in {"won", "lost", "void"}
+            )
+        )
         body = _multibet_to_doc(multibet)
         doc = {
             "alertKey": multibet.alert_key,
@@ -168,12 +205,13 @@ class MongoAlertRepository:
         }
         update_fields = {
             "type": "multibet",
-            "status": "pending",
             "fixtureIds": body["fixtureIds"],
             "stakeUnits": 1,
             "updatedAt": now,
             "multibet": body,
         }
+        if not is_terminal:
+            update_fields["status"] = "pending"
         if telegram_sent:
             update_fields["telegramSent"] = True
 
@@ -205,6 +243,46 @@ class MongoAlertRepository:
         except Exception as error:
             self._mark_unavailable(error)
             return False
+
+    def was_telegram_sent(self, alert_key: str) -> bool:
+        self.ensure_indexes()
+        if not self.enabled or self.alerts is None:
+            return False
+
+        try:
+            doc = self.alerts.find_one(
+                {"alertKey": alert_key},
+                {"telegramSent": 1},
+            )
+            return bool(doc and doc.get("telegramSent"))
+        except Exception as error:
+            self._mark_unavailable(error)
+            return False
+
+    def repair_settled_alert_statuses(self) -> int:
+        self.ensure_indexes()
+        if not self.enabled or self.alerts is None:
+            return 0
+
+        repaired = 0
+        try:
+            cursor = self.alerts.find(
+                {"settledAt": {"$exists": True}, "result.status": {"$in": ["won", "lost", "void"]}},
+                {"status": 1, "result.status": 1},
+            )
+            for doc in cursor:
+                result_status = ((doc.get("result") or {}).get("status") or "").strip()
+                if result_status and doc.get("status") != result_status:
+                    self.alerts.update_one(
+                        {"_id": doc["_id"]},
+                        {"$set": {"status": result_status, "updatedAt": _now()}},
+                    )
+                    repaired += 1
+        except Exception as error:
+            self._mark_unavailable(error)
+            return repaired
+
+        return repaired
 
     def delete_all_bet_alerts(self) -> int:
         self.ensure_indexes()

@@ -9,7 +9,7 @@ from app.config import get_settings
 from app.engine import build_all_modus_multibets, build_fixture_markets, build_official_value_markets, load_affiliate_links
 from app.models import MultibetModus
 from app.mongodb import MongoAlertRepository
-from app.results import settle_alert_from_fixtures
+from app.results import is_fixture_final, settle_alert_from_fixtures
 from app.site_feed import SiteFeedClient, build_high_probability_picks, format_demo_picks_message
 from app.sportmonks import SportmonksClient
 from app.storage import AlertStore
@@ -48,6 +48,7 @@ class AlertWorker:
         self.last_result: dict[str, int | str] = {"status": "not_started"}
 
     async def run_once(self) -> dict[str, int | str]:
+        repaired_before_scan = self.repository.repair_settled_alert_statuses()
         settled_before_scan = await self.settle_open_alerts()
         affiliate_links = load_affiliate_links(self.settings.bookmaker_affiliate_links_json)
         fixtures = await self.sportmonks.fetch_schedule(
@@ -55,6 +56,7 @@ class AlertWorker:
             league_ids=self.settings.sportmonks_league_ids,
         )
         fixtures = await self.hydrate_fixtures_with_direct_feeds(fixtures)
+        fixtures = [fixture for fixture in fixtures if not is_fixture_final(fixture)]
 
         markets = self.build_markets(fixtures, affiliate_links)
         singles = [
@@ -77,7 +79,8 @@ class AlertWorker:
         skipped_due_mongo = 0
         app_url = self.settings.app_base_url or ""
         for market in singles[: self.settings.max_alerts_per_run]:
-            should_send = self.store.mark_once(market.alert_key)
+            already_sent = self.repository.was_telegram_sent(market.alert_key)
+            should_send = (not already_sent) and self.store.mark_once(market.alert_key)
             saved = self.repository.save_single_alert(market, telegram_sent=False)
             if not saved:
                 logger.warning(
@@ -100,7 +103,8 @@ class AlertWorker:
 
         remaining_slots = max(0, self.settings.max_alerts_per_run - sent)
         for multibet in multibets[:remaining_slots]:
-            should_send = self.store.mark_once(multibet.alert_key)
+            already_sent = self.repository.was_telegram_sent(multibet.alert_key)
+            should_send = (not already_sent) and self.store.mark_once(multibet.alert_key)
             saved = self.repository.save_multibet_alert(multibet, telegram_sent=False)
             if not saved:
                 logger.warning(
@@ -130,6 +134,7 @@ class AlertWorker:
             "sent": sent,
             "persisted": persisted,
             "skipped_due_mongo": skipped_due_mongo,
+            "repaired_statuses": repaired_before_scan,
             "settled": settled_before_scan,
             "mongodb_enabled": self.repository.enabled,
             "mongodb_error": self.repository.error or "",
