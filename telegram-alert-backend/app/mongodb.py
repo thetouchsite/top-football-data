@@ -128,11 +128,7 @@ class MongoAlertRepository:
         now = _now()
         doc = {
             "alertKey": market.alert_key,
-            "type": "single",
-            "status": "pending",
-            "fixtureIds": [market.fixture_id],
             "createdAt": now,
-            "stakeUnits": 1,
         }
         update_fields = {
             "type": "single",
@@ -168,11 +164,7 @@ class MongoAlertRepository:
         body = _multibet_to_doc(multibet)
         doc = {
             "alertKey": multibet.alert_key,
-            "type": "multibet",
-            "status": "pending",
-            "fixtureIds": body["fixtureIds"],
             "createdAt": now,
-            "stakeUnits": 1,
         }
         update_fields = {
             "type": "multibet",
