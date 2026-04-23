@@ -73,29 +73,53 @@ class AlertWorker:
         multibets = self._flatten_multibets_by_modus(by_modus)
 
         sent = 0
+        persisted = 0
+        skipped_due_mongo = 0
         app_url = self.settings.app_base_url or ""
         for market in singles[: self.settings.max_alerts_per_run]:
             should_send = self.store.mark_once(market.alert_key)
+            saved = self.repository.save_single_alert(market, telegram_sent=False)
+            if not saved:
+                logger.warning(
+                    "Mongo save failed for single alert %s. Telegram send skipped. Mongo error: %s",
+                    market.alert_key,
+                    self.repository.error,
+                )
+                skipped_due_mongo += 1
+                continue
+
+            persisted += 1
             if should_send and self.settings.alerts_webhook_url:
                 await post_from_single(self.settings.alerts_webhook_url, market)
             if should_send and self.telegram.configured:
                 await self.telegram.send_message(
                     format_single_alert(market, self.settings.cta_label, app_url)
                 )
+                self.repository.mark_telegram_sent(market.alert_key)
                 sent += 1
-            self.repository.save_single_alert(market, telegram_sent=should_send)
 
         remaining_slots = max(0, self.settings.max_alerts_per_run - sent)
         for multibet in multibets[:remaining_slots]:
             should_send = self.store.mark_once(multibet.alert_key)
+            saved = self.repository.save_multibet_alert(multibet, telegram_sent=False)
+            if not saved:
+                logger.warning(
+                    "Mongo save failed for multibet alert %s. Telegram send skipped. Mongo error: %s",
+                    multibet.alert_key,
+                    self.repository.error,
+                )
+                skipped_due_mongo += 1
+                continue
+
+            persisted += 1
             if should_send and self.settings.alerts_webhook_url:
                 await post_from_multibet(self.settings.alerts_webhook_url, multibet)
             if should_send and self.telegram.configured:
                 await self.telegram.send_message(
                     format_multibet_alert(multibet, self.settings.cta_label, app_url)
                 )
+                self.repository.mark_telegram_sent(multibet.alert_key)
                 sent += 1
-            self.repository.save_multibet_alert(multibet, telegram_sent=should_send)
 
         result = {
             "status": "ok",
@@ -104,8 +128,12 @@ class AlertWorker:
             "single_alerts": len(singles),
             "multibet_alerts": len(multibets),
             "sent": sent,
+            "persisted": persisted,
+            "skipped_due_mongo": skipped_due_mongo,
             "settled": settled_before_scan,
             "mongodb_enabled": self.repository.enabled,
+            "mongodb_error": self.repository.error or "",
+            "mongodb_db": self.repository.database_name,
         }
         self.last_result = result
         return result
@@ -292,6 +320,7 @@ async def health() -> dict[str, object]:
         "sportmonks_configured": bool(settings.resolved_sportmonks_token),
         "telegram_configured": bool(settings.telegram_bot_token and settings.telegram_chat_id),
         "mongodb_configured": bool(settings.mongodb_uri),
+        "mongodb_db": settings.mongodb_db,
         "mongodb_enabled": worker.repository.enabled,
         "mongodb_error": worker.repository.error,
         "last_result": worker.last_result,

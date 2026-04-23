@@ -18,6 +18,7 @@ import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import PremiumLock from "@/components/shared/PremiumLock";
 import FormationPitch from "@/components/stats/FormationPitch";
 import PlayerCard from "@/components/stats/PlayerCard";
+import TopXgPlayers from "@/components/stats/TopXgPlayers";
 import OddsComparison from "@/components/match/OddsComparison";
 import PressurePreviewChart from "@/components/match/PressurePreviewChart";
 import { useApp } from "@/lib/AppContext";
@@ -134,7 +135,10 @@ function deriveValueHighlight(valueBet) {
     highlight.oneXTwo = "away";
   }
 
-  const isOuMarket = market.includes("o/u") || market.includes("under") || market.includes("over");
+  const isOuMarket =
+    market.includes("o/u") ||
+    market.includes("under") ||
+    market.includes("over");
   if (isOuMarket || type.includes("over") || type.includes("under")) {
     if (type.includes("over")) {
       highlight.ou = "over25";
@@ -143,8 +147,15 @@ function deriveValueHighlight(valueBet) {
     }
   }
 
-  const isGgMarket = market.includes("gg") || market.includes("ng") || market.includes("goal");
-  if (isGgMarket || type === "goal" || type === "no goal" || type === "gg" || type === "ng") {
+  const isGgMarket =
+    market.includes("gg") || market.includes("ng") || market.includes("goal");
+  if (
+    isGgMarket ||
+    type === "goal" ||
+    type === "no goal" ||
+    type === "gg" ||
+    type === "ng"
+  ) {
     if (
       type === "goal" ||
       type === "gg" ||
@@ -193,7 +204,8 @@ function derivePressureSupport(match, valueHighlight) {
   } else if (isGgNoGoal) {
     score += (noGoal - 50) * 1.0 + (under - 50) * 0.45 + (2.35 - xgTotal) * 14;
   } else if (isGgGoal) {
-    score += (50 - noGoal) * 1.0 + (attackAvg - 52) * 0.35 + (xgTotal - 2.35) * 14;
+    score +=
+      (50 - noGoal) * 1.0 + (attackAvg - 52) * 0.35 + (xgTotal - 2.35) * 14;
   } else if (isOneXTwo) {
     const pressureBalance = (under - 50) * 0.3 + (noGoal - 50) * 0.3;
     score += Math.max(-8, Math.min(8, -pressureBalance));
@@ -221,11 +233,16 @@ function derivePressureSupport(match, valueHighlight) {
 }
 
 function hasRealMetricSource(source) {
-  return Boolean(source && !["not_available", "derived_model", "derived_from_xg"].includes(source));
+  return Boolean(
+    source &&
+    !["not_available", "derived_model", "derived_from_xg"].includes(source),
+  );
 }
 
 function formatDeepDataValue(value, fallback = "n/d") {
-  return value == null || value === "" || !Number.isFinite(Number(value)) ? fallback : Number(value);
+  return value == null || value === "" || !Number.isFinite(Number(value))
+    ? fallback
+    : Number(value);
 }
 
 function buildFallbackPlayerProfile(player, teamName) {
@@ -251,7 +268,9 @@ function buildFallbackPlayerProfile(player, teamName) {
     xg: player.xg ?? 0,
     shots: player.shots ?? 0,
     form: player.form || "Stabile",
-    formHistory: Array.isArray(player.formHistory) ? player.formHistory : [0, 0, 0, 0, 0],
+    formHistory: Array.isArray(player.formHistory)
+      ? player.formHistory
+      : [0, 0, 0, 0, 0],
     scorerOdds: player.scorerOdds ?? player.odds ?? 10,
     scorerProb: player.scorerProb ?? player.probability ?? 10,
     goals: player.goals ?? 0,
@@ -267,18 +286,26 @@ function buildFallbackPlayerProfile(player, teamName) {
       source: "not_available",
     },
     playerProps: player.playerProps || {
-      xg: { value: player.xg ?? null, source: player.xg ? "sportmonks_lineup_details" : "not_available" },
+      xg: {
+        value: player.xg ?? null,
+        source: player.xg ? "sportmonks_lineup_details" : "not_available",
+      },
       shots: {
         value: player.shots ?? null,
         source: player.shots ? "sportmonks_lineup_details" : "not_available",
       },
-      shotsOnTarget: { value: player.shotsOnTarget ?? null, source: "not_available" },
+      shotsOnTarget: {
+        value: player.shotsOnTarget ?? null,
+        source: "not_available",
+      },
       discipline: {
         foulsCommitted: player.fouls ?? null,
         foulsSuffered: player.foulsSuffered ?? null,
         yellowCards: player.yellowCards ?? 0,
         redCards: player.redCards ?? 0,
-        source: player.fouls ? "sportmonks_lineup_details_events" : "not_available",
+        source: player.fouls
+          ? "sportmonks_lineup_details_events"
+          : "not_available",
       },
       heatmap: player.heatmap || {
         available: false,
@@ -298,17 +325,28 @@ export default function MatchDetail() {
   const { id } = useParams();
   const routeId = decodeURIComponent(String(id || ""));
   const fixtureIdToLoad = String(routeId || "").trim() || null;
-  const { favorites, following, toggleFavoriteMatch, toggleFollowMatch, isPremium } = useApp();
+  const {
+    favorites,
+    following,
+    toggleFavoriteMatch,
+    toggleFollowMatch,
+    isPremium,
+  } = useApp();
   const [apiMatch, setApiMatch] = useState(null);
   /** Risposta completa GET /api/football/fixtures/:id (fixture normalizzata + rawFixture Sportmonks, ecc.) */
   const [fixtureBundle, setFixtureBundle] = useState(null);
-  const [fixtureLoading, setFixtureLoading] = useState(Boolean(fixtureIdToLoad));
+  const [fixtureLoading, setFixtureLoading] = useState(
+    Boolean(fixtureIdToLoad),
+  );
   const [fixtureError, setFixtureError] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [selectedLineupSide, setSelectedLineupSide] = useState("home");
   const [activeMainTab, setActiveMainTab] = useState("panoramica");
-  const [formationsDeepTab, setFormationsDeepTab] = useState(FORMATIONS_DEEP_TABS.lineups);
-  const [selectedPlayerMarket, setSelectedPlayerMarket] = useState("anytime_goalscorer");
+  const [formationsDeepTab, setFormationsDeepTab] = useState(
+    FORMATIONS_DEEP_TABS.lineups,
+  );
+  const [selectedPlayerMarket, setSelectedPlayerMarket] =
+    useState("anytime_goalscorer");
   const [playerPropsPayload, setPlayerPropsPayload] = useState(null);
   const [playerPropsLoading, setPlayerPropsLoading] = useState(false);
   const [playerPropsError, setPlayerPropsError] = useState("");
@@ -373,7 +411,8 @@ export default function MatchDetail() {
     }
 
     const msToKickoff = kickoffTs - Date.now();
-    const withinAutoRefreshWindow = msToKickoff <= 90 * 60_000 && msToKickoff >= -15 * 60_000;
+    const withinAutoRefreshWindow =
+      msToKickoff <= 90 * 60_000 && msToKickoff >= -15 * 60_000;
     if (!withinAutoRefreshWindow) {
       return undefined;
     }
@@ -396,7 +435,11 @@ export default function MatchDetail() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [fixtureIdToLoad, fixtureBundle?.fixture?.kickoff_at, fixtureBundle?.fixture?.lineup_status]);
+  }, [
+    fixtureIdToLoad,
+    fixtureBundle?.fixture?.kickoff_at,
+    fixtureBundle?.fixture?.lineup_status,
+  ]);
 
   useEffect(() => {
     if (!fixtureBundle?.fixture) {
@@ -418,13 +461,19 @@ export default function MatchDetail() {
       },
       fixtureId: f?.id ?? null,
       hasOdds: Boolean(f?.odds),
-      hasPredictions: Array.isArray(f?.predictions) ? f.predictions.length > 0 : Boolean(f?.predictions),
+      hasPredictions: Array.isArray(f?.predictions)
+        ? f.predictions.length > 0
+        : Boolean(f?.predictions),
       hasMetadata: Boolean(f?.metadata),
     });
 
     const rawLineups = Array.isArray(raw?.lineups) ? raw.lineups : [];
-    const withFormationField = rawLineups.filter((e) => String(e?.formation_field || "").trim());
-    const withFormationPosition = rawLineups.filter((e) => e?.formation_position != null);
+    const withFormationField = rawLineups.filter((e) =>
+      String(e?.formation_field || "").trim(),
+    );
+    const withFormationPosition = rawLineups.filter(
+      (e) => e?.formation_position != null,
+    );
 
     console.log("[MatchDetail] === formazioni / lineups (diagnosi) ===", {
       lineup_status: f?.lineup_status,
@@ -453,14 +502,20 @@ export default function MatchDetail() {
     });
 
     const rawCoaches = Array.isArray(raw?.coaches) ? raw.coaches : [];
-    const normalizedHomeCoaches = Array.isArray(f?.coaches?.home) ? f.coaches.home : [];
-    const normalizedAwayCoaches = Array.isArray(f?.coaches?.away) ? f.coaches.away : [];
+    const normalizedHomeCoaches = Array.isArray(f?.coaches?.home)
+      ? f.coaches.home
+      : [];
+    const normalizedAwayCoaches = Array.isArray(f?.coaches?.away)
+      ? f.coaches.away
+      : [];
     const sampleRawCoach = rawCoaches[0] || null;
     const sampleRawLineupWithPlayer =
-      rawLineups.find((entry) => entry?.player && typeof entry.player === "object") || null;
+      rawLineups.find(
+        (entry) => entry?.player && typeof entry.player === "object",
+      ) || null;
     const sampleNormalizedPlayerWithMedia =
       (Array.isArray(f?.players) ? f.players : []).find(
-        (player) => player?.media?.imageUrl || player?.media?.thumbUrl
+        (player) => player?.media?.imageUrl || player?.media?.thumbUrl,
       ) || null;
 
     console.log("[MatchDetail] === coaches / foto (diagnosi) ===", {
@@ -477,12 +532,14 @@ export default function MatchDetail() {
               null,
             hasImagePath: Boolean(
               sampleRawCoach.image_path ||
-                sampleRawCoach.imagePath ||
-                sampleRawCoach.photo ||
-                sampleRawCoach.image
+              sampleRawCoach.imagePath ||
+              sampleRawCoach.photo ||
+              sampleRawCoach.image,
             ),
             imageKeys: Object.keys(sampleRawCoach).filter((key) =>
-              ["image", "photo", "logo"].some((token) => key.toLowerCase().includes(token))
+              ["image", "photo", "logo"].some((token) =>
+                key.toLowerCase().includes(token),
+              ),
             ),
           }
         : null,
@@ -500,7 +557,9 @@ export default function MatchDetail() {
         ? {
             lineupId: sampleRawLineupWithPlayer.id ?? null,
             playerId:
-              sampleRawLineupWithPlayer.player_id || sampleRawLineupWithPlayer.player?.id || null,
+              sampleRawLineupWithPlayer.player_id ||
+              sampleRawLineupWithPlayer.player?.id ||
+              null,
             playerName:
               sampleRawLineupWithPlayer.player_name ||
               sampleRawLineupWithPlayer.player?.display_name ||
@@ -508,21 +567,27 @@ export default function MatchDetail() {
               null,
             hasPlayerImagePath: Boolean(
               sampleRawLineupWithPlayer.player?.image_path ||
-                sampleRawLineupWithPlayer.player?.imagePath ||
-                sampleRawLineupWithPlayer.player?.photo ||
-                sampleRawLineupWithPlayer.player?.image
+              sampleRawLineupWithPlayer.player?.imagePath ||
+              sampleRawLineupWithPlayer.player?.photo ||
+              sampleRawLineupWithPlayer.player?.image,
             ),
             playerImageKeys: sampleRawLineupWithPlayer.player
               ? Object.keys(sampleRawLineupWithPlayer.player).filter((key) =>
-                  ["image", "photo", "logo"].some((token) => key.toLowerCase().includes(token))
+                  ["image", "photo", "logo"].some((token) =>
+                    key.toLowerCase().includes(token),
+                  ),
                 )
               : [],
           }
         : null,
-      normalized_players_total: Array.isArray(f?.players) ? f.players.length : 0,
-      normalized_players_with_media: (Array.isArray(f?.players) ? f.players : []).filter(
-        (player) => player?.media?.imageUrl || player?.media?.thumbUrl
-      ).length,
+      normalized_players_total: Array.isArray(f?.players)
+        ? f.players.length
+        : 0,
+      normalized_players_with_media: (Array.isArray(f?.players)
+        ? f.players
+        : []
+      ).filter((player) => player?.media?.imageUrl || player?.media?.thumbUrl)
+        .length,
       normalized_player_media_sample: sampleNormalizedPlayerWithMedia
         ? {
             id: sampleNormalizedPlayerWithMedia.id ?? null,
@@ -536,12 +601,17 @@ export default function MatchDetail() {
     });
   }, [fixtureBundle]);
 
-  const match = apiMatch || createUnknownMatchFallback(routeId || Date.now().toString());
+  const match =
+    apiMatch || createUnknownMatchFallback(routeId || Date.now().toString());
   const isFav = favorites.matches.includes(String(match.id));
   const isFollowed = following.matches.includes(String(match.id));
-  const availablePlayers = Array.isArray(match.players) ? match.players : EMPTY_ARRAY;
+  const availablePlayers = Array.isArray(match.players)
+    ? match.players
+    : EMPTY_ARRAY;
   const comparisonBookmakers =
-    match.odds_provider === "not_available_with_current_feed" ? [] : match.bookmakers;
+    match.odds_provider === "not_available_with_current_feed"
+      ? []
+      : match.bookmakers;
   const premiumAnalysis = useMemo(() => buildPremiumAnalysis(match), [match]);
   const valueBetInsightText = useMemo(() => {
     if (!match?.valueBet) {
@@ -557,34 +627,51 @@ export default function MatchDetail() {
           : "Value";
     return `${src}: ${match.valueBet.type}${qLabel} · edge +${match.valueBet.edge}%`;
   }, [match]);
-  const valueHighlight = useMemo(() => deriveValueHighlight(match?.valueBet), [match?.valueBet]);
+  const valueHighlight = useMemo(
+    () => deriveValueHighlight(match?.valueBet),
+    [match?.valueBet],
+  );
   const pressureSupport = useMemo(
     () => derivePressureSupport(match, valueHighlight),
-    [match, valueHighlight]
+    [match, valueHighlight],
   );
-  const standingsRows = Array.isArray(match.standings?.rows) ? match.standings.rows : EMPTY_ARRAY;
-  const homeCoaches = Array.isArray(match.coaches?.home) ? match.coaches.home : EMPTY_ARRAY;
-  const awayCoaches = Array.isArray(match.coaches?.away) ? match.coaches.away : EMPTY_ARRAY;
-  const homeSquad = Array.isArray(match.squads?.home) ? match.squads.home : EMPTY_ARRAY;
-  const awaySquad = Array.isArray(match.squads?.away) ? match.squads.away : EMPTY_ARRAY;
+  const standingsRows = Array.isArray(match.standings?.rows)
+    ? match.standings.rows
+    : EMPTY_ARRAY;
+  const homeCoaches = Array.isArray(match.coaches?.home)
+    ? match.coaches.home
+    : EMPTY_ARRAY;
+  const awayCoaches = Array.isArray(match.coaches?.away)
+    ? match.coaches.away
+    : EMPTY_ARRAY;
+  const homeSquad = Array.isArray(match.squads?.home)
+    ? match.squads.home
+    : EMPTY_ARRAY;
+  const awaySquad = Array.isArray(match.squads?.away)
+    ? match.squads.away
+    : EMPTY_ARRAY;
   const homeLineup = match.lineups?.home || { formation: "--", players: [] };
   const awayLineup = match.lineups?.away || { formation: "--", players: [] };
-  const selectedLineup = selectedLineupSide === "away" ? awayLineup : homeLineup;
+  const selectedLineup =
+    selectedLineupSide === "away" ? awayLineup : homeLineup;
   const selectedLineupPlayers = Array.isArray(selectedLineup?.players)
     ? selectedLineup.players
     : EMPTY_ARRAY;
-  const selectedLineupTeam = selectedLineupSide === "away" ? match.away : match.home;
+  const selectedLineupTeam =
+    selectedLineupSide === "away" ? match.away : match.home;
   const selectedSquad = selectedLineupSide === "away" ? awaySquad : homeSquad;
-  const selectedPlayerPool = selectedLineupPlayers.length ? selectedLineupPlayers : selectedSquad;
+  const selectedPlayerPool = selectedLineupPlayers.length
+    ? selectedLineupPlayers
+    : selectedSquad;
   const hasRealPlayerStats = useMemo(
     () =>
       availablePlayers.some(
         (player) =>
           hasRealMetricSource(player?.playerProps?.xg?.source) ||
           hasRealMetricSource(player?.playerProps?.shots?.source) ||
-          hasRealMetricSource(player?.playerProps?.discipline?.source)
+          hasRealMetricSource(player?.playerProps?.discipline?.source),
       ),
-    [availablePlayers]
+    [availablePlayers],
   );
   const visibleFormationsTabs = useMemo(
     () =>
@@ -595,25 +682,25 @@ export default function MatchDetail() {
           : null,
         { key: FORMATIONS_DEEP_TABS.teamMomentum, label: "Team Momentum" },
       ].filter(Boolean),
-    [hasRealPlayerStats]
+    [hasRealPlayerStats],
   );
   const homeStandingRow = useMemo(
     () =>
       standingsRows.find(
         (row) =>
           row.side === "home" ||
-          normalizeValueToken(row.team) === normalizeValueToken(match.home)
+          normalizeValueToken(row.team) === normalizeValueToken(match.home),
       ) || null,
-    [standingsRows, match.home]
+    [standingsRows, match.home],
   );
   const awayStandingRow = useMemo(
     () =>
       standingsRows.find(
         (row) =>
           row.side === "away" ||
-          normalizeValueToken(row.team) === normalizeValueToken(match.away)
+          normalizeValueToken(row.team) === normalizeValueToken(match.away),
       ) || null,
-    [standingsRows, match.away]
+    [standingsRows, match.away],
   );
 
   useEffect(() => {
@@ -622,24 +709,40 @@ export default function MatchDetail() {
       firstLineupPlayer &&
       availablePlayers.find(
         (candidate) =>
-          candidate.id === firstLineupPlayer.id || candidate.name === firstLineupPlayer.name
+          candidate.id === firstLineupPlayer.id ||
+          candidate.name === firstLineupPlayer.name,
       );
     const playerFromTeam = availablePlayers.find(
-      (candidate) => normalizeValueToken(candidate.team) === normalizeValueToken(selectedLineupTeam)
+      (candidate) =>
+        normalizeValueToken(candidate.team) ===
+        normalizeValueToken(selectedLineupTeam),
     );
     const firstSquadPlayer = selectedSquad[0];
 
     setSelectedPlayer(
       playerFromLineup ||
         playerFromTeam ||
-        buildFallbackPlayerProfile(firstLineupPlayer || firstSquadPlayer, selectedLineupTeam) ||
+        buildFallbackPlayerProfile(
+          firstLineupPlayer || firstSquadPlayer,
+          selectedLineupTeam,
+        ) ||
         availablePlayers[0] ||
-        null
+        null,
     );
-  }, [availablePlayers, selectedLineupSide, match.home, match.away, match.lineups, match.squads]);
+  }, [
+    availablePlayers,
+    selectedLineupSide,
+    match.home,
+    match.away,
+    match.lineups,
+    match.squads,
+  ]);
 
   useEffect(() => {
-    if (!hasRealPlayerStats && formationsDeepTab === FORMATIONS_DEEP_TABS.playerStats) {
+    if (
+      !hasRealPlayerStats &&
+      formationsDeepTab === FORMATIONS_DEEP_TABS.playerStats
+    ) {
       setFormationsDeepTab(FORMATIONS_DEEP_TABS.lineups);
     }
   }, [formationsDeepTab, hasRealPlayerStats]);
@@ -682,7 +785,13 @@ export default function MatchDetail() {
     return () => {
       active = false;
     };
-  }, [activeMainTab, formationsDeepTab, match.id, selectedPlayer?.id, selectedPlayerMarket]);
+  }, [
+    activeMainTab,
+    formationsDeepTab,
+    match.id,
+    selectedPlayer?.id,
+    selectedPlayerMarket,
+  ]);
 
   useEffect(() => {
     if (
@@ -706,7 +815,9 @@ export default function MatchDetail() {
       .catch((error) => {
         if (active) {
           setTeamMomentumPayload(null);
-          setTeamMomentumError(error.message || "Team momentum non disponibile.");
+          setTeamMomentumError(
+            error.message || "Team momentum non disponibile.",
+          );
         }
       })
       .finally(() => {
@@ -718,19 +829,31 @@ export default function MatchDetail() {
     return () => {
       active = false;
     };
-  }, [activeMainTab, formationsDeepTab, match.id, teamMomentumPayload?.fixtureId]);
+  }, [
+    activeMainTab,
+    formationsDeepTab,
+    match.id,
+    teamMomentumPayload?.fixtureId,
+  ]);
 
   useEffect(() => {
     if (!fixtureIdToLoad) {
       return undefined;
     }
     let cancelled = false;
-    getAlerts({ fixtureId: String(fixtureIdToLoad), type: "multibet", status: "pending", limit: 8 })
+    getAlerts({
+      fixtureId: String(fixtureIdToLoad),
+      type: "multibet",
+      status: "pending",
+      limit: 8,
+    })
       .then(({ alerts }) => {
         if (cancelled) {
           return;
         }
-        setFixtureMultibetAlerts((alerts || []).filter((a) => a.type === "multibet"));
+        setFixtureMultibetAlerts(
+          (alerts || []).filter((a) => a.type === "multibet"),
+        );
       })
       .catch(() => {
         if (!cancelled) {
@@ -756,7 +879,9 @@ export default function MatchDetail() {
           <GlassCard className="mb-4 border-primary/25 bg-primary/5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="text-sm font-semibold text-foreground">Multipla orchestratore</div>
+                <div className="text-sm font-semibold text-foreground">
+                  Multipla orchestratore
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {fixtureMultibetAlerts.length === 1
                     ? "Questa partita è in 1 segnalazione multi-bet aperta (Mongo / Telegram)."
@@ -773,8 +898,13 @@ export default function MatchDetail() {
           </GlassCard>
         )}
 
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-          <GlassCard className={`mb-6 ${match.valueBet ? "border-primary/20" : ""}`}>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <GlassCard
+            className={`mb-6 ${match.valueBet ? "border-primary/20" : ""}`}
+          >
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
               <div className="flex min-w-0 flex-1 items-center justify-center gap-2 sm:gap-4 md:justify-start">
                 <div className="min-w-0 max-w-[38%] text-center sm:max-w-none">
@@ -787,7 +917,9 @@ export default function MatchDetail() {
                       shape="card"
                     />
                   </div>
-                  <span className="line-clamp-2 text-sm font-bold text-foreground">{match.home}</span>
+                  <span className="line-clamp-2 text-sm font-bold text-foreground">
+                    {match.home}
+                  </span>
                 </div>
                 <div className="shrink-0 px-1 text-center sm:px-4">
                   <div className="font-orbitron text-2xl font-black text-muted-foreground">
@@ -803,7 +935,9 @@ export default function MatchDetail() {
                   </div>
                   <span className="line-clamp-2 text-xs font-semibold text-accent">
                     {match.league}
-                    {match.state?.shortName ? ` - ${match.state.shortName}` : ""}
+                    {match.state?.shortName
+                      ? ` - ${match.state.shortName}`
+                      : ""}
                   </span>
                 </div>
                 <div className="min-w-0 max-w-[38%] text-center sm:max-w-none">
@@ -816,7 +950,9 @@ export default function MatchDetail() {
                       shape="card"
                     />
                   </div>
-                  <span className="line-clamp-2 text-sm font-bold text-foreground">{match.away}</span>
+                  <span className="line-clamp-2 text-sm font-bold text-foreground">
+                    {match.away}
+                  </span>
                 </div>
               </div>
               <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:justify-end md:gap-3">
@@ -900,7 +1036,11 @@ export default function MatchDetail() {
                     value={tab}
                     className="shrink-0 text-xs capitalize data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
                   >
-                    {tab === "h2h" ? "Testa a Testa" : tab === "contesto" ? "Contesto" : tab}
+                    {tab === "h2h"
+                      ? "Testa a Testa"
+                      : tab === "contesto"
+                        ? "Contesto"
+                        : tab}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -912,7 +1052,9 @@ export default function MatchDetail() {
                       Probabilità e quote
                     </h3>
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      {match.valueBet && <ValueBetBadge match={match} variant="compact" />}
+                      {match.valueBet && (
+                        <ValueBetBadge match={match} variant="compact" />
+                      )}
                       {match.valueBet && pressureSupport?.level && (
                         <span className="text-xs px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/30">
                           Supporto tattico:{" "}
@@ -929,14 +1071,16 @@ export default function MatchDetail() {
                           </span>
                         </span>
                       )}
-                      {match.odds_provider === "not_available_with_current_feed" && (
+                      {match.odds_provider ===
+                        "not_available_with_current_feed" && (
                         <span className="text-xs px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
                           Quote stimate, non bookmaker
                         </span>
                       )}
                       {(match.ouProb || match.ggProb) && (
                         <span className="text-xs px-2 py-1 rounded-full bg-secondary/60 text-muted-foreground border border-border/30">
-                          O/U e GG: % da predizioni API, modello derivato o implicite dalle quote
+                          O/U e GG: % da predizioni API, modello derivato o
+                          implicite dalle quote
                         </span>
                       )}
                       {match.valueBetSource === "fallback_derivato" && (
@@ -948,9 +1092,24 @@ export default function MatchDetail() {
                   </div>
                   <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {[
-                      { key: "home", label: `1 - ${match.home}`, probability: match.prob.home, odds: match.odds.home },
-                      { key: "draw", label: "X - Pareggio", probability: match.prob.draw, odds: match.odds.draw },
-                      { key: "away", label: `2 - ${match.away}`, probability: match.prob.away, odds: match.odds.away },
+                      {
+                        key: "home",
+                        label: `1 - ${match.home}`,
+                        probability: match.prob.home,
+                        odds: match.odds.home,
+                      },
+                      {
+                        key: "draw",
+                        label: "X - Pareggio",
+                        probability: match.prob.draw,
+                        odds: match.odds.draw,
+                      },
+                      {
+                        key: "away",
+                        label: `2 - ${match.away}`,
+                        probability: match.prob.away,
+                        odds: match.odds.away,
+                      },
                     ].map((item) => (
                       <div
                         key={item.label}
@@ -960,15 +1119,21 @@ export default function MatchDetail() {
                             : "bg-secondary/50"
                         }`}
                       >
-                        <div className="mb-1 line-clamp-2 text-xs text-muted-foreground">{item.label}</div>
+                        <div className="mb-1 line-clamp-2 text-xs text-muted-foreground">
+                          {item.label}
+                        </div>
                         <div
                           className={`font-bold text-xl ${
-                            valueHighlight.oneXTwo === item.key ? "text-primary" : "text-foreground"
+                            valueHighlight.oneXTwo === item.key
+                              ? "text-primary"
+                              : "text-foreground"
                           }`}
                         >
                           {item.probability}%
                         </div>
-                        <div className="text-sm font-semibold text-accent mt-1">{item.odds}</div>
+                        <div className="text-sm font-semibold text-accent mt-1">
+                          {item.odds}
+                        </div>
                         {Number.isFinite(match.modelOdds?.[item.key]) && (
                           <div className="text-[11px] text-muted-foreground">
                             Quota modello {match.modelOdds[item.key]}
@@ -1012,80 +1177,112 @@ export default function MatchDetail() {
                         prob: match.ggProb?.noGoal,
                         modelOdd: match.modelOddsGg?.noGoal,
                       },
-                    ].map((row) => (
+                    ].map((row) =>
                       (() => {
-                        const isHighlighted = valueHighlight.ou === row.key || valueHighlight.gg === row.key;
+                        const isHighlighted =
+                          valueHighlight.ou === row.key ||
+                          valueHighlight.gg === row.key;
                         return (
-                      <div
-                        key={row.label}
-                        className={`flex flex-col gap-1 rounded-lg p-3 sm:flex-row sm:items-center sm:justify-between ${
-                          isHighlighted
-                            ? "border border-primary/25 bg-primary/12 ring-1 ring-primary/20"
-                            : "bg-secondary/30"
-                        }`}
-                      >
-                        <span className="text-xs text-muted-foreground">{row.label}</span>
-                        <div className="text-right">
-                          {typeof row.prob === "number" ? (
-                            <>
-                              <div className={`text-sm font-bold ${isHighlighted ? "text-primary" : "text-foreground"}`}>
-                                {row.prob}%
-                              </div>
-                              <div className="text-xs font-semibold text-accent">{row.odd}</div>
-                              {Number.isFinite(row.modelOdd) && (
-                                <div className="text-[11px] text-muted-foreground">
-                                  Quota modello {row.modelOdd}
-                                </div>
+                          <div
+                            key={row.label}
+                            className={`flex flex-col gap-1 rounded-lg p-3 sm:flex-row sm:items-center sm:justify-between ${
+                              isHighlighted
+                                ? "border border-primary/25 bg-primary/12 ring-1 ring-primary/20"
+                                : "bg-secondary/30"
+                            }`}
+                          >
+                            <span className="text-xs text-muted-foreground">
+                              {row.label}
+                            </span>
+                            <div className="text-right">
+                              {typeof row.prob === "number" ? (
+                                <>
+                                  <div
+                                    className={`text-sm font-bold ${isHighlighted ? "text-primary" : "text-foreground"}`}
+                                  >
+                                    {row.prob}%
+                                  </div>
+                                  <div className="text-xs font-semibold text-accent">
+                                    {row.odd}
+                                  </div>
+                                  {Number.isFinite(row.modelOdd) && (
+                                    <div className="text-[11px] text-muted-foreground">
+                                      Quota modello {row.modelOdd}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-xs font-bold text-foreground">
+                                  {row.odd}
+                                </span>
                               )}
-                            </>
-                          ) : (
-                            <span className="text-xs font-bold text-foreground">{row.odd}</span>
-                          )}
-                        </div>
-                        {isHighlighted && (
-                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-primary/20 sm:col-span-2">
-                            <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500" />
+                            </div>
+                            {isHighlighted && (
+                              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-primary/20 sm:col-span-2">
+                                <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500" />
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
                         );
-                      })()
-                    ))}
+                      })(),
+                    )}
                   </div>
                 </GlassCard>
 
                 {match.pressure_preview?.bars?.length > 0 && (
                   <GlassCard>
-                    <PressurePreviewChart preview={match.pressure_preview} supportInsight={pressureSupport} />
+                    <PressurePreviewChart
+                      preview={match.pressure_preview}
+                      supportInsight={pressureSupport}
+                    />
                   </GlassCard>
                 )}
 
                 <GlassCard>
-                  <h3 className="font-semibold text-sm text-foreground mb-3">xG Pre-Match</h3>
+                  <h3 className="font-semibold text-sm text-foreground mb-3">
+                    xG Pre-Match
+                  </h3>
                   {(() => {
                     const homeXg = Number(match.xg?.home || 0);
                     const awayXg = Number(match.xg?.away || 0);
                     const maxXg = Math.max(homeXg, awayXg, 0.1);
-                    const homePct = Math.max(0, Math.min(100, (homeXg / maxXg) * 100));
-                    const awayPct = Math.max(0, Math.min(100, (awayXg / maxXg) * 100));
+                    const homePct = Math.max(
+                      0,
+                      Math.min(100, (homeXg / maxXg) * 100),
+                    );
+                    const awayPct = Math.max(
+                      0,
+                      Math.min(100, (awayXg / maxXg) * 100),
+                    );
                     const delta = Math.abs(homeXg - awayXg).toFixed(2);
                     const leader =
-                      homeXg > awayXg ? match.home : awayXg > homeXg ? match.away : "Equilibrio";
+                      homeXg > awayXg
+                        ? match.home
+                        : awayXg > homeXg
+                          ? match.away
+                          : "Equilibrio";
 
                     return (
                       <div className="rounded-xl bg-secondary/30 p-3">
                         <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
                           <span>Confronto xG</span>
                           <span className="font-semibold text-foreground">
-                            Diff. xG {delta} {leader !== "Equilibrio" ? `· Proiezione ${leader}` : "· Equilibrio"}
+                            Diff. xG {delta}{" "}
+                            {leader !== "Equilibrio"
+                              ? `· Proiezione ${leader}`
+                              : "· Equilibrio"}
                           </span>
                         </div>
 
                         <div className="space-y-3">
                           <div>
                             <div className="mb-1 flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">{match.home}</span>
-                              <span className="font-bold text-primary">{homeXg.toFixed(2)}</span>
+                              <span className="text-muted-foreground">
+                                {match.home}
+                              </span>
+                              <span className="font-bold text-primary">
+                                {homeXg.toFixed(2)}
+                              </span>
                             </div>
                             <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/50">
                               <div
@@ -1096,8 +1293,12 @@ export default function MatchDetail() {
                           </div>
                           <div>
                             <div className="mb-1 flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">{match.away}</span>
-                              <span className="font-bold text-foreground">{awayXg.toFixed(2)}</span>
+                              <span className="text-muted-foreground">
+                                {match.away}
+                              </span>
+                              <span className="font-bold text-foreground">
+                                {awayXg.toFixed(2)}
+                              </span>
                             </div>
                             <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/50">
                               <div
@@ -1113,46 +1314,58 @@ export default function MatchDetail() {
                 </GlassCard>
 
                 <GlassCard>
-                  <h3 className="font-semibold text-sm text-foreground mb-3">Risultati Probabili</h3>
+                  <h3 className="font-semibold text-sm text-foreground mb-3">
+                    Risultati Probabili
+                  </h3>
                   {match.scores.length > 0 ? (
                     <div className="rounded-xl bg-secondary/30 p-3">
                       {(() => {
                         const topProb = Math.max(
                           ...match.scores.map((entry) =>
-                            Number.isFinite(Number(entry?.prob)) ? Number(entry.prob) : 0
-                          )
+                            Number.isFinite(Number(entry?.prob))
+                              ? Number(entry.prob)
+                              : 0,
+                          ),
                         );
                         return (
-                      <div className="space-y-2">
-                        {match.scores.map((score, index) => (
-                          (() => {
-                            const rowProb = Number.isFinite(Number(score?.prob)) ? Number(score.prob) : 0;
-                            const isTop = rowProb === topProb;
-                            return (
-                          <div
-                            key={`${score.score}-${index}`}
-                            className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs ${
-                              isTop
-                                ? "border border-primary/25 bg-primary/12 ring-1 ring-primary/20"
-                                : "bg-secondary/40"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-foreground">{score.score}</span>
-                              {isTop && (
-                                <span className="rounded-full border border-primary/30 bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                                  Piu probabile
-                                </span>
-                              )}
-                            </div>
-                            <span className={`font-bold ${isTop ? "text-primary" : "text-foreground"}`}>
-                              {score.prob}%
-                            </span>
+                          <div className="space-y-2">
+                            {match.scores.map((score, index) =>
+                              (() => {
+                                const rowProb = Number.isFinite(
+                                  Number(score?.prob),
+                                )
+                                  ? Number(score.prob)
+                                  : 0;
+                                const isTop = rowProb === topProb;
+                                return (
+                                  <div
+                                    key={`${score.score}-${index}`}
+                                    className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs ${
+                                      isTop
+                                        ? "border border-primary/25 bg-primary/12 ring-1 ring-primary/20"
+                                        : "bg-secondary/40"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-semibold text-foreground">
+                                        {score.score}
+                                      </span>
+                                      {isTop && (
+                                        <span className="rounded-full border border-primary/30 bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                          Piu probabile
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span
+                                      className={`font-bold ${isTop ? "text-primary" : "text-foreground"}`}
+                                    >
+                                      {score.prob}%
+                                    </span>
+                                  </div>
+                                );
+                              })(),
+                            )}
                           </div>
-                            );
-                          })()
-                        ))}
-                      </div>
                         );
                       })()}
                     </div>
@@ -1188,9 +1401,12 @@ export default function MatchDetail() {
                           }`}
                           title={`Mostra formazione ${option.team}`}
                         >
-                          <div className="truncate text-xs font-bold">{option.team}</div>
+                          <div className="truncate text-xs font-bold">
+                            {option.team}
+                          </div>
                           <div className="mt-0.5 text-[11px] opacity-80">
-                            {option.lineup?.formation || "--"} - {playersCount} giocatori
+                            {option.lineup?.formation || "--"} - {playersCount}{" "}
+                            giocatori
                           </div>
                         </button>
                       );
@@ -1221,65 +1437,96 @@ export default function MatchDetail() {
                           <FormationPitch
                             homeLineup={selectedLineup}
                             homeTeam={selectedLineupTeam}
-                            awayTeam={selectedLineupSide === "away" ? match.home : match.away}
+                            awayTeam={
+                              selectedLineupSide === "away"
+                                ? match.home
+                                : match.away
+                            }
                             onPlayerClick={(player) => {
                               const nextPlayer =
                                 availablePlayers.find(
                                   (candidate) =>
-                                    candidate.id === player.id || candidate.name === player.name
-                                ) || buildFallbackPlayerProfile(player, selectedLineupTeam);
+                                    candidate.id === player.id ||
+                                    candidate.name === player.name,
+                                ) ||
+                                buildFallbackPlayerProfile(
+                                  player,
+                                  selectedLineupTeam,
+                                );
                               setSelectedPlayer(nextPlayer);
                             }}
                           />
                           {!selectedLineupPlayers.length && (
                             <GlassCard>
                               <p className="text-xs text-muted-foreground">
-                                Nessuna formazione caricata dal feed corrente per {selectedLineupTeam}.
+                                Nessuna formazione caricata dal feed corrente
+                                per {selectedLineupTeam}.
                               </p>
                             </GlassCard>
                           )}
-                          {!selectedLineupPlayers.length && selectedSquad.length > 0 && (
-                            <Accordion
-                              type="single"
-                              collapsible
-                              className="rounded-xl border border-border/40 bg-secondary/10 px-3"
-                            >
-                              <AccordionItem value="rose-md" className="border-0">
-                                <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">
-                                  Rosa {selectedLineupTeam} (lista compatta)
-                                </AccordionTrigger>
-                                <AccordionContent>
-                                  <div className="space-y-2 pb-2">
-                                    {selectedSquad.slice(0, 16).map((player) => (
-                                      <button
-                                        key={player.id || player.name}
-                                        type="button"
-                                        onClick={() =>
-                                          setSelectedPlayer(
-                                            availablePlayers.find(
-                                              (candidate) =>
-                                                candidate.id === player.id || candidate.name === player.name
-                                            ) || buildFallbackPlayerProfile(player, selectedLineupTeam)
-                                          )
-                                        }
-                                        className="flex w-full items-center justify-between rounded-lg bg-secondary/30 p-2 text-left text-xs transition-colors hover:bg-secondary/50"
-                                      >
-                                        <span className="min-w-0 truncate text-foreground">{player.name}</span>
-                                        <span className="ml-2 shrink-0 text-muted-foreground">
-                                          #{player.number || "--"} - {player.position || player.pos || "--"}
-                                        </span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                </AccordionContent>
-                              </AccordionItem>
-                            </Accordion>
-                          )}
+                          {!selectedLineupPlayers.length &&
+                            selectedSquad.length > 0 && (
+                              <Accordion
+                                type="single"
+                                collapsible
+                                className="rounded-xl border border-border/40 bg-secondary/10 px-3"
+                              >
+                                <AccordionItem
+                                  value="rose-md"
+                                  className="border-0"
+                                >
+                                  <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">
+                                    Rosa {selectedLineupTeam} (lista compatta)
+                                  </AccordionTrigger>
+                                  <AccordionContent>
+                                    <div className="space-y-2 pb-2">
+                                      {selectedSquad
+                                        .slice(0, 16)
+                                        .map((player) => (
+                                          <button
+                                            key={player.id || player.name}
+                                            type="button"
+                                            onClick={() =>
+                                              setSelectedPlayer(
+                                                availablePlayers.find(
+                                                  (candidate) =>
+                                                    candidate.id ===
+                                                      player.id ||
+                                                    candidate.name ===
+                                                      player.name,
+                                                ) ||
+                                                  buildFallbackPlayerProfile(
+                                                    player,
+                                                    selectedLineupTeam,
+                                                  ),
+                                              )
+                                            }
+                                            className="flex w-full items-center justify-between rounded-lg bg-secondary/30 p-2 text-left text-xs transition-colors hover:bg-secondary/50"
+                                          >
+                                            <span className="min-w-0 truncate text-foreground">
+                                              {player.name}
+                                            </span>
+                                            <span className="ml-2 shrink-0 text-muted-foreground">
+                                              #{player.number || "--"} -{" "}
+                                              {player.position ||
+                                                player.pos ||
+                                                "--"}
+                                            </span>
+                                          </button>
+                                        ))}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              </Accordion>
+                            )}
                         </div>
                         <PlayerCard
                           player={selectedPlayer}
                           expanded
-                          oddsAvailable={match.odds_provider !== "not_available_with_current_feed"}
+                          oddsAvailable={
+                            match.odds_provider !==
+                            "not_available_with_current_feed"
+                          }
                         />
                       </div>
 
@@ -1293,10 +1540,12 @@ export default function MatchDetail() {
                                     Impact lineup adjustment
                                   </h3>
                                   <p className="mt-1 text-xs text-muted-foreground">
-                                    Livello: {match.lineup_penalty?.mode || "unknown"}
+                                    Livello:{" "}
+                                    {match.lineup_penalty?.mode || "unknown"}
                                     {match.lineup_penalty?.mode === "probable"
                                       ? " (penalizzazione ridotta)"
-                                      : match.lineup_penalty?.mode === "expected"
+                                      : match.lineup_penalty?.mode ===
+                                          "expected"
                                         ? " (solo warning, senza impatto probabilita)"
                                         : ""}
                                   </p>
@@ -1306,27 +1555,35 @@ export default function MatchDetail() {
                                 </span>
                               </div>
                               <div className="mt-3 space-y-2">
-                                {match.lineup_penalty.penalties.map((entry, index) => (
-                                  <div
-                                    key={`${entry.side}-${index}`}
-                                    className="rounded-lg bg-secondary/30 p-3 text-xs text-foreground"
-                                  >
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <span className="font-semibold">
-                                        {entry.side === "home" ? match.home : match.away}
-                                      </span>
-                                      <span className="font-bold text-amber-300">
-                                        -{entry.appliedPenaltyPct ?? entry.penaltyPct}% potenziale offensivo
-                                      </span>
+                                {match.lineup_penalty.penalties.map(
+                                  (entry, index) => (
+                                    <div
+                                      key={`${entry.side}-${index}`}
+                                      className="rounded-lg bg-secondary/30 p-3 text-xs text-foreground"
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <span className="font-semibold">
+                                          {entry.side === "home"
+                                            ? match.home
+                                            : match.away}
+                                        </span>
+                                        <span className="font-bold text-amber-300">
+                                          -
+                                          {entry.appliedPenaltyPct ??
+                                            entry.penaltyPct}
+                                          % potenziale offensivo
+                                        </span>
+                                      </div>
+                                      {Array.isArray(entry.missingPlayers) &&
+                                        entry.missingPlayers.length > 0 && (
+                                          <div className="mt-1 text-muted-foreground">
+                                            Assenze key player:{" "}
+                                            {entry.missingPlayers.join(", ")}
+                                          </div>
+                                        )}
                                     </div>
-                                    {Array.isArray(entry.missingPlayers) &&
-                                      entry.missingPlayers.length > 0 && (
-                                        <div className="mt-1 text-muted-foreground">
-                                          Assenze key player: {entry.missingPlayers.join(", ")}
-                                        </div>
-                                      )}
-                                  </div>
-                                ))}
+                                  ),
+                                )}
                               </div>
                             </GlassCard>
                           )}
@@ -1342,10 +1599,14 @@ export default function MatchDetail() {
                           </div>
                           {match.scorers.length > 0 ? (
                             <div className="space-y-2">
-                              {match.scorers.map((scorer, index) => (
+                              {match.scorers.map((scorer, index) =>
                                 (() => {
-                                  const hasRealXg = hasRealMetricSource(scorer.propsSource?.xg);
-                                  const hasRealShots = hasRealMetricSource(scorer.propsSource?.shots);
+                                  const hasRealXg = hasRealMetricSource(
+                                    scorer.propsSource?.xg,
+                                  );
+                                  const hasRealShots = hasRealMetricSource(
+                                    scorer.propsSource?.shots,
+                                  );
 
                                   return (
                                     <button
@@ -1355,8 +1616,13 @@ export default function MatchDetail() {
                                         const nextPlayer =
                                           availablePlayers.find(
                                             (candidate) =>
-                                              candidate.id === scorer.id || candidate.name === scorer.name
-                                          ) || buildFallbackPlayerProfile(scorer, scorer.team || selectedLineupTeam);
+                                              candidate.id === scorer.id ||
+                                              candidate.name === scorer.name,
+                                          ) ||
+                                          buildFallbackPlayerProfile(
+                                            scorer,
+                                            scorer.team || selectedLineupTeam,
+                                          );
                                         setSelectedPlayer(nextPlayer);
                                       }}
                                       className="flex w-full min-w-0 flex-col gap-2 rounded-lg bg-secondary/30 p-3 text-left transition-colors hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
@@ -1371,26 +1637,41 @@ export default function MatchDetail() {
                                       </div>
                                       <div className="flex min-w-0 flex-shrink-0 flex-wrap items-center gap-3 sm:gap-4">
                                         <span className="text-xs text-muted-foreground">
-                                          xG <span className="font-bold text-primary">{hasRealXg ? scorer.xg : "n/d"}</span>
+                                          xG{" "}
+                                          <span className="font-bold text-primary">
+                                            {hasRealXg ? scorer.xg : "n/d"}
+                                          </span>
                                         </span>
                                         <span className="text-xs text-muted-foreground">
-                                          Tiri <span className="font-bold text-foreground">{hasRealShots ? scorer.shots : "n/d"}</span>
+                                          Tiri{" "}
+                                          <span className="font-bold text-foreground">
+                                            {hasRealShots
+                                              ? scorer.shots
+                                              : "n/d"}
+                                          </span>
                                         </span>
                                         <span className="text-xs text-muted-foreground">
-                                          Quota <span className="font-bold text-foreground">{scorer.odds}</span>
+                                          Quota{" "}
+                                          <span className="font-bold text-foreground">
+                                            {scorer.odds}
+                                          </span>
                                         </span>
                                         <span className="text-xs text-muted-foreground">
-                                          Prob. <span className="font-bold text-primary">{scorer.prob}%</span>
+                                          Prob.{" "}
+                                          <span className="font-bold text-primary">
+                                            {scorer.prob}%
+                                          </span>
                                         </span>
                                       </div>
                                     </button>
                                   );
-                                })()
-                              ))}
+                                })(),
+                              )}
                             </div>
                           ) : (
                             <p className="text-xs text-muted-foreground">
-                              Nessun impact player disponibile dal feed corrente.
+                              Nessun impact player disponibile dal feed
+                              corrente.
                             </p>
                           )}
                         </GlassCard>
@@ -1398,147 +1679,195 @@ export default function MatchDetail() {
                     </>
                   )}
 
-                  {formationsDeepTab === FORMATIONS_DEEP_TABS.playerStats && hasRealPlayerStats && (
-                    <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-                      <GlassCard>
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                          <h3 className="text-sm font-semibold text-foreground">Player Stats</h3>
-                          <span className="text-[11px] text-muted-foreground">
-                            {selectedLineupTeam}
-                          </span>
-                        </div>
-                        <div className="space-y-2">
-                          {selectedPlayerPool.slice(0, 18).map((player) => {
-                            const matchedPlayer =
-                              availablePlayers.find(
-                                (candidate) =>
-                                  candidate.id === player.id || candidate.name === player.name
-                              ) || buildFallbackPlayerProfile(player, selectedLineupTeam);
-                            const isActive = String(selectedPlayer?.id) === String(matchedPlayer?.id);
-                            const hasRealData =
-                              hasRealMetricSource(matchedPlayer?.playerProps?.xg?.source) ||
-                              hasRealMetricSource(matchedPlayer?.playerProps?.shots?.source) ||
-                              hasRealMetricSource(matchedPlayer?.playerProps?.discipline?.source);
-
-                            if (!hasRealData) {
-                              return null;
-                            }
-
-                            return (
-                              <button
-                                key={matchedPlayer.id || matchedPlayer.name}
-                                type="button"
-                                onClick={() => setSelectedPlayer(matchedPlayer)}
-                                className={`flex w-full items-center justify-between rounded-lg p-2 text-left text-xs transition-colors ${
-                                  isActive
-                                    ? "border border-primary/25 bg-primary/10 text-primary"
-                                    : "bg-secondary/30 hover:bg-secondary/50"
-                                }`}
-                              >
-                                <span className="min-w-0 truncate font-semibold text-foreground">
-                                  {matchedPlayer.name}
-                                </span>
-                                <span className="ml-2 shrink-0 text-muted-foreground">
-                                  xG {formatDeepDataValue(matchedPlayer?.playerProps?.xg?.value ?? matchedPlayer?.xg)}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </GlassCard>
-
-                      <div className="space-y-4">
-                        <PlayerCard
-                          player={selectedPlayer}
-                          expanded
-                          oddsAvailable={match.odds_provider !== "not_available_with_current_feed"}
-                        />
-
+                  {formationsDeepTab === FORMATIONS_DEEP_TABS.playerStats &&
+                    hasRealPlayerStats && (
+                      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
                         <GlassCard>
-                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                          <div className="mb-3 flex items-center justify-between gap-2">
                             <h3 className="text-sm font-semibold text-foreground">
-                              Comparatore Player Props
+                              Player Stats
                             </h3>
-                            <div className="flex flex-wrap gap-2">
-                              {PLAYER_PROP_MARKETS.map((marketOption) => (
-                                <button
-                                  key={marketOption.key}
-                                  type="button"
-                                  onClick={() => setSelectedPlayerMarket(marketOption.key)}
-                                  className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
-                                    selectedPlayerMarket === marketOption.key
-                                      ? "border border-primary/25 bg-primary/10 text-primary"
-                                      : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                                  }`}
-                                >
-                                  {marketOption.label}
-                                </button>
-                              ))}
-                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {selectedLineupTeam}
+                            </span>
                           </div>
+                          <div className="space-y-2">
+                            {selectedPlayerPool.slice(0, 18).map((player) => {
+                              const matchedPlayer =
+                                availablePlayers.find(
+                                  (candidate) =>
+                                    candidate.id === player.id ||
+                                    candidate.name === player.name,
+                                ) ||
+                                buildFallbackPlayerProfile(
+                                  player,
+                                  selectedLineupTeam,
+                                );
+                              const isActive =
+                                String(selectedPlayer?.id) ===
+                                String(matchedPlayer?.id);
+                              const hasRealData =
+                                hasRealMetricSource(
+                                  matchedPlayer?.playerProps?.xg?.source,
+                                ) ||
+                                hasRealMetricSource(
+                                  matchedPlayer?.playerProps?.shots?.source,
+                                ) ||
+                                hasRealMetricSource(
+                                  matchedPlayer?.playerProps?.discipline
+                                    ?.source,
+                                );
 
-                          {playerPropsLoading && (
-                            <div className="rounded-lg bg-secondary/30 px-3 py-4 text-xs text-muted-foreground">
-                              Caricamento quote player props...
-                            </div>
-                          )}
+                              if (!hasRealData) {
+                                return null;
+                              }
 
-                          {!playerPropsLoading && playerPropsError && (
-                            <div className="rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-4 text-xs text-destructive">
-                              {playerPropsError}
-                            </div>
-                          )}
-
-                          {!playerPropsLoading && !playerPropsError && playerPropsPayload?.rows?.length > 0 && (
-                            <div className="space-y-2">
-                              {playerPropsPayload.rows.map((row) => (
-                                <div
-                                  key={`${row.bookmaker}-${row.selection}`}
-                                  className={`grid gap-2 rounded-lg p-3 text-xs sm:grid-cols-[minmax(0,1fr)_90px_90px_100px] sm:items-center ${
-                                    row.isBest
-                                      ? "border border-primary/25 bg-primary/10"
-                                      : "bg-secondary/30"
+                              return (
+                                <button
+                                  key={matchedPlayer.id || matchedPlayer.name}
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedPlayer(matchedPlayer)
+                                  }
+                                  className={`flex w-full items-center justify-between rounded-lg p-2 text-left text-xs transition-colors ${
+                                    isActive
+                                      ? "border border-primary/25 bg-primary/10 text-primary"
+                                      : "bg-secondary/30 hover:bg-secondary/50"
                                   }`}
                                 >
-                                  <div className="min-w-0">
-                                    <div className="truncate font-semibold text-foreground">
-                                      {row.bookmaker}
-                                    </div>
-                                    <div className="truncate text-muted-foreground">
-                                      {row.selection}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="text-muted-foreground">Quota</div>
-                                    <div className="font-bold text-foreground">{row.odd}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-muted-foreground">EV</div>
-                                    <div className={`font-bold ${row.valueEdge >= 0 ? "text-primary" : "text-amber-300"}`}>
-                                      {row.valueEdge >= 0 ? "+" : ""}
-                                      {row.valueEdge}%
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="text-muted-foreground">Modello</div>
-                                    <div className="font-bold text-foreground">{row.modelProbability}%</div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                                  <span className="min-w-0 truncate font-semibold text-foreground">
+                                    {matchedPlayer.name}
+                                  </span>
+                                  <span className="ml-2 shrink-0 text-muted-foreground">
+                                    xG{" "}
+                                    {formatDeepDataValue(
+                                      matchedPlayer?.playerProps?.xg?.value ??
+                                        matchedPlayer?.xg,
+                                    )}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </GlassCard>
 
-                          {!playerPropsLoading &&
-                            !playerPropsError &&
-                            (!playerPropsPayload || !playerPropsPayload.rows?.length) && (
+                        <div className="space-y-4">
+                          <TopXgPlayers
+                            players={selectedPlayerPool}
+                            onPlayerClick={setSelectedPlayer}
+                          />
+                          <PlayerCard
+                            player={selectedPlayer}
+                            expanded
+                            oddsAvailable={
+                              match.odds_provider !==
+                              "not_available_with_current_feed"
+                            }
+                          />
+
+                          <GlassCard>
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <h3 className="text-sm font-semibold text-foreground">
+                                Comparatore Player Props
+                              </h3>
+                              <div className="flex flex-wrap gap-2">
+                                {PLAYER_PROP_MARKETS.map((marketOption) => (
+                                  <button
+                                    key={marketOption.key}
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedPlayerMarket(marketOption.key)
+                                    }
+                                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+                                      selectedPlayerMarket === marketOption.key
+                                        ? "border border-primary/25 bg-primary/10 text-primary"
+                                        : "bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                                    }`}
+                                  >
+                                    {marketOption.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {playerPropsLoading && (
                               <div className="rounded-lg bg-secondary/30 px-3 py-4 text-xs text-muted-foreground">
-                                Nessuna quota disponibile per il mercato selezionato.
+                                Caricamento quote player props...
                               </div>
                             )}
-                        </GlassCard>
+
+                            {!playerPropsLoading && playerPropsError && (
+                              <div className="rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-4 text-xs text-destructive">
+                                {playerPropsError}
+                              </div>
+                            )}
+
+                            {!playerPropsLoading &&
+                              !playerPropsError &&
+                              playerPropsPayload?.rows?.length > 0 && (
+                                <div className="space-y-2">
+                                  {playerPropsPayload.rows.map((row) => (
+                                    <div
+                                      key={`${row.bookmaker}-${row.selection}`}
+                                      className={`grid gap-2 rounded-lg p-3 text-xs sm:grid-cols-[minmax(0,1fr)_90px_90px_100px] sm:items-center ${
+                                        row.isBest
+                                          ? "border border-primary/25 bg-primary/10"
+                                          : "bg-secondary/30"
+                                      }`}
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="truncate font-semibold text-foreground">
+                                          {row.bookmaker}
+                                        </div>
+                                        <div className="truncate text-muted-foreground">
+                                          {row.selection}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-muted-foreground">
+                                          Quota
+                                        </div>
+                                        <div className="font-bold text-foreground">
+                                          {row.odd}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-muted-foreground">
+                                          EV
+                                        </div>
+                                        <div
+                                          className={`font-bold ${row.valueEdge >= 0 ? "text-primary" : "text-amber-300"}`}
+                                        >
+                                          {row.valueEdge >= 0 ? "+" : ""}
+                                          {row.valueEdge}%
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="text-muted-foreground">
+                                          Modello
+                                        </div>
+                                        <div className="font-bold text-foreground">
+                                          {row.modelProbability}%
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                            {!playerPropsLoading &&
+                              !playerPropsError &&
+                              (!playerPropsPayload ||
+                                !playerPropsPayload.rows?.length) && (
+                                <div className="rounded-lg bg-secondary/30 px-3 py-4 text-xs text-muted-foreground">
+                                  Nessuna quota disponibile per il mercato
+                                  selezionato.
+                                </div>
+                              )}
+                          </GlassCard>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {formationsDeepTab === FORMATIONS_DEEP_TABS.teamMomentum && (
                     <div className="space-y-4">
@@ -1552,19 +1881,26 @@ export default function MatchDetail() {
 
                       {!teamMomentumLoading && teamMomentumError && (
                         <GlassCard>
-                          <p className="text-xs text-destructive">{teamMomentumError}</p>
+                          <p className="text-xs text-destructive">
+                            {teamMomentumError}
+                          </p>
                         </GlassCard>
                       )}
 
                       {!teamMomentumLoading && !teamMomentumError && (
                         <>
                           <div className="grid gap-4 md:grid-cols-2">
-                            {[teamMomentumPayload?.home, teamMomentumPayload?.away]
+                            {[
+                              teamMomentumPayload?.home,
+                              teamMomentumPayload?.away,
+                            ]
                               .filter(Boolean)
                               .map((team) => (
                                 <GlassCard key={team.teamId || team.team}>
                                   <div className="mb-3 flex items-center justify-between gap-2">
-                                    <h3 className="text-sm font-semibold text-foreground">{team.team}</h3>
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                      {team.team}
+                                    </h3>
                                     <span className="rounded-full border border-border/40 bg-secondary/40 px-2 py-1 text-[11px] font-semibold text-muted-foreground">
                                       {team.marketView}
                                     </span>
@@ -1573,16 +1909,28 @@ export default function MatchDetail() {
                                     <>
                                       <div className="grid grid-cols-3 gap-2">
                                         <div className="rounded-lg bg-secondary/30 p-3">
-                                          <div className="text-[11px] text-muted-foreground">xPts</div>
-                                          <div className="text-lg font-bold text-primary">{team.xPts}</div>
+                                          <div className="text-[11px] text-muted-foreground">
+                                            xPts
+                                          </div>
+                                          <div className="text-lg font-bold text-primary">
+                                            {team.xPts}
+                                          </div>
                                         </div>
                                         <div className="rounded-lg bg-secondary/30 p-3">
-                                          <div className="text-[11px] text-muted-foreground">Punti reali</div>
-                                          <div className="text-lg font-bold text-foreground">{team.actualPoints}</div>
+                                          <div className="text-[11px] text-muted-foreground">
+                                            Punti reali
+                                          </div>
+                                          <div className="text-lg font-bold text-foreground">
+                                            {team.actualPoints}
+                                          </div>
                                         </div>
                                         <div className="rounded-lg bg-secondary/30 p-3">
-                                          <div className="text-[11px] text-muted-foreground">Delta</div>
-                                          <div className={`text-lg font-bold ${team.delta >= 0 ? "text-primary" : "text-amber-300"}`}>
+                                          <div className="text-[11px] text-muted-foreground">
+                                            Delta
+                                          </div>
+                                          <div
+                                            className={`text-lg font-bold ${team.delta >= 0 ? "text-primary" : "text-amber-300"}`}
+                                          >
                                             {team.delta >= 0 ? "+" : ""}
                                             {team.delta}
                                           </div>
@@ -1590,12 +1938,20 @@ export default function MatchDetail() {
                                       </div>
                                       <div className="mt-3 grid grid-cols-2 gap-2">
                                         <div className="rounded-lg bg-secondary/30 p-3 text-xs">
-                                          <div className="text-muted-foreground">Segna di più</div>
-                                          <div className="mt-1 font-semibold text-foreground">{team.strongestScoringWindow}</div>
+                                          <div className="text-muted-foreground">
+                                            Segna di più
+                                          </div>
+                                          <div className="mt-1 font-semibold text-foreground">
+                                            {team.strongestScoringWindow}
+                                          </div>
                                         </div>
                                         <div className="rounded-lg bg-secondary/30 p-3 text-xs">
-                                          <div className="text-muted-foreground">Subisce di più</div>
-                                          <div className="mt-1 font-semibold text-foreground">{team.highestConcedingWindow}</div>
+                                          <div className="text-muted-foreground">
+                                            Subisce di più
+                                          </div>
+                                          <div className="mt-1 font-semibold text-foreground">
+                                            {team.highestConcedingWindow}
+                                          </div>
                                         </div>
                                       </div>
                                       <div className="mt-3 space-y-1">
@@ -1604,26 +1960,37 @@ export default function MatchDetail() {
                                             key={bucket.key}
                                             className="grid grid-cols-[70px_1fr_1fr] items-center gap-2 rounded-lg bg-secondary/30 px-3 py-2 text-xs"
                                           >
-                                            <span className="text-muted-foreground">{bucket.key}</span>
-                                            <span className="text-foreground">Gol {bucket.scored}</span>
-                                            <span className="text-foreground">Subiti {bucket.conceded}</span>
+                                            <span className="text-muted-foreground">
+                                              {bucket.key}
+                                            </span>
+                                            <span className="text-foreground">
+                                              Gol {bucket.scored}
+                                            </span>
+                                            <span className="text-foreground">
+                                              Subiti {bucket.conceded}
+                                            </span>
                                           </div>
                                         ))}
                                       </div>
                                     </>
                                   ) : (
                                     <div className="rounded-lg bg-secondary/30 px-3 py-4 text-xs text-muted-foreground">
-                                      Storico squadra non disponibile nel feed corrente per questa lega/team.
+                                      Storico squadra non disponibile nel feed
+                                      corrente per questa lega/team.
                                     </div>
                                   )}
                                 </GlassCard>
                               ))}
                           </div>
 
-                          {(teamMomentumPayload?.pressurePreview || match.pressure_preview) && (
+                          {(teamMomentumPayload?.pressurePreview ||
+                            match.pressure_preview) && (
                             <GlassCard>
                               <PressurePreviewChart
-                                preview={teamMomentumPayload?.pressurePreview || match.pressure_preview}
+                                preview={
+                                  teamMomentumPayload?.pressurePreview ||
+                                  match.pressure_preview
+                                }
                                 supportInsight={pressureSupport}
                               />
                             </GlassCard>
@@ -1636,8 +2003,15 @@ export default function MatchDetail() {
               </TabsContent>
 
               <TabsContent value="contesto" className="space-y-3">
-                <Accordion type="multiple" defaultValue={["standings", "coaches"]} className="space-y-2">
-                  <AccordionItem value="standings" className="rounded-xl border border-border/40 bg-secondary/10 px-3">
+                <Accordion
+                  type="multiple"
+                  defaultValue={["standings", "coaches"]}
+                  className="space-y-2"
+                >
+                  <AccordionItem
+                    value="standings"
+                    className="rounded-xl border border-border/40 bg-secondary/10 px-3"
+                  >
                     <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline py-3">
                       Standings stagione
                     </AccordionTrigger>
@@ -1668,7 +2042,9 @@ export default function MatchDetail() {
                                     </div>
                                   </div>
                                   <div className="text-xl font-black text-primary">
-                                    {entry.row ? `#${entry.row.position}` : "n/d"}
+                                    {entry.row
+                                      ? `#${entry.row.position}`
+                                      : "n/d"}
                                   </div>
                                 </div>
                               </div>
@@ -1678,14 +2054,26 @@ export default function MatchDetail() {
                             <div
                               key={row.id}
                               className={`grid min-w-0 grid-cols-[28px_minmax(0,1fr)_36px_36px_44px] gap-1.5 items-center rounded-lg p-2 sm:grid-cols-[32px_minmax(0,1fr)_40px_40px_48px] sm:gap-2 sm:p-2.5 ${
-                                row.highlighted ? "bg-primary/10 border border-primary/20" : "bg-secondary/30"
+                                row.highlighted
+                                  ? "bg-primary/10 border border-primary/20"
+                                  : "bg-secondary/30"
                               }`}
                             >
-                              <span className="text-xs font-bold text-muted-foreground">{row.position}</span>
-                              <span className="text-xs font-semibold text-foreground truncate">{row.team}</span>
-                              <span className="text-xs text-center text-muted-foreground">{row.played}</span>
-                              <span className="text-xs text-center text-muted-foreground">{row.goalDifference}</span>
-                              <span className="text-xs text-right font-bold text-primary">{row.points} pt</span>
+                              <span className="text-xs font-bold text-muted-foreground">
+                                {row.position}
+                              </span>
+                              <span className="text-xs font-semibold text-foreground truncate">
+                                {row.team}
+                              </span>
+                              <span className="text-xs text-center text-muted-foreground">
+                                {row.played}
+                              </span>
+                              <span className="text-xs text-center text-muted-foreground">
+                                {row.goalDifference}
+                              </span>
+                              <span className="text-xs text-right font-bold text-primary">
+                                {row.points} pt
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -1697,36 +2085,65 @@ export default function MatchDetail() {
                     </AccordionContent>
                   </AccordionItem>
 
-                  <AccordionItem value="coaches" className="rounded-xl border border-border/40 bg-secondary/10 px-3">
+                  <AccordionItem
+                    value="coaches"
+                    className="rounded-xl border border-border/40 bg-secondary/10 px-3"
+                  >
                     <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline py-3">
                       Allenatori
                     </AccordionTrigger>
                     <AccordionContent>
                       <div className="grid md:grid-cols-2 gap-4 pb-2">
                         <div className="space-y-2">
-                          <div className="text-xs font-semibold text-primary">{match.home}</div>
-                          {homeCoaches.length > 0 ? homeCoaches.map((coach) => (
-                            <div key={coach.id} className="p-2.5 rounded-lg bg-secondary/30">
-                              <div className="text-sm font-semibold text-foreground">{coach.name}</div>
-                              {coach.dateOfBirth && (
-                                <div className="text-xs text-muted-foreground">Nato il {coach.dateOfBirth}</div>
-                              )}
-                            </div>
-                          )) : (
-                            <p className="text-xs text-muted-foreground">Coach non disponibile.</p>
+                          <div className="text-xs font-semibold text-primary">
+                            {match.home}
+                          </div>
+                          {homeCoaches.length > 0 ? (
+                            homeCoaches.map((coach) => (
+                              <div
+                                key={coach.id}
+                                className="p-2.5 rounded-lg bg-secondary/30"
+                              >
+                                <div className="text-sm font-semibold text-foreground">
+                                  {coach.name}
+                                </div>
+                                {coach.dateOfBirth && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Nato il {coach.dateOfBirth}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Coach non disponibile.
+                            </p>
                           )}
                         </div>
                         <div className="space-y-2">
-                          <div className="text-xs font-semibold text-primary">{match.away}</div>
-                          {awayCoaches.length > 0 ? awayCoaches.map((coach) => (
-                            <div key={coach.id} className="p-2.5 rounded-lg bg-secondary/30">
-                              <div className="text-sm font-semibold text-foreground">{coach.name}</div>
-                              {coach.dateOfBirth && (
-                                <div className="text-xs text-muted-foreground">Nato il {coach.dateOfBirth}</div>
-                              )}
-                            </div>
-                          )) : (
-                            <p className="text-xs text-muted-foreground">Coach non disponibile.</p>
+                          <div className="text-xs font-semibold text-primary">
+                            {match.away}
+                          </div>
+                          {awayCoaches.length > 0 ? (
+                            awayCoaches.map((coach) => (
+                              <div
+                                key={coach.id}
+                                className="p-2.5 rounded-lg bg-secondary/30"
+                              >
+                                <div className="text-sm font-semibold text-foreground">
+                                  {coach.name}
+                                </div>
+                                {coach.dateOfBirth && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Nato il {coach.dateOfBirth}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Coach non disponibile.
+                            </p>
                           )}
                         </div>
                       </div>
@@ -1737,16 +2154,29 @@ export default function MatchDetail() {
 
               <TabsContent value="h2h">
                 <GlassCard>
-                  <h3 className="font-semibold text-sm text-foreground mb-4">Testa a Testa</h3>
+                  <h3 className="font-semibold text-sm text-foreground mb-4">
+                    Testa a Testa
+                  </h3>
                   {match.h2h.length > 0 ? (
                     <div className="space-y-2">
                       {match.h2h.map((entry, index) => (
-                        <div key={`${entry.date}-${index}`} className="flex min-w-0 flex-col gap-2 rounded-lg bg-secondary/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-                          <span className="shrink-0 text-xs text-muted-foreground">{entry.date}</span>
+                        <div
+                          key={`${entry.date}-${index}`}
+                          className="flex min-w-0 flex-col gap-2 rounded-lg bg-secondary/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {entry.date}
+                          </span>
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="truncate text-xs text-foreground">{entry.home}</span>
-                            <span className="shrink-0 font-bold text-foreground">{entry.score}</span>
-                            <span className="truncate text-xs text-foreground">{entry.away}</span>
+                            <span className="truncate text-xs text-foreground">
+                              {entry.home}
+                            </span>
+                            <span className="shrink-0 font-bold text-foreground">
+                              {entry.score}
+                            </span>
+                            <span className="truncate text-xs text-foreground">
+                              {entry.away}
+                            </span>
                           </div>
                         </div>
                       ))}
@@ -1762,18 +2192,25 @@ export default function MatchDetail() {
           </div>
 
           <div className="min-w-0 space-y-4">
-            <OddsComparison bookmakers={comparisonBookmakers} valueMarkets={match.valueMarkets} />
+            <OddsComparison
+              bookmakers={comparisonBookmakers}
+              valueMarkets={match.valueMarkets}
+            />
             {isPremium ? (
               <GlassCard className="border-primary/20">
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingUp className="w-4 h-4 text-primary" />
-                  <h3 className="font-semibold text-sm text-foreground">Analisi Pro</h3>
+                  <h3 className="font-semibold text-sm text-foreground">
+                    Analisi Pro
+                  </h3>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed mb-3">
                   {premiumAnalysis}
                 </p>
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
-                  <div className="text-xs font-semibold text-primary">Insight corrente</div>
+                  <div className="text-xs font-semibold text-primary">
+                    Insight corrente
+                  </div>
                   <div className="text-xs text-foreground mt-1">
                     {match.valueBet
                       ? valueBetInsightText
@@ -1799,4 +2236,3 @@ export default function MatchDetail() {
     </div>
   );
 }
-

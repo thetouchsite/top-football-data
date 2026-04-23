@@ -120,10 +120,10 @@ class MongoAlertRepository:
         except Exception as error:
             self._mark_unavailable(error)
 
-    def save_single_alert(self, market: FixtureMarket, telegram_sent: bool) -> None:
+    def save_single_alert(self, market: FixtureMarket, telegram_sent: bool) -> bool:
         self.ensure_indexes()
         if not self.enabled:
-            return
+            return False
 
         now = _now()
         doc = {
@@ -150,13 +150,15 @@ class MongoAlertRepository:
                 },
                 upsert=True,
             )
+            return True
         except Exception as error:
             self._mark_unavailable(error)
+            return False
 
-    def save_multibet_alert(self, multibet: MultiBet, telegram_sent: bool) -> None:
+    def save_multibet_alert(self, multibet: MultiBet, telegram_sent: bool) -> bool:
         self.ensure_indexes()
         if not self.enabled:
-            return
+            return False
 
         now = _now()
         body = _multibet_to_doc(multibet)
@@ -184,8 +186,25 @@ class MongoAlertRepository:
                 },
                 upsert=True,
             )
+            return True
         except Exception as error:
             self._mark_unavailable(error)
+            return False
+
+    def mark_telegram_sent(self, alert_key: str) -> bool:
+        self.ensure_indexes()
+        if not self.enabled or self.alerts is None:
+            return False
+
+        try:
+            self.alerts.update_one(
+                {"alertKey": alert_key},
+                {"$set": {"telegramSent": True, "updatedAt": _now()}},
+            )
+            return True
+        except Exception as error:
+            self._mark_unavailable(error)
+            return False
 
     def delete_all_bet_alerts(self) -> int:
         self.ensure_indexes()
