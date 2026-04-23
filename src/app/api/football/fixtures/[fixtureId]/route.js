@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createProviderFreshness } from "@/lib/domain/freshness";
+import { getFixtureReadMeta } from "@/server/football/runtime";
 import { getFixturePayload } from "@/server/football/service";
 
 export const runtime = "nodejs";
@@ -7,7 +8,11 @@ const DEBUG_FOOTBALL_TELEMETRY = ["1", "true", "yes"].includes(
   String(process.env.DEBUG_FOOTBALL_TELEMETRY || "").toLowerCase()
 );
 
-function deriveRouteTelemetryFromSource(source, isFallback) {
+function deriveRouteTelemetryFromSource(source, isFallback, readMeta) {
+  const layer = readMeta?.cacheLayer;
+  if (layer === "L1" && source === "sportmonks_cache" && !isFallback) {
+    return { cacheHit: true, cacheState: "hit", source: "memory_cache" };
+  }
   if (source === "sportmonks_cache" && !isFallback) {
     return { cacheHit: true, cacheState: "hit", source: "memory_cache" };
   }
@@ -35,9 +40,10 @@ export async function GET(request, { params }) {
     const result = await getFixturePayload(fixtureId, { view });
     const payload = result?.body || {};
     const e2eMs = Date.now() - startedAt;
+    const readMeta = getFixtureReadMeta(payload);
     const requestPurpose = view === "core" ? "fixture_detail_core" : "fixture_detail";
     const dtoTarget = view === "core" ? "MatchDetailCoreDTO" : "MatchDetailEnrichedDTO";
-    const derived = deriveRouteTelemetryFromSource(payload?.source, Boolean(payload?.isFallback));
+    const derived = deriveRouteTelemetryFromSource(payload?.source, Boolean(payload?.isFallback), readMeta);
     const routeLog = {
       route: "/api/football/fixtures/[fixtureId]",
       requestPurpose,
@@ -45,6 +51,10 @@ export async function GET(request, { params }) {
       fixtureId,
       cacheHit: derived.cacheHit,
       cacheState: derived.cacheState,
+      cacheLayer: readMeta?.cacheLayer ?? null,
+      snapshotAgeMs: readMeta?.snapshotAgeMs ?? null,
+      refreshState: readMeta?.refreshState ?? null,
+      fixtureState: readMeta?.fixtureState ?? null,
       providerLatencyMs: null,
       pagesFetched: null,
       itemsFetched: payload?.fixture ? 1 : 0,
@@ -61,7 +71,7 @@ export async function GET(request, { params }) {
       source: derived.source,
     };
     console.info(
-      `[football][summary] route=${routeLog.route} fixtureId=${routeLog.fixtureId ?? "-"} cache=${routeLog.cacheState} pages=0 items=${routeLog.itemsFetched} payloadBytes=${routeLog.payloadBytes} e2eMs=${routeLog.e2eMs} callCost=0 fallback=${routeLog.fallbackTriggered} source=${routeLog.source}`
+      `[football][summary] route=${routeLog.route} fixtureId=${routeLog.fixtureId ?? "-"} cache=${routeLog.cacheState} layer=${routeLog.cacheLayer ?? "-"} pages=0 items=${routeLog.itemsFetched} payloadBytes=${routeLog.payloadBytes} e2eMs=${routeLog.e2eMs} callCost=0 fallback=${routeLog.fallbackTriggered} source=${routeLog.source} ageMs=${routeLog.snapshotAgeMs ?? "na"} ref=${routeLog.refreshState ?? "-"} fstate=${routeLog.fixtureState ?? "-"}`
     );
     if (DEBUG_FOOTBALL_TELEMETRY) {
       console.info("[football][route]", routeLog);

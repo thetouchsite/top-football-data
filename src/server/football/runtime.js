@@ -1,4 +1,5 @@
 import { READ_META } from "./schedule-window-constants";
+const FIXTURE_READ_META = Symbol.for("@tfd/football/fixtureReadMeta");
 
 const DEBUG_FOOTBALL_TELEMETRY = ["1", "true", "yes"].includes(
   String(process.env.DEBUG_FOOTBALL_TELEMETRY || "").toLowerCase()
@@ -110,5 +111,24 @@ export function getScheduleReadMeta(payload) {
     return null;
   }
   const d = Object.getOwnPropertyDescriptor(payload, READ_META);
+  return d?.value ?? null;
+}
+
+export function attachFixtureReadMeta(payload, meta) {
+  if (payload && typeof payload === "object" && meta && typeof meta === "object") {
+    Object.defineProperty(payload, FIXTURE_READ_META, {
+      value: meta,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return payload;
+}
+
+export function getFixtureReadMeta(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const d = Object.getOwnPropertyDescriptor(payload, FIXTURE_READ_META);
   return d?.value ?? null;
 }

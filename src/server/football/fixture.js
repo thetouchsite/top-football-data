@@ -8,6 +8,7 @@ import {
 } from "@/lib/providers/sportmonks";
 import { FIXTURE_CACHE_TTL_MS } from "./contracts";
 import {
+  attachFixtureReadMeta,
   getFixtureCacheStore,
   getFixtureInflightStore,
   isRateLimitError,
@@ -15,6 +16,51 @@ import {
   mapTelemetrySource,
 } from "./runtime";
 import { buildEmptyFixturePayload, buildFixturePayload } from "./payloads";
+
+const FIXTURE_PREMATCH_TTL_MS = FIXTURE_CACHE_TTL_MS;
+const FIXTURE_LIVE_TTL_MS = 20_000;
+const FIXTURE_FINISHED_TTL_MS = 60 * 60_000;
+const FIXTURE_STALE_IF_ERROR_MAX_MS = 6 * 60 * 60_000;
+
+function deriveFixtureStateTag(normalizedFixture) {
+  const raw = String(
+    normalizedFixture?.state || normalizedFixture?.status || normalizedFixture?.raw_status || ""
+  ).toLowerCase();
+  if (!raw) {
+    return "prematch";
+  }
+  if (
+    raw.includes("live") ||
+    raw.includes("inplay") ||
+    raw.includes("1st") ||
+    raw.includes("2nd") ||
+    raw.includes("half") ||
+    raw.includes("extra")
+  ) {
+    return "live";
+  }
+  if (
+    raw.includes("finished") ||
+    raw.includes("full") ||
+    raw.includes("ft") ||
+    raw.includes("aet") ||
+    raw.includes("pen")
+  ) {
+    return "finished";
+  }
+  return "prematch";
+}
+
+function fixtureFreshTtlMs(normalizedFixture) {
+  const state = deriveFixtureStateTag(normalizedFixture);
+  if (state === "live") {
+    return FIXTURE_LIVE_TTL_MS;
+  }
+  if (state === "finished") {
+    return FIXTURE_FINISHED_TTL_MS;
+  }
+  return FIXTURE_PREMATCH_TTL_MS;
+}
 
 export async function getFixturePayload(fixtureId, options = {}) {
   const startedAt = Date.now();
@@ -35,7 +81,12 @@ export async function getFixturePayload(fixtureId, options = {}) {
     };
   }
 
-  if (cachedEntry && Date.now() - cachedEntry.updatedAt < FIXTURE_CACHE_TTL_MS) {
+  const now = Date.now();
+  const cachedAgeMs = cachedEntry ? now - cachedEntry.updatedAt : null;
+  const isFreshCacheHit =
+    cachedEntry && cachedAgeMs < fixtureFreshTtlMs(cachedEntry.normalizedFixture);
+
+  if (isFreshCacheHit) {
     const payload = buildFixturePayload({
       normalizedFixture: cachedEntry.normalizedFixture,
       rawFixture: cachedEntry.rawFixture,
@@ -66,7 +117,17 @@ export async function getFixturePayload(fixtureId, options = {}) {
       source: mapTelemetrySource(payload?.body?.source || "sportmonks_cache", {
         cacheState: "hit",
         fallbackTriggered: Boolean(payload?.body?.isFallback),
+        cacheLayer: "L1",
       }),
+      cacheLayer: "L1",
+      snapshotAgeMs: cachedAgeMs,
+      refreshState: "none",
+    });
+    attachFixtureReadMeta(payload.body, {
+      cacheLayer: "L1",
+      snapshotAgeMs: cachedAgeMs,
+      refreshState: "none",
+      fixtureState: deriveFixtureStateTag(cachedEntry.normalizedFixture),
     });
     return payload;
   }
@@ -105,6 +166,15 @@ export async function getFixturePayload(fixtureId, options = {}) {
         cacheState: "hit",
         fallbackTriggered: Boolean(inflightPayload?.body?.isFallback),
       }),
+      cacheLayer: "provider",
+      snapshotAgeMs: null,
+      refreshState: "inflight_wait",
+    });
+    attachFixtureReadMeta(inflightPayload.body, {
+      cacheLayer: "provider",
+      snapshotAgeMs: null,
+      refreshState: "inflight_wait",
+      fixtureState: null,
     });
     return inflightPayload;
   }
@@ -226,16 +296,27 @@ export async function getFixturePayload(fixtureId, options = {}) {
           cacheState: "miss",
           fallbackTriggered: Boolean(payload?.body?.isFallback),
         }),
+        cacheLayer: "provider",
+        snapshotAgeMs: 0,
+        refreshState: "rebuild_ok",
+      });
+      attachFixtureReadMeta(payload.body, {
+        cacheLayer: "provider",
+        snapshotAgeMs: 0,
+        refreshState: "rebuild_ok",
+        fixtureState: deriveFixtureStateTag(normalizedFixture),
       });
       return payload;
     } catch (error) {
-      if (cachedEntry) {
+      const staleEntry = cachedEntry || fixtureCacheStore.get(cacheKey);
+      const staleAgeMs = staleEntry ? Date.now() - staleEntry.updatedAt : null;
+      if (staleEntry && staleAgeMs < FIXTURE_STALE_IF_ERROR_MAX_MS) {
         const stalePayload = buildFixturePayload({
-          normalizedFixture: cachedEntry.normalizedFixture,
-          rawFixture: cachedEntry.rawFixture,
-          provider: cachedEntry.provider,
+          normalizedFixture: staleEntry.normalizedFixture,
+          rawFixture: staleEntry.rawFixture,
+          provider: staleEntry.provider,
           source: "sportmonks_cache",
-          updatedAt: cachedEntry.updatedAt,
+          updatedAt: staleEntry.updatedAt,
           notice: isRateLimitError(error)
             ? "Rate limit Sportmonks raggiunto. Mostro l'ultima fixture disponibile dalla cache provider."
             : error.message || "Fixture provider non aggiornata. Mostro l'ultima versione in cache.",
@@ -263,8 +344,18 @@ export async function getFixturePayload(fixtureId, options = {}) {
           source: mapTelemetrySource("sportmonks_cache", {
             cacheState: "stale-hit",
             fallbackTriggered: true,
+            cacheLayer: "L1",
           }),
           error: error?.message || "unknown_error",
+          cacheLayer: "L1",
+          snapshotAgeMs: staleAgeMs,
+          refreshState: "stale_if_error",
+        });
+        attachFixtureReadMeta(stalePayload.body, {
+          cacheLayer: "L1",
+          snapshotAgeMs: staleAgeMs,
+          refreshState: "stale_if_error",
+          fixtureState: deriveFixtureStateTag(staleEntry.normalizedFixture),
         });
         return stalePayload;
       }
@@ -298,6 +389,15 @@ export async function getFixturePayload(fixtureId, options = {}) {
           fallbackTriggered: true,
         }),
         error: error?.message || "unknown_error",
+        cacheLayer: "provider",
+        snapshotAgeMs: null,
+        refreshState: "fallback",
+      });
+      attachFixtureReadMeta(emptyPayload.body, {
+        cacheLayer: "provider",
+        snapshotAgeMs: null,
+        refreshState: "fallback",
+        fixtureState: null,
       });
       return emptyPayload;
     } finally {
