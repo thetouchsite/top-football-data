@@ -78,3 +78,18 @@ export function getScheduleWindow(days = 7, options = {}) {
 export function getFixture(fixtureId) {
   return requestJson(`/api/football/fixtures/${encodeURIComponent(fixtureId)}`);
 }
+
+export function getPlayerProps({ fixtureId, playerId, market }) {
+  const params = new URLSearchParams({
+    fixtureId: String(fixtureId || ""),
+    playerId: String(playerId || ""),
+    market: String(market || "anytime_goalscorer"),
+  });
+  return requestJson(`/api/football/player-props?${params.toString()}`);
+}
+
+export function getTeamMomentum(fixtureId) {
+  return requestJson(
+    `/api/football/team-momentum?fixtureId=${encodeURIComponent(String(fixtureId || ""))}`
+  );
+}

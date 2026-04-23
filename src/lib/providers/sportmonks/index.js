@@ -136,6 +136,8 @@ export const SPORTMONKS_INCLUDE_POLICY = {
     "lineups",
     "lineups.player",
     "lineups.details.type",
+    "lineups.expected",
+    "lineups.expected.type",
     "events.type",
     "formations",
     "coaches",
@@ -250,6 +252,43 @@ const SPORTMONKS_FIXTURE_CORE_INCLUDE_ATTEMPTS = [
     "odds.bookmaker",
     "predictions.type",
     "statistics.type",
+  ],
+];
+
+const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDE_ATTEMPTS = [
+  [
+    "lineups",
+    "lineups.player",
+    "lineups.details.type",
+    "lineups.expected",
+    "lineups.expected.type",
+    "events.type",
+    "formations",
+    "coaches",
+    "referees",
+  ],
+  [
+    "lineups",
+    "lineups.player",
+    "lineups.details.type",
+    "events.type",
+    "formations",
+    "coaches",
+    "referees",
+  ],
+  [
+    "lineups",
+    "lineups.player",
+    "events.type",
+    "formations",
+    "coaches",
+    "referees",
+  ],
+  [
+    "lineups",
+    "formations",
+    "coaches",
+    "referees",
   ],
 ];
 
@@ -2835,40 +2874,109 @@ function buildPlayerInsight(player) {
   return `${player.name} e incluso nel feed Sportmonks corrente, ma il profilo resta descrittivo finche non arriva il layer odds dedicato.`;
 }
 
+function readLineupDetailMetric(detailEntries = [], aliases = []) {
+  const normalizedAliases = aliases.map((alias) => normalizeLookupKey(alias));
+  const match = asArray(detailEntries).find((detailEntry) => {
+    const key = normalizeLookupKey(
+      detailEntry?.type?.developer_name ||
+        detailEntry?.type?.code ||
+        detailEntry?.type?.name ||
+        detailEntry?.type_id
+    );
+
+    return normalizedAliases.some((alias) => key.includes(alias));
+  });
+  const value = pickValueEntry(match?.value ?? match?.data ?? match);
+
+  return {
+    value: Number.isFinite(safeNumber(value, Number.NaN)) ? value : null,
+    source: match ? "sportmonks_lineup_details" : "not_available",
+  };
+}
+
+function readLineupExpectedMetric(lineupEntry, aliases = []) {
+  const normalizedAliases = aliases.map((alias) => normalizeLookupKey(alias));
+  const match = asArray(lineupEntry?.expected).find((entry) => {
+    const typeKey = normalizeLookupKey(
+      entry?.type?.developer_name || entry?.type?.code || entry?.type?.name || entry?.type_id
+    );
+
+    return normalizedAliases.some((alias) => typeKey.includes(alias));
+  });
+  const value = pickValueEntry(match?.data || match);
+
+  return {
+    value: Number.isFinite(safeNumber(value, Number.NaN)) ? value : null,
+    source: match ? "sportmonks_expected" : "not_available",
+  };
+}
+
+function getPlayerEventCount(events, playerName, eventTypes = []) {
+  const normalizedPlayerName = normalizeName(playerName);
+  const normalizedTypes = new Set(eventTypes);
+
+  return asArray(events).filter(
+    (event) =>
+      normalizedTypes.has(event.type) &&
+      normalizeName(event.player) === normalizedPlayerName
+  ).length;
+}
+
+function normalizePlayerHeatmap(lineupEntry) {
+  const raw =
+    lineupEntry?.heatmap ||
+    lineupEntry?.heat_map ||
+    lineupEntry?.player?.heatmap ||
+    lineupEntry?.player?.heat_map ||
+    null;
+
+  if (!raw) {
+    return {
+      available: false,
+      zones: [],
+      source: "not_available",
+    };
+  }
+
+  const zones = asArray(raw?.zones || raw?.data || raw)
+    .map((zone, index) => ({
+      id: String(zone?.id || zone?.zone || index),
+      label: zone?.label || zone?.name || zone?.zone || `Zona ${index + 1}`,
+      value: safeNumber(zone?.value ?? zone?.intensity ?? zone?.count, 0),
+    }))
+    .filter((zone) => zone.value > 0)
+    .slice(0, 6);
+
+  return {
+    available: zones.length > 0,
+    zones,
+    source: zones.length > 0 ? "sportmonks_heatmap" : "not_available",
+  };
+}
+
 function buildLineupPlayerProfiles(lineups, renderedLineups, normalizedEvents, homeName, awayName) {
   const players = asArray(lineups)
     .filter((lineupEntry) => lineupEntry?.formation_position || lineupEntry?.formation_field)
     .map((lineupEntry) => {
-      const expectedEntry =
-        asArray(lineupEntry?.expected).find((entry) => {
-          const typeKey = normalizeLookupKey(
-            entry?.type?.developer_name || entry?.type?.code || entry?.type_id
-          );
-
-          return typeKey.includes("5304") || typeKey.includes("expected_goals");
-        }) || null;
       const detailEntries = asArray(lineupEntry?.details);
-      const readDetailValue = (keywords = []) => {
-        const match = detailEntries.find((detailEntry) => {
-          const key = normalizeLookupKey(
-            detailEntry?.type?.developer_name || detailEntry?.type?.code || detailEntry?.type?.name || detailEntry?.type_id
-          );
-
-          return keywords.some((keyword) => key.includes(keyword));
-        });
-
-        return pickValueEntry(match?.value ?? match?.data ?? match);
-      };
-      const xg = roundTo(
-        pickValueEntry(expectedEntry?.data || expectedEntry) ||
-          readDetailValue(["expected_goals", "5304"]),
-        2
-      );
-      const shots = roundTo(
-        readDetailValue(["shots_total", "shots", "shots_on_target"]) ||
-          Math.max(0, Math.round(xg * 2.5)),
-        0
-      );
+      const expectedGoalsMetric = readLineupExpectedMetric(lineupEntry, [
+        "expected_goals",
+        "5304",
+        "xg",
+      ]);
+      const detailExpectedGoalsMetric = readLineupDetailMetric(detailEntries, [
+        "expected_goals",
+        "5304",
+        "xg",
+      ]);
+      const shotsMetric = readLineupDetailMetric(detailEntries, [
+        "shots_total",
+        "total_shots",
+        "shots",
+      ]);
+      const shotsOnTargetMetric = readLineupDetailMetric(detailEntries, [
+        "shots_on_target",
+      ]);
       const name =
         lineupEntry?.player_name ||
         lineupEntry?.player?.display_name ||
@@ -2881,12 +2989,49 @@ function buildLineupPlayerProfiles(lineups, renderedLineups, normalizedEvents, h
         )
           ? homeName
           : awayName;
+      const xgMetric =
+        expectedGoalsMetric.value != null ? expectedGoalsMetric : detailExpectedGoalsMetric;
+      const xg = roundTo(safeNumber(xgMetric.value, 0), 2);
+      const estimatedShots = xg > 0 ? Math.max(0, Math.round(xg * 2.5)) : 0;
+      const shotsRaw = shotsMetric.value ?? shotsOnTargetMetric.value;
+      const shots = roundTo(shotsRaw ?? estimatedShots, 0);
+      const shotsSource =
+        shotsRaw != null
+          ? shotsMetric.value != null
+            ? shotsMetric.source
+            : shotsOnTargetMetric.source
+          : estimatedShots > 0
+            ? "derived_from_xg"
+            : "not_available";
       const goals =
-        roundTo(readDetailValue(["goals"])) ||
+        roundTo(readLineupDetailMetric(detailEntries, ["goals"]).value) ||
         countPlayerEvents(normalizedEvents, name, "goal");
-      const assists = roundTo(readDetailValue(["assists"]));
-      const fouls = roundTo(readDetailValue(["fouls"]));
-      const minutes = roundTo(readDetailValue(["minutes_played", "minutes"])) || 90;
+      const assists = roundTo(readLineupDetailMetric(detailEntries, ["assists"]).value);
+      const foulsCommittedMetric = readLineupDetailMetric(detailEntries, [
+        "fouls_committed",
+        "fouls",
+      ]);
+      const foulsSufferedMetric = readLineupDetailMetric(detailEntries, [
+        "fouls_drawn",
+        "fouls_suffered",
+        "was_fouled",
+      ]);
+      const yellowCardsMetric = readLineupDetailMetric(detailEntries, [
+        "yellow_cards",
+        "yellow_card",
+      ]);
+      const redCardsMetric = readLineupDetailMetric(detailEntries, [
+        "red_cards",
+        "red_card",
+      ]);
+      const minutes = roundTo(
+        readLineupDetailMetric(detailEntries, ["minutes_played", "minutes"]).value
+      ) || 90;
+      const yellowCards =
+        roundTo(yellowCardsMetric.value) || getPlayerEventCount(normalizedEvents, name, ["yellow"]);
+      const redCards =
+        roundTo(redCardsMetric.value) || getPlayerEventCount(normalizedEvents, name, ["red"]);
+      const heatmap = normalizePlayerHeatmap(lineupEntry);
       const scorerProb = Math.min(
         78,
         Math.max(6, Math.round(10 + xg * 28 + shots * 3 + goals * 4))
@@ -2912,15 +3057,53 @@ function buildLineupPlayerProfiles(lineups, renderedLineups, normalizedEvents, h
           "--",
         xg: xg || 0,
         shots: shots || 0,
+        shotsOnTarget: roundTo(safeNumber(shotsOnTargetMetric.value, 0), 0),
         form: getPlayerFormLabel({ xg, shots }),
         goals: goals || 0,
         assists: assists || 0,
-        fouls: fouls || 0,
+        fouls: roundTo(safeNumber(foulsCommittedMetric.value, 0), 1),
+        foulsSuffered: roundTo(safeNumber(foulsSufferedMetric.value, 0), 1),
+        yellowCards,
+        redCards,
         minutes: minutes || 0,
         formHistory: buildPlayerFormHistory({ xg }),
         insight: buildPlayerInsight({ name, xg, shots }),
         scorerOdds: probabilityToOdds(scorerProb),
         scorerProb,
+        heatmap,
+        playerProps: {
+          xg: {
+            value: xg || null,
+            source: xgMetric.source,
+          },
+          shots: {
+            value: shots || null,
+            source: shotsSource,
+          },
+          shotsOnTarget: {
+            value: shotsOnTargetMetric.value ?? null,
+            source: shotsOnTargetMetric.source,
+          },
+          discipline: {
+            foulsCommitted: foulsCommittedMetric.value ?? null,
+            foulsSuffered: foulsSufferedMetric.value ?? null,
+            yellowCards,
+            redCards,
+            source:
+              foulsCommittedMetric.value != null ||
+              foulsSufferedMetric.value != null ||
+              yellowCards > 0 ||
+              redCards > 0
+                ? "sportmonks_lineup_details_events"
+                : "not_available",
+          },
+          heatmap,
+          scorer: {
+            odds: probabilityToOdds(scorerProb),
+            probability: scorerProb,
+            source: "derived_model",
+          },
+        },
       };
     });
 
@@ -2934,11 +3117,19 @@ function buildImpactPlayers(playerProfiles = []) {
   return [...playerProfiles]
     .slice(0, 5)
     .map((player) => ({
+      id: player.id,
       name: player.name,
+      team: player.team,
       media: player.media || buildMediaBundle(null),
       odds: player.scorerOdds,
       prob: player.scorerProb,
       xg: player.xg,
+      shots: player.shots,
+      propsSource: {
+        xg: player.playerProps?.xg?.source || "not_available",
+        shots: player.playerProps?.shots?.source || "not_available",
+        scorer: player.playerProps?.scorer?.source || "derived_model",
+      },
     }));
 }
 
@@ -3630,7 +3821,7 @@ export async function fetchSportmonksScheduleWindow(
  * Quote pre-match dal feed dedicato Sportmonks (non solo include su `fixtures`).
  * @see https://api.sportmonks.com/v3/football/odds/pre-match/fixtures/{fixtureId}
  */
-async function fetchSportmonksPrematchOddsForFixture(fixtureId) {
+export async function fetchSportmonksPrematchOddsForFixture(fixtureId) {
   const id = String(fixtureId || "").trim();
   if (!id) {
     return [];
@@ -3645,6 +3836,105 @@ async function fetchSportmonksPrematchOddsForFixture(fixtureId) {
   } catch {
     return [];
   }
+}
+
+export async function fetchSportmonksRecentFixturesForParticipant(
+  participantId,
+  options = {}
+) {
+  const id = String(participantId || "").trim();
+  if (!id) {
+    return [];
+  }
+
+  const limit = clampInteger(options?.limit, 8, 1, 20);
+  const include = [
+    "league",
+    "state",
+    "participants",
+    "scores",
+    "events.type",
+    "statistics.type",
+    "predictions.type",
+  ];
+  const pathCandidates = [
+    `fixtures/participants/${encodeURIComponent(id)}/latest`,
+    `fixtures/teams/${encodeURIComponent(id)}/latest`,
+    `fixtures/participants/${encodeURIComponent(id)}`,
+    `fixtures/teams/${encodeURIComponent(id)}`,
+  ];
+
+  for (const pathname of pathCandidates) {
+    try {
+      const response = await requestSportmonksCollection(pathname, {
+        include,
+        timezone: ROME_TIMEZONE,
+        perPage: limit,
+        maxPages: 1,
+        telemetry: {
+          route: options?.telemetry?.route || "/api/football/team-momentum",
+          requestPurpose:
+            options?.telemetry?.requestPurpose || "team_momentum_recent_fixtures",
+          days: null,
+          fixtureId: options?.telemetry?.fixtureId ?? null,
+          dtoTarget: options?.telemetry?.dtoTarget || "TeamMomentumDTO",
+          dtoVersion: options?.telemetry?.dtoVersion || "v1",
+        },
+      });
+      const fixtures = asArray(response?.data).slice(0, limit);
+      if (fixtures.length > 0) {
+        return fixtures;
+      }
+    } catch {
+      // try next candidate path
+    }
+  }
+
+  try {
+    const safeDays = clampInteger(options?.days, 45, 7, 120);
+    const fromDate = new Date();
+    const toDate = new Date();
+    fromDate.setDate(fromDate.getDate() - safeDays);
+    const from = buildDateKey(fromDate);
+    const to = buildDateKey(toDate);
+    const leagueFilters = getSportmonksFixtureLeaguesFilterParam();
+    const response = await requestSportmonksCollection(`fixtures/between/${from}/${to}`, {
+      include,
+      timezone: ROME_TIMEZONE,
+      perPage: 50,
+      maxPages: Math.max(2, Math.ceil(limit / 2)),
+      filters: leagueFilters || undefined,
+      telemetry: {
+        route: options?.telemetry?.route || "/api/football/team-momentum",
+        requestPurpose:
+          options?.telemetry?.requestPurpose || "team_momentum_recent_fixtures_fallback",
+        days: safeDays,
+        fixtureId: options?.telemetry?.fixtureId ?? null,
+        dtoTarget: options?.telemetry?.dtoTarget || "TeamMomentumDTO",
+        dtoVersion: options?.telemetry?.dtoVersion || "v1",
+      },
+    });
+    const fixtures = asArray(response?.data)
+      .filter((fixture) =>
+        asArray(fixture?.participants).some(
+          (participant) => String(participant?.id || "") === id
+        )
+      )
+      .sort((left, right) => {
+        const leftTs = parseDate(left?.starting_at || left?.startingAt)?.getTime() || 0;
+        const rightTs = parseDate(right?.starting_at || right?.startingAt)?.getTime() || 0;
+        return rightTs - leftTs;
+      })
+      .slice(0, limit);
+
+    if (fixtures.length > 0) {
+      return fixtures;
+    }
+  } catch {
+    // final fallback failed
+  }
+
+  return [];
 }
 
 /**
@@ -3709,21 +3999,23 @@ export async function fetchSportmonksFixtureEnrichmentById(fixtureId, telemetry 
     return null;
   }
 
-  const payload = await requestSportmonksJson(`fixtures/${encodeURIComponent(normalizedFixtureId)}`, {
-    include: SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDES,
-    timezone: ROME_TIMEZONE,
-    perPage: null,
-    telemetry: {
-      route: telemetry.route || "/api/football/fixtures/[fixtureId]",
-      requestPurpose: telemetry.requestPurpose || "fixture_detail_enrichment",
-      days: null,
-      fixtureId: normalizedFixtureId,
-      dtoTarget: telemetry.dtoTarget || "MatchDetailEnrichedDTO",
-      dtoVersion: telemetry.dtoVersion || "v1",
-      fallbackTriggered: false,
-      retryCount: 0,
-    },
-  });
+  const payload = await requestSportmonksWithIncludeFallback(
+    `fixtures/${encodeURIComponent(normalizedFixtureId)}`,
+    SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDE_ATTEMPTS,
+    {
+      timezone: ROME_TIMEZONE,
+      perPage: null,
+      includeScope: "detail_enrichment",
+      telemetry: {
+        route: telemetry.route || "/api/football/fixtures/[fixtureId]",
+        requestPurpose: telemetry.requestPurpose || "fixture_detail_enrichment",
+        days: null,
+        fixtureId: normalizedFixtureId,
+        dtoTarget: telemetry.dtoTarget || "MatchDetailEnrichedDTO",
+        dtoVersion: telemetry.dtoVersion || "v1",
+      },
+    }
+  );
 
   return payload?.data || null;
 }

@@ -5,11 +5,42 @@ import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/AppContext";
 
+function hasRealSource(source) {
+  return source && !["not_available", "derived_model", "derived_from_xg"].includes(source);
+}
+
+function formatMetricValue(value, fallback = "n/d") {
+  if (value == null || value === "" || !Number.isFinite(Number(value))) {
+    return fallback;
+  }
+
+  return Number(value);
+}
+
+function formatSourceLabel(source) {
+  if (source === "sportmonks_expected") return "Sportmonks xG";
+  if (source === "sportmonks_lineup_details") return "Sportmonks";
+  if (source === "sportmonks_lineup_details_events") return "Sportmonks";
+  if (source === "derived_from_xg") return "Stima da xG";
+  if (source === "derived_model") return "Stima modello";
+  if (source === "sportmonks_heatmap") return "Sportmonks";
+  return "n/d";
+}
+
 export default function PlayerCard({ player, expanded = false, oddsAvailable = false }) {
   const { favorites, following, toggleFavoritePlayer, toggleFollowPlayer } = useApp();
   if (!player) return null;
   const isFav = favorites.players.includes(player.name);
   const isFollowed = following.players.includes(player.name);
+  const playerProps = player.playerProps || {};
+  const xgSource = playerProps.xg?.source || "not_available";
+  const shotsSource = playerProps.shots?.source || "not_available";
+  const discipline = playerProps.discipline || {};
+  const heatmap = playerProps.heatmap || player.heatmap || { available: false, zones: [] };
+  const xgValue = playerProps.xg?.value ?? player.xg;
+  const shotsValue = playerProps.shots?.value ?? player.shots;
+  const sourceBadge =
+    hasRealSource(xgSource) || hasRealSource(shotsSource) ? "Dati Sportmonks" : "Dati non disponibili";
 
   return (
     <GlassCard>
@@ -35,6 +66,15 @@ export default function PlayerCard({ player, expanded = false, oddsAvailable = f
             </p>
           </div>
         </div>
+        <span
+          className={`hidden rounded-full border px-2 py-1 text-[10px] font-semibold sm:inline-flex ${
+            sourceBadge === "Dati Sportmonks"
+              ? "border-primary/25 bg-primary/10 text-primary"
+              : "border-border/40 bg-secondary/40 text-muted-foreground"
+          }`}
+        >
+          {sourceBadge}
+        </span>
         <button
           onClick={() => toggleFavoritePlayer(player.name)}
           className={`p-2 rounded-lg transition-all ${
@@ -66,11 +106,17 @@ export default function PlayerCard({ player, expanded = false, oddsAvailable = f
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="text-center p-2.5 rounded-lg bg-secondary/40">
           <div className="text-xs text-muted-foreground mb-0.5">xG</div>
-          <div className="font-bold text-lg text-primary">{player.xg}</div>
+          <div className="font-bold text-lg text-primary">{formatMetricValue(xgValue)}</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {formatSourceLabel(xgSource)}
+          </div>
         </div>
         <div className="text-center p-2.5 rounded-lg bg-secondary/40">
           <div className="text-xs text-muted-foreground mb-0.5">Tiri</div>
-          <div className="font-bold text-lg text-foreground">{player.shots}</div>
+          <div className="font-bold text-lg text-foreground">{formatMetricValue(shotsValue)}</div>
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {formatSourceLabel(shotsSource)}
+          </div>
         </div>
         <div className="text-center p-2.5 rounded-lg bg-secondary/40">
           <div className="text-xs text-muted-foreground mb-0.5">Forma</div>
@@ -100,8 +146,10 @@ export default function PlayerCard({ player, expanded = false, oddsAvailable = f
               <div className="font-bold text-foreground">{player.assists}</div>
             </div>
             <div className="p-2.5 rounded-lg bg-secondary/40">
-              <div className="text-xs text-muted-foreground mb-0.5">Falli / match</div>
-              <div className="font-bold text-foreground">{player.fouls}</div>
+              <div className="text-xs text-muted-foreground mb-0.5">Falli commessi</div>
+              <div className="font-bold text-foreground">
+                {formatMetricValue(discipline.foulsCommitted ?? player.fouls)}
+              </div>
             </div>
             <div className="p-2.5 rounded-lg bg-secondary/40">
               <div className="text-xs text-muted-foreground mb-0.5">Min / match</div>
@@ -114,6 +162,66 @@ export default function PlayerCard({ player, expanded = false, oddsAvailable = f
               <p className="text-xs text-foreground leading-relaxed">{player.insight}</p>
             </div>
           )}
+          <div className="mb-4 rounded-lg border border-border/40 bg-secondary/20 p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-foreground">Player Props</div>
+              <span className="rounded-full border border-border/40 bg-secondary/40 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                {formatSourceLabel(playerProps.scorer?.source || "derived_model")}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-secondary/40 p-2.5">
+                <div className="text-[11px] text-muted-foreground">Tiri totali</div>
+                <div className="text-sm font-bold text-foreground">
+                  {formatMetricValue(playerProps.shots?.value ?? player.shots)}
+                </div>
+              </div>
+              <div className="rounded-lg bg-secondary/40 p-2.5">
+                <div className="text-[11px] text-muted-foreground">Tiri in porta</div>
+                <div className="text-sm font-bold text-foreground">
+                  {formatMetricValue(playerProps.shotsOnTarget?.value ?? player.shotsOnTarget)}
+                </div>
+              </div>
+              <div className="rounded-lg bg-secondary/40 p-2.5">
+                <div className="text-[11px] text-muted-foreground">Falli subiti</div>
+                <div className="text-sm font-bold text-foreground">
+                  {formatMetricValue(discipline.foulsSuffered ?? player.foulsSuffered)}
+                </div>
+              </div>
+              <div className="rounded-lg bg-secondary/40 p-2.5">
+                <div className="text-[11px] text-muted-foreground">Cartellini</div>
+                <div className="text-sm font-bold text-foreground">
+                  {formatMetricValue(discipline.yellowCards ?? player.yellowCards, 0)}G /{" "}
+                  {formatMetricValue(discipline.redCards ?? player.redCards, 0)}R
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 rounded-lg bg-secondary/40 p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-muted-foreground">Heatmap</div>
+                <div className="text-[10px] font-semibold text-muted-foreground">
+                  {formatSourceLabel(heatmap.source)}
+                </div>
+              </div>
+              {heatmap.available && Array.isArray(heatmap.zones) && heatmap.zones.length > 0 ? (
+                <div className="grid grid-cols-3 gap-1">
+                  {heatmap.zones.slice(0, 6).map((zone) => (
+                    <div
+                      key={zone.id || zone.label}
+                      className="rounded bg-primary/10 px-2 py-1 text-[10px] text-primary"
+                    >
+                      <div className="truncate font-semibold">{zone.label}</div>
+                      <div>{zone.value}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  Heatmap non disponibile nel feed corrente.
+                </div>
+              )}
+            </div>
+          </div>
         </>
       )}
 
