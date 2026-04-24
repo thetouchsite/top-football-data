@@ -2,13 +2,6 @@ import React from "react";
 import GlassCard from "@/components/shared/GlassCard";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
 
-function hasRealSource(source) {
-  return Boolean(
-    source &&
-    !["not_available", "derived_model", "derived_from_xg"].includes(source),
-  );
-}
-
 function formatMetricValue(value, fallback = "—") {
   if (value == null || value === "" || !Number.isFinite(Number(value))) {
     return fallback;
@@ -21,7 +14,8 @@ export default function TopXgPlayers({ players = [], onPlayerClick }) {
     .map((player) => {
       const xgSource = player.playerProps?.xg?.source || "not_available";
       const xgValue = player.playerProps?.xg?.value ?? player.xg ?? 0;
-      const shotsValue = player.playerProps?.shots?.value ?? player.shots ?? 0;
+      const shotsValue =
+        player.playerProps?.shots?.value ?? player.shots ?? 0;
       const ratingValue =
         player.rating ?? player.playerProps?.rating?.value ?? null;
 
@@ -33,10 +27,13 @@ export default function TopXgPlayers({ players = [], onPlayerClick }) {
         ratingValue,
       };
     })
-    .filter(
-      (player) => hasRealSource(player.xgSource) || Number(player.xgValue) > 0,
+    .filter((player) => Number(player.xgValue) > 0)
+    .sort(
+      (left, right) =>
+        Number(right.xgValue) - Number(left.xgValue) ||
+        Number(right.shotsValue || 0) - Number(left.shotsValue || 0) ||
+        Number(right.ratingValue || 0) - Number(left.ratingValue || 0),
     )
-    .sort((left, right) => Number(right.xgValue) - Number(left.xgValue))
     .slice(0, 3);
 
   if (!rankedPlayers.length) {
@@ -48,14 +45,23 @@ export default function TopXgPlayers({ players = [], onPlayerClick }) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-foreground">
-            Top xG giocatori
+            Top 3 · xG atteso in questa partita
           </h3>
           <p className="text-xs text-muted-foreground">
-            I giocatori con il maggior expected goals nel match.
+            I tre con{" "}
+            <span className="font-medium text-foreground">
+              maggior xG atteso in questa gara
+            </span>{" "}
+            (ordinati per xG del match, feed/lineup).{" "}
+            <span className="font-medium text-foreground">Non</span> è un
+            ranking di stagione o tra partite diverse.
           </p>
         </div>
-        <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">
-          xG leader
+        <span
+          className="rounded-full border border-primary/25 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary"
+          title="Riferito solo a questa partita"
+        >
+          Solo questa partita
         </span>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -92,22 +98,25 @@ export default function TopXgPlayers({ players = [], onPlayerClick }) {
             </div>
             <div className="w-full rounded-2xl bg-secondary/30 p-4">
               <div className="text-[11px] text-muted-foreground uppercase tracking-[0.18em]">
-                Expected goals
+                xG atteso (questa partita)
               </div>
               <div className="mt-2 text-3xl font-semibold text-primary">
                 {formatMetricValue(player.xgValue, "—")}
               </div>
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span className="rounded-full bg-secondary/40 px-2 py-1">
-                  Tiri {formatMetricValue(player.shotsValue, "—")}
+                <span
+                  className="rounded-full bg-secondary/40 px-2 py-1"
+                  title="Tiri da statistiche partita/lineup, non stagionali"
+                >
+                  Tiri (questa partita) {formatMetricValue(player.shotsValue, "—")}
                 </span>
                 <span className="rounded-full bg-secondary/40 px-2 py-1">
-                  Fonte{" "}
+                  Fonte xG:{" "}
                   {player.xgSource === "sportmonks_expected"
                     ? "Sportmonks xG"
                     : player.xgSource === "sportmonks_lineup_details"
                       ? "Sportmonks"
-                      : "Stima"}
+                      : "Stima / altro"}
                 </span>
               </div>
             </div>

@@ -184,3 +184,14 @@ export function getPlayerOddsByFixture(fixtureId, options = {}) {
   }
   return requestJson(`/api/football/player-odds?${params.toString()}`);
 }
+
+export function getHeadToHeadByFixture(fixtureId, options = {}) {
+  const params = new URLSearchParams({
+    fixtureId: String(fixtureId || ""),
+  });
+  const snapshotVersion = resolveSnapshotVersion(options);
+  if (snapshotVersion) {
+    params.set("snapshotVersion", snapshotVersion);
+  }
+  return requestJson(`/api/football/head-to-head?${params.toString()}`);
+}

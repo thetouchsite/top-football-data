@@ -32,6 +32,16 @@ function formatShortDate(value) {
   }).format(new Date(ts));
 }
 
+function formatDecimal(value, fd = 2) {
+  if (value == null || value === "" || !Number.isFinite(Number(value))) return "—";
+  return Number(value).toFixed(fd);
+}
+
+function formatInt(value) {
+  if (value == null || value === "" || !Number.isFinite(Number(value))) return "—";
+  return String(Math.round(Number(value)));
+}
+
 function getRatingBadgeClass(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "bg-secondary/50 text-muted-foreground";
@@ -52,15 +62,15 @@ function formatBirthDate(value) {
   }).format(new Date(ts));
 }
 
-export default function PlayerDetailPanel({ fixtureId, player }) {
+export default function PlayerDetailPanel({ fixtureId, player, matchMetrics = null }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("overview");
-  const [season, setSeason] = useState("");
   const [careerExpanded, setCareerExpanded] = useState(false);
   const [expandedHonorTeams, setExpandedHonorTeams] = useState({});
   const [selectedLeague, setSelectedLeague] = useState("__all__");
+  const [selectedSeasonLeague, setSelectedSeasonLeague] = useState("__all__");
 
   useEffect(() => {
     let mounted = true;
@@ -71,8 +81,8 @@ export default function PlayerDetailPanel({ fixtureId, player }) {
       .then((payload) => {
         if (!mounted) return;
         setData(payload);
-        setSeason(String(payload?.seasons?.[0]?.season || ""));
         setSelectedLeague("__all__");
+        setSelectedSeasonLeague("__all__");
       })
       .catch((err) => {
         if (!mounted) return;
@@ -87,11 +97,28 @@ export default function PlayerDetailPanel({ fixtureId, player }) {
   }, [fixtureId, player?.id]);
 
   const profile = data?.profile || player || {};
-  const seasons = Array.isArray(data?.seasons) ? data.seasons : [];
-  const selectedSeason = useMemo(
-    () => seasons.find((row) => String(row?.season) === String(season)) || seasons[0] || null,
-    [season, seasons],
-  );
+  const currentSeason = data?.currentSeason;
+  const legacySeasons = Array.isArray(data?.seasons) ? data.seasons : [];
+  const activeSeasonStats = useMemo(() => {
+    if (currentSeason) {
+      if (selectedSeasonLeague === "__all__") {
+        return (
+          currentSeason.allCompetitions ||
+          currentSeason.byCompetition?.[0] ||
+          null
+        );
+      }
+      return (
+        currentSeason.byCompetition?.find(
+          (row) => String(row.competitionValue) === String(selectedSeasonLeague),
+        ) || null
+      );
+    }
+    if (legacySeasons.length) {
+      return legacySeasons[0] || null;
+    }
+    return null;
+  }, [currentSeason, legacySeasons, selectedSeasonLeague]);
   const matchRows = Array.isArray(data?.matchStats) ? data.matchStats : [];
   const leagueOptions = useMemo(() => {
     const map = new Map();
@@ -288,7 +315,7 @@ export default function PlayerDetailPanel({ fixtureId, player }) {
 
       {!loading && !error && tab === "overview" && (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2">
             <StatCell label="Posizione" value={profile?.position || profile?.pos || "n/d"} />
             <StatCell label="Piede" value={profile?.preferredFoot || "n/d"} />
             <StatCell label="Altezza" value={profile?.height || "n/d"} />
@@ -297,39 +324,184 @@ export default function PlayerDetailPanel({ fixtureId, player }) {
             <StatCell label="Nascita" value={formatBirthDate(profile?.dateOfBirth)} />
           </div>
 
+          {matchMetrics && (
+            <div className="rounded-xl border border-border/35 bg-gradient-to-b from-primary/5 to-secondary/15 p-3">
+              <div className="mb-1 text-xs font-semibold text-foreground">
+                Questa partita · xG atteso
+              </div>
+              <p className="mb-3 text-[10px] text-muted-foreground">
+                Prestazione attesa per la partita che stai guardando — stessi campi della scheda
+                &quot;Analisi xG&quot; tra i giocatori. Sotto, le{" "}
+                <span className="font-medium text-foreground">statistiche stagione</span> (stagione
+                corrente, filtrabili per competizione).
+              </p>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">
+                xG e indicatori attesi (match)
+              </div>
+              <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <StatCell label="xG (atteso)" value={formatDecimal(matchMetrics.xg)} />
+                <StatCell label="xGOT (atteso)" value={formatDecimal(matchMetrics.xgot)} />
+                <StatCell label="xG open play" value={formatDecimal(matchMetrics.xgOpenPlay)} />
+                <StatCell label="xG set piece" value={formatDecimal(matchMetrics.xgSetPiece)} />
+                <StatCell label="xG corner" value={formatDecimal(matchMetrics.xgCorners)} />
+                <StatCell label="xG non rigore" value={formatDecimal(matchMetrics.xgNonPenalty)} />
+                <StatCell label="Expected points" value={formatDecimal(matchMetrics.expectedPoints)} />
+                <StatCell label="eShots" value={formatDecimal(matchMetrics.eshots)} />
+                <StatCell
+                  label="Shooting perf. (indice API)"
+                  value={formatDecimal(matchMetrics.shootingPerformance)}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border border-border/35 bg-secondary/20 p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="text-xs font-semibold text-foreground">Statistiche stagione</div>
-              {seasons.length > 0 && (
-                <div className="w-44">
-                  <Select value={season} onValueChange={setSeason}>
+            <div className="mb-1 text-sm font-semibold text-foreground">Statistiche stagione</div>
+            <div className="mb-3 text-[11px] text-muted-foreground">Stagione corrente</div>
+            <div className="mb-3 w-full max-w-[260px]">
+              {currentSeason?.byCompetition?.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedSeasonLeague}
+                    onValueChange={setSelectedSeasonLeague}
+                  >
                     <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Seleziona stagione" />
+                      <SelectValue placeholder="Tutte le competizioni" />
                     </SelectTrigger>
                     <SelectContent>
-                      {seasons.map((row) => (
-                        <SelectItem key={String(row.season)} value={String(row.season)}>
-                          {row.season}
+                      <SelectItem value="__all__">Tutte le competizioni</SelectItem>
+                      {currentSeason.byCompetition.map((row) => (
+                        <SelectItem
+                          key={row.competitionValue}
+                          value={String(row.competitionValue)}
+                        >
+                          {row.competitionName}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
+              ) : legacySeasons.length > 0 ? (
+                <p className="text-[10px] text-muted-foreground">
+                  Profilo senza spaccato competizioni; mostro l&apos;unica riga disponibile.
+                </p>
+              ) : null}
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <StatCell label="Minuti" value={selectedSeason?.minutesPlayed} />
-              <StatCell label="Presenze" value={selectedSeason?.appearances} />
-              <StatCell label="Gol" value={selectedSeason?.goals} />
-              <StatCell label="Assist" value={selectedSeason?.assists} />
-              <StatCell label="Gialli" value={selectedSeason?.yellowCards} />
-              <StatCell label="Rossi" value={selectedSeason?.redCards} />
-              <StatCell label="Rating" value={selectedSeason?.rating ?? "—"} />
-              <StatCell label="Panchina" value={selectedSeason?.bench} />
-              <StatCell label="Passaggi" value={selectedSeason?.passes} />
-              <StatCell label="Tiri totali" value={selectedSeason?.shotsTotal} />
-              <StatCell label="Tiri in porta" value={selectedSeason?.shotsOnTarget} />
-            </div>
+            {activeSeasonStats == null && (
+              <p className="text-xs text-muted-foreground">
+                Statistiche stagionali non disponibili in questo profilo.
+              </p>
+            )}
+            {activeSeasonStats != null && (
+              <>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Presenze e volume
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <StatCell label="Minuti" value={activeSeasonStats?.minutesPlayed} />
+                  <StatCell label="Presenze" value={activeSeasonStats?.appearances} />
+                  <StatCell label="Gol" value={activeSeasonStats?.goals} />
+                  <StatCell label="Assist" value={activeSeasonStats?.assists} />
+                  <StatCell label="Gialli" value={activeSeasonStats?.yellowCards} />
+                  <StatCell label="Rossi" value={activeSeasonStats?.redCards} />
+                  <StatCell label="Rating" value={activeSeasonStats?.rating ?? "—"} />
+                  <StatCell label="Panchina" value={activeSeasonStats?.bench} />
+                  <StatCell label="Passaggi" value={activeSeasonStats?.passes} />
+                  <StatCell label="Tiri totali" value={activeSeasonStats?.shotsTotal} />
+                  <StatCell label="Tiri in porta" value={activeSeasonStats?.shotsOnTarget} />
+                  <StatCell label="Tocchi" value={activeSeasonStats?.touches} />
+                  <StatCell
+                    label="Tackles vinti"
+                    value={activeSeasonStats?.tacklesWon != null ? activeSeasonStats.tacklesWon : "—"}
+                  />
+                  <StatCell
+                    label="Intercetti"
+                    value={activeSeasonStats?.interceptions != null ? activeSeasonStats.interceptions : "—"}
+                  />
+                  <StatCell
+                    label="Duelli vinti %"
+                    value={
+                      activeSeasonStats?.duelsWonPct != null
+                        ? formatDecimal(activeSeasonStats.duelsWonPct, 1)
+                        : "—"
+                    }
+                  />
+                  <StatCell
+                    label="Precisione pass. %"
+                    value={
+                      activeSeasonStats?.passAccuracyPct != null
+                        ? formatDecimal(activeSeasonStats.passAccuracyPct, 1)
+                        : "—"
+                    }
+                  />
+                </div>
+                <div className="mb-2 mt-4 text-[10px] font-semibold uppercase tracking-wide text-primary/80">
+                  xG e indicatori attesi (stagione)
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <StatCell
+                    label="xG (stagione)"
+                    value={activeSeasonStats?.seasonXg != null ? formatDecimal(activeSeasonStats.seasonXg) : "—"}
+                  />
+                  <StatCell
+                    label="xGOT (stagione)"
+                    value={activeSeasonStats?.seasonXgot != null ? formatDecimal(activeSeasonStats.seasonXgot) : "—"}
+                  />
+                  <StatCell
+                    label="xG open play"
+                    value={
+                      activeSeasonStats?.seasonXgOpenPlay != null
+                        ? formatDecimal(activeSeasonStats.seasonXgOpenPlay)
+                        : "—"
+                    }
+                  />
+                  <StatCell
+                    label="xG set piece"
+                    value={
+                      activeSeasonStats?.seasonXgSetPiece != null
+                        ? formatDecimal(activeSeasonStats.seasonXgSetPiece)
+                        : "—"
+                    }
+                  />
+                  <StatCell
+                    label="xG corner"
+                    value={
+                      activeSeasonStats?.seasonXgCorners != null
+                        ? formatDecimal(activeSeasonStats.seasonXgCorners)
+                        : "—"
+                    }
+                  />
+                  <StatCell
+                    label="xG non rigore"
+                    value={
+                      activeSeasonStats?.seasonXgNonPenalty != null
+                        ? formatDecimal(activeSeasonStats.seasonXgNonPenalty)
+                        : "—"
+                    }
+                  />
+                  <StatCell
+                    label="Expected points"
+                    value={
+                      activeSeasonStats?.expectedPoints != null
+                        ? formatDecimal(activeSeasonStats.expectedPoints)
+                        : "—"
+                    }
+                  />
+                  <StatCell
+                    label="eShots"
+                    value={activeSeasonStats?.eshots != null ? formatDecimal(activeSeasonStats.eshots) : "—"}
+                  />
+                  <StatCell
+                    label="Shooting perf. (indice API)"
+                    value={
+                      activeSeasonStats?.shootingPerformance != null
+                        ? formatDecimal(activeSeasonStats.shootingPerformance)
+                        : "—"
+                    }
+                  />
+                </div>
+              </>
+            )}
           </div>
 
         </div>

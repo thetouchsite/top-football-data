@@ -148,6 +148,7 @@ export const SPORTMONKS_INCLUDE_POLICY = {
     "formations",
     "coaches",
     "referees",
+    "metadata",
   ],
   detailEnrichmentForbidden: [
     "expected",
@@ -238,27 +239,25 @@ const SPORTMONKS_INCLUDE_DENYLIST_BY_SCOPE = {
   detail_enrichment: new Set(SPORTMONKS_INCLUDE_POLICY.detailEnrichmentForbidden),
 };
 
+const SPORTMONKS_FIXTURE_CORE_BASE_INCLUDES = [
+  "league",
+  "state",
+  "participants",
+  "scores",
+  "odds",
+  "odds.bookmaker",
+  "predictions.type",
+  "statistics.type",
+];
+
+/** xG per-partita: prima sull'enrichment, ma se quella chiamata fallisce il merge ha solo il core; chiederlo qui evita
+ *  l'UI a una sola riga xG (fallback su match.xg) sulla stessa partita quando l'enrichment è assente. */
+const SPORTMONKS_FIXTURE_CORE_XG_EXTRA = ["xGFixture.type", "xgfixture.type"];
+
 const SPORTMONKS_FIXTURE_CORE_INCLUDE_ATTEMPTS = [
-  [
-    "league",
-    "state",
-    "participants",
-    "scores",
-    "odds",
-    "odds.bookmaker",
-    "predictions.type",
-    "statistics.type",
-  ],
-  [
-    "league",
-    "state",
-    "participants",
-    "scores",
-    "odds",
-    "odds.bookmaker",
-    "predictions.type",
-    "statistics.type",
-  ],
+  [...SPORTMONKS_FIXTURE_CORE_BASE_INCLUDES, ...SPORTMONKS_FIXTURE_CORE_XG_EXTRA],
+  SPORTMONKS_FIXTURE_CORE_BASE_INCLUDES,
+  SPORTMONKS_FIXTURE_CORE_BASE_INCLUDES,
 ];
 
 const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDE_ATTEMPTS = [
@@ -278,6 +277,7 @@ const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDE_ATTEMPTS = [
     "formations",
     "coaches",
     "referees",
+    "metadata",
   ],
   [
     "lineups",
@@ -293,6 +293,7 @@ const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDE_ATTEMPTS = [
     "formations",
     "coaches",
     "referees",
+    "metadata",
   ],
   [
     "lineups",
@@ -301,12 +302,14 @@ const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDE_ATTEMPTS = [
     "formations",
     "coaches",
     "referees",
+    "metadata",
   ],
   [
     "lineups",
     "formations",
     "coaches",
     "referees",
+    "metadata",
   ],
 ];
 
@@ -1196,6 +1199,14 @@ function getFixtureMetadataEntries(fixture) {
   return asArray(fixture?.metadata);
 }
 
+function isTruthyMetadataValue(v) {
+  if (v === true || v === 1) return true;
+  if (typeof v === "string" && ["true", "1", "yes"].includes(String(v).trim().toLowerCase())) {
+    return true;
+  }
+  return false;
+}
+
 function getFixtureMetadataBoolean(fixture, typeIds = []) {
   const match = getFixtureMetadataEntries(fixture).find((entry) =>
     typeIds.some((typeId) => safeNumber(entry?.type_id, Number.NaN) === safeNumber(typeId, Number.NaN))
@@ -1205,12 +1216,17 @@ function getFixtureMetadataBoolean(fixture, typeIds = []) {
     return null;
   }
 
-  if (typeof match?.values === "boolean") {
-    return match.values;
+  if (isTruthyMetadataValue(match?.values)) {
+    return true;
   }
-
-  if (typeof match?.values?.confirmed === "boolean") {
-    return match.values.confirmed;
+  if (match?.values != null && typeof match.values === "object" && isTruthyMetadataValue(match.values?.confirmed)) {
+    return true;
+  }
+  if (typeof match?.values === "boolean" && match.values === false) {
+    return false;
+  }
+  if (match?.values != null && typeof match.values === "object" && match.values?.confirmed === false) {
+    return false;
   }
 
   return null;
@@ -1831,14 +1847,23 @@ function getFormationOverrides(formations, homeParticipant, awayParticipant) {
   return overrides;
 }
 
+/**
+ * Official lineups: (1) fixture metadata type 572 `confirmed` when present (enrichment
+ * must request `include=metadata`). (2) If the match is in play or finished, `lineups`
+ * from Sportmonks are the actual match sheet (type 11/12) even when 572 lags or stays false.
+ */
 function buildLineupStatus(fixture, lineups, formations) {
-  const confirmedLineups = getFixtureMetadataBoolean(fixture, [572]);
+  const confirmedByMeta = getFixtureMetadataBoolean(fixture, [572]);
 
-  if (confirmedLineups === true) {
+  if (confirmedByMeta === true) {
     return "official";
   }
 
   if (asArray(lineups).length > 0) {
+    const stateInfo = getStateInfo(fixture);
+    if (["LIVE", "HT", "ET", "PEN", "FT"].includes(stateInfo.shortName)) {
+      return "official";
+    }
     return "probable";
   }
 
@@ -4228,6 +4253,36 @@ export async function fetchSportmonksPlayerById(playerId, options = {}) {
     },
   });
   return payload?.data || null;
+}
+
+export async function fetchSportmonksHeadToHeadFixtures(
+  homeParticipantId,
+  awayParticipantId,
+  telemetry = {},
+) {
+  const homeId = String(homeParticipantId || "").trim();
+  const awayId = String(awayParticipantId || "").trim();
+  if (!homeId || !awayId) {
+    return [];
+  }
+
+  const response = await requestSportmonksCollection(
+    `fixtures/head-to-head/${encodeURIComponent(homeId)}/${encodeURIComponent(awayId)}`,
+    {
+      include: ["participants", "league", "scores", "state", "venue", "events", "season"],
+      perPage: 30,
+      maxPages: 2,
+      telemetry: {
+        route: telemetry.route || "/api/football/head-to-head",
+        requestPurpose: telemetry.requestPurpose || "fixture_head_to_head",
+        days: null,
+        fixtureId: telemetry.fixtureId ?? null,
+        dtoTarget: telemetry.dtoTarget || "HeadToHeadDTO",
+        dtoVersion: telemetry.dtoVersion || "v1",
+      },
+    },
+  );
+  return asArray(response?.data);
 }
 
 export function getSportmonksProviderReadiness() {

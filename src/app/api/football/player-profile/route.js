@@ -1,8 +1,48 @@
 import { NextResponse } from "next/server";
+import {
+  readDuelsWonPercentFromRows,
+  readPassAccuracyPercentFromRows,
+  readPassAccuracyPercentValue,
+} from "@/lib/football/passAccuracyFromRows";
+
+function normalizeLeagueName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
 
 export const runtime = "nodejs";
 const PLAYER_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
-const PLAYER_PROFILE_CACHE_VERSION = "v8";
+const PLAYER_PROFILE_CACHE_VERSION = "v19";
+
+/** Statistiche conteggio: evita artefatti float (es. 30.602600000000002) dopo somma su più partite. */
+const SEASON_COUNT_FIELDS = new Set([
+  "appearances",
+  "minutesPlayed",
+  "goals",
+  "assists",
+  "yellowCards",
+  "redCards",
+  "bench",
+  "passes",
+  "shotsTotal",
+  "shotsOnTarget",
+  "touches",
+  "tacklesWon",
+  "interceptions",
+]);
+
+function roundSeasonCountFields(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  const out = { ...obj };
+  for (const k of SEASON_COUNT_FIELDS) {
+    if (out[k] == null) continue;
+    const n = Number(out[k]);
+    if (Number.isFinite(n)) out[k] = Math.round(n);
+  }
+  return out;
+}
 
 function getCacheStore() {
   if (!globalThis.__footballPlayerProfileCache) {
@@ -83,7 +123,8 @@ async function fetchSportmonksPlayerProfile(playerId) {
   const url = new URL(`${baseUrl}/players/${encodeURIComponent(String(playerId))}`);
   url.searchParams.set("api_token", token);
   url.searchParams.set("include", include);
-  url.searchParams.set("per_page", "100");
+  // Abbastanza righe: statistics (tutte le leghe) è incluso; 100 poteva troncare e perdere is_current.
+  url.searchParams.set("per_page", "250");
 
   const response = await fetch(url.toString(), {
     method: "GET",
@@ -204,23 +245,6 @@ async function fetchSportmonksCurrentSeasonFixturesForTeam(teamId, seasonRows = 
     fixtures.forEach((fixture) => collected.push(fixture));
   }
 
-  // Include all competitions played in the same seasonal window (league + cups + europe),
-  // even when Sportmonks assigns separate season_id per competition.
-  if (candidateRows.length > 0) {
-    const primary = candidateRows[0];
-    const broadFixtures = await fetchSportmonksSeasonFixturesForTeam(
-      teamId,
-      String(primary?.season?.id || primary?.season_id || ""),
-      primary?.season || {},
-      { applySeasonFilter: false },
-    );
-    broadFixtures.forEach((fixture) => collected.push(fixture));
-  }
-
-  // Safety net: collect last ~13 months regardless of season mapping quirks.
-  const broadNoSeasonFixtures = await fetchSportmonksSeasonFixturesForTeam(teamId, "", {}, { applySeasonFilter: false });
-  broadNoSeasonFixtures.forEach((fixture) => collected.push(fixture));
-
   const deduped = new Map();
   collected.forEach((fixture) => {
     const key = String(fixture?.id || "");
@@ -285,7 +309,11 @@ function pickStatDetail(details, aliases) {
     const key = normalizeMetricKey(
       row?.type?.developer_name || row?.type?.name || row?.name || row?.type_id,
     );
-    const matchedAlias = normalizedAliases.find((alias) => key.includes(alias) || alias.includes(key));
+    // Evita: alias "…passes…percentage" che matcha la chiave "passes" (conteggio) via alias.includes(key).
+    const matchedAlias = normalizedAliases.find(
+      (alias) =>
+        key === alias || key.includes(alias) || (key.length >= 10 && alias.includes(key)),
+    );
     if (matchedAlias) {
       const parsed =
         readNumeric(row?.value, matchedAlias) ??
@@ -340,75 +368,704 @@ function extractAge(playerData) {
   return Math.max(0, Math.floor(diffYears));
 }
 
-function buildSeasonsFromStatistics(playerData) {
-  const statistics = asArray(playerData?.statistics);
-  const parseSeasonScore = (row) => {
-    const seasonObj = row?.season || {};
-    if (seasonObj?.is_current === true) return Number.MAX_SAFE_INTEGER;
-    const endingTs = Date.parse(String(seasonObj?.ending_at || seasonObj?.end || ""));
-    if (Number.isFinite(endingTs)) {
-      return Math.floor(endingTs / 1000);
+function parseSeasonScoreForSort(row) {
+  const seasonObj = row?.season || {};
+  if (seasonObj?.is_current === true) return Number.MAX_SAFE_INTEGER;
+  const endingTs = Date.parse(String(seasonObj?.ending_at || seasonObj?.end || ""));
+  if (Number.isFinite(endingTs)) {
+    return Math.floor(endingTs / 1000);
+  }
+  const seasonId = Number(seasonObj?.id || row?.season_id);
+  if (Number.isFinite(seasonId) && seasonId > 0) return seasonId;
+  const text = String(seasonObj?.name || seasonObj?.display_name || "");
+  const years = text.match(/(19|20)\d{2}/g) || [];
+  if (years.length) return Number(years[years.length - 1]);
+  const startTs = Date.parse(String(seasonObj?.starting_at || seasonObj?.start || ""));
+  if (Number.isFinite(startTs)) return Math.floor(startTs / 1000);
+  return 0;
+}
+
+function resolveCurrentSeasonId(statistics) {
+  const arr = asArray(statistics);
+  if (!arr.length) return null;
+  const isCur = arr.find((r) => r?.season?.is_current === true);
+  if (isCur) {
+    const id = String(isCur.season?.id ?? isCur.season_id ?? "").trim();
+    if (id) return id;
+  }
+  const sorted = [...arr].sort(
+    (a, b) => parseSeasonScoreForSort(b) - parseSeasonScoreForSort(a),
+  );
+  const id = String(sorted[0]?.season?.id ?? sorted[0]?.season_id ?? "").trim();
+  return id || null;
+}
+
+/**
+ * Ambito "stagione corrente" per filtrare fixture: evita di sommare partite di carriera
+ * (prima arrivavano da una fetch senza season_id su ~13 mesi).
+ */
+function getCurrentSeasonContextFromStatistics(statisticsRows) {
+  const arr = asArray(statisticsRows);
+  if (!arr.length) {
+    return { seasonIdSet: new Set(), tStart: null, tEnd: null, isEmpty: true };
+  }
+  const currentRows = arr.filter((r) => r?.season?.is_current === true);
+  const dateSourceRows =
+    currentRows.length > 0
+      ? currentRows
+      : (() => {
+          const rid = resolveCurrentSeasonId(arr);
+          const match = arr.find(
+            (r) => String(r?.season?.id ?? r?.season_id ?? "") === String(rid || ""),
+          );
+          return match ? [match] : [arr[0]].filter(Boolean);
+        })();
+  const seasonIdSet = new Set();
+  for (const r of currentRows) {
+    const a = String(r?.season?.id || "").trim();
+    const b = String(r?.season_id || "").trim();
+    if (a) seasonIdSet.add(a);
+    if (b) seasonIdSet.add(b);
+  }
+  if (seasonIdSet.size === 0) {
+    const rid = resolveCurrentSeasonId(arr);
+    if (rid) seasonIdSet.add(String(rid));
+  }
+  let tStart = null;
+  let tEnd = null;
+  for (const r of currentRows) {
+    const s = r?.season;
+    const a = Date.parse(String(s?.starting_at || s?.start || ""));
+    const b = Date.parse(String(s?.ending_at || s?.end || ""));
+    if (Number.isFinite(a)) tStart = tStart == null ? a : Math.min(tStart, a);
+    if (Number.isFinite(b)) tEnd = tEnd == null ? b : Math.max(tEnd, b);
+  }
+  for (const r of dateSourceRows) {
+    if (currentRows.length > 0) break;
+    const s = r?.season;
+    const a = Date.parse(String(s?.starting_at || s?.start || ""));
+    const b = Date.parse(String(s?.ending_at || s?.end || ""));
+    if (Number.isFinite(a)) tStart = tStart == null ? a : Math.min(tStart, a);
+    if (Number.isFinite(b)) tEnd = tEnd == null ? b : Math.max(tEnd, b);
+  }
+  return { seasonIdSet, tStart, tEnd, isEmpty: false, hasCurrentFlags: currentRows.length > 0 };
+}
+
+/**
+ * Stretta: solo partite con season_id tra quelli segnalati in statistics come
+ * is_current, oppure (se la competizione non ha stesso id) data nel range
+ * [tStart, tEnd] con margine ridotto. Senza is_current, si usa la sola
+ * riga/season scelta in fallback: finestra minima, meno "spaghetti" tra anni.
+ */
+function isFixtureInCurrentSeasonContext(fixture, ctx) {
+  if (!fixture) return false;
+  if (ctx.isEmpty) return true;
+  const sid = String(fixture?.season_id ?? fixture?.season?.id ?? "").trim();
+  if (ctx.seasonIdSet.size > 0 && sid && ctx.seasonIdSet.has(sid)) {
+    if (ctx.hasCurrentFlags && ctx.tStart != null && ctx.tEnd != null) {
+      const fts = Date.parse(String(fixture?.starting_at || fixture?.startingAt || ""));
+      if (Number.isFinite(fts) && (fts < ctx.tStart - 2 * 86400000 || fts > ctx.tEnd + 50 * 86400000)) {
+        return false;
+      }
     }
-    const seasonId = Number(seasonObj?.id || row?.season_id);
-    if (Number.isFinite(seasonId) && seasonId > 0) return seasonId;
-    const text = String(seasonObj?.name || seasonObj?.display_name || "");
-    const years = text.match(/(19|20)\d{2}/g) || [];
-    if (years.length) return Number(years[years.length - 1]);
-    const startTs = Date.parse(String(seasonObj?.starting_at || seasonObj?.start || ""));
-    if (Number.isFinite(startTs)) return Math.floor(startTs / 1000);
-    return 0;
+    return true;
+  }
+  const fts = Date.parse(String(fixture?.starting_at || fixture?.startingAt || ""));
+  if (Number.isFinite(fts) && ctx.tStart != null && ctx.tEnd != null) {
+    const lead = 2 * 24 * 60 * 60 * 1000;
+    const tail = 50 * 24 * 60 * 60 * 1000;
+    if (fts >= ctx.tStart - lead && fts <= ctx.tEnd + tail) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function filterLatestRowsToCurrentSeason(latest, teamId, ctx) {
+  if (ctx.isEmpty) return asArray(latest);
+  return asArray(latest).filter((row) => {
+    if (teamId) {
+      const rowTeam = String(row?.participant_id || row?.team_id || "").trim();
+      if (rowTeam && rowTeam !== String(teamId)) return false;
+    }
+    return isFixtureInCurrentSeasonContext(row?.fixture || row, ctx);
+  });
+}
+
+function mapPlayerStatisticsEntry(row) {
+  const details = asArray(row?.details);
+  const seasonName =
+    row?.season?.name ||
+    row?.season?.display_name ||
+    row?.season?.league?.name ||
+    `Season ${row?.season_id || ""}`.trim();
+  const leagueName = row?.season?.league?.name || null;
+  const teamName = row?.team?.name || null;
+  const labelParts = [];
+  if (seasonName) labelParts.push(seasonName);
+  if (leagueName && leagueName !== seasonName) labelParts.push(leagueName);
+  if (teamName && !labelParts.includes(teamName)) labelParts.push(teamName);
+  const uniqueLabel =
+    labelParts.length > 0 ? labelParts.join(" · ") : seasonName || "Stagione";
+  const seasonValue = [
+    "s",
+    String(row?.season?.id ?? row?.season_id ?? "x"),
+    "l",
+    String(row?.season?.league?.id ?? "x"),
+    "t",
+    String(row?.team_id ?? row?.team?.id ?? "x"),
+  ].join("-");
+  const yellowCards = pickStatDetail(details, ["yellow_cards", "yellow_card"]);
+  const redCards = pickStatDetail(details, ["red_cards", "red_card"]);
+  const bench = pickStatDetail(details, ["bench", "appearances_from_bench"]);
+  const base = {
+    season: uniqueLabel,
+    seasonValue,
+    seasonLabel: uniqueLabel,
+    leagueName,
+    teamName: teamName || null,
+    seasonId: row?.season?.id ?? row?.season_id ?? null,
+    appearances: pickStatFromRowOrDetails(row, ["appearances", "matches_played"]) ?? 0,
+    minutesPlayed: pickStatFromRowOrDetails(row, ["minutes_played", "minutes"]) ?? 0,
+    goals: pickStatFromRowOrDetails(row, ["goals", "goals_scored"]) ?? 0,
+    assists: pickStatFromRowOrDetails(row, ["assists"]) ?? 0,
+    yellowCards: yellowCards ?? pickStatFromRowOrDetails(row, ["yellow_cards", "yellow_card"]) ?? 0,
+    redCards: redCards ?? pickStatFromRowOrDetails(row, ["red_cards", "red_card"]) ?? 0,
+    rating: pickStatFromRowOrDetails(row, ["rating", "average_rating"], null),
+    bench: bench ?? pickStatFromRowOrDetails(row, ["bench", "appearances_from_bench"]) ?? 0,
+    passes: pickStatFromRowOrDetails(row, ["passes_total", "passes"]) ?? 0,
+    shotsTotal: pickStatFromRowOrDetails(row, ["shots_total", "total_shots", "shots"]) ?? 0,
+    shotsOnTarget: pickStatFromRowOrDetails(row, ["shots_on_target"]) ?? 0,
+    touches: pickStatDetail(details, ["touches"]) ?? 0,
+    tacklesWon: pickStatDetail(details, ["tackles_won", "tackleswon"]) ?? 0,
+    interceptions: pickStatDetail(details, ["interceptions"]) ?? 0,
+    duelsWonPct: (() => {
+      const fromKeys = readDuelsWonPercentFromRows(
+        details,
+        (r) => {
+          const raw = r?.value ?? r?.data?.value;
+          if (raw == null) return null;
+          if (typeof raw === "number" || typeof raw === "string") return toNumber(raw);
+          if (typeof raw === "object" && raw) {
+            return toNumber(raw.total ?? raw.value ?? raw.average);
+          }
+          return null;
+        },
+        (r) =>
+          normalizeMetricKey(
+            r?.type?.developer_name || r?.type?.name || r?.name || r?.type_id,
+          ),
+      );
+      if (fromKeys > 0) return fromKeys;
+      const p = pickStatDetail(details, ["duels_won_percentage"]);
+      if (p == null) return null;
+      return readPassAccuracyPercentValue(p);
+    })(),
+    passAccuracyPct: (() => {
+      const fromNames = readPassAccuracyPercentFromRows(
+        details,
+        (r) => {
+          const raw = r?.value ?? r?.data?.value;
+          if (raw == null) return null;
+          if (typeof raw === "number" || typeof raw === "string") return toNumber(raw);
+          if (typeof raw === "object" && raw) {
+            return toNumber(raw.total ?? raw.value ?? raw.average);
+          }
+          return null;
+        },
+        (r) =>
+          normalizeMetricKey(
+            r?.type?.developer_name || r?.type?.name || r?.name || r?.type_id,
+          ),
+      );
+      if (fromNames > 0) return fromNames;
+      const p = pickStatDetail(details, [
+        "accurate_passes_percentage",
+        "passaccuracy",
+        "passes_accuracy",
+      ]);
+      if (p != null && p > 100) return null;
+      return p;
+    })(),
+    seasonXg: pickStatDetail(details, ["expected_goals", "5304", "xg"]) ?? null,
+    seasonXgot: pickStatDetail(details, ["expected_goals_on_target", "5305", "xgot"]) ?? null,
+    seasonXgOpenPlay: pickStatDetail(details, ["expected_goals_open_play"]) ?? null,
+    seasonXgSetPiece: pickStatDetail(details, ["expected_goals_set_play"]) ?? null,
+    seasonXgCorners: pickStatDetail(details, ["expected_goals_corners"]) ?? null,
+    seasonXgNonPenalty:
+      pickStatDetail(details, [
+        "expected_non_penalty_goals",
+        "expected_goals_non_penalty_goals",
+      ]) ?? null,
+    expectedPoints: pickStatDetail(details, ["expected_points"]) ?? null,
+    eshots: pickStatDetail(details, ["expected_shots", "expected_shots_total"]) ?? null,
+    shootingPerformance: pickStatDetail(details, ["shooting_performance"]) ?? null,
   };
-  const mapped = statistics
-    .map((row) => {
-      const details = asArray(row?.details);
-      const seasonName =
-        row?.season?.name ||
-        row?.season?.display_name ||
-        row?.season?.league?.name ||
-        `Season ${row?.season_id || ""}`.trim();
-      const yellowCards = pickStatDetail(details, ["yellow_cards", "yellow_card"]);
-      const redCards = pickStatDetail(details, ["red_cards", "red_card"]);
-      const bench = pickStatDetail(details, ["bench", "appearances_from_bench"]);
+  return roundSeasonCountFields(base);
+}
+
+function aggregateCurrentSeasonStats(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+  if (rows.length === 1) {
+    return roundSeasonCountFields({ ...rows[0] });
+  }
+  const n = (v) => (v == null || v === "" || !Number.isFinite(Number(v)) ? 0 : Number(v));
+  const sum = (k) => rows.reduce((a, r) => a + n(r[k]), 0);
+  const sumNullable = (k) => {
+    const vals = rows
+      .map((r) => r[k])
+      .filter((v) => v != null && Number.isFinite(Number(v)));
+    if (vals.length === 0) return null;
+    return vals.reduce((a, b) => a + Number(b), 0);
+  };
+  const minutesWeighted = (k) => {
+    let w = 0;
+    let s = 0;
+    for (const r of rows) {
+      const m = n(r.minutesPlayed);
+      const v = r[k];
+      if (v == null || !Number.isFinite(Number(v)) || m <= 0) continue;
+      s += Number(v) * m;
+      w += m;
+    }
+    return w > 0 ? Math.round((s / w) * 1000) / 1000 : null;
+  };
+  const passWeighted = () => {
+    let acc = 0;
+    let tot = 0;
+    for (const r of rows) {
+      const p = n(r.passes);
+      const pct = r.passAccuracyPct;
+      if (pct == null || !Number.isFinite(Number(pct)) || p <= 0) continue;
+      acc += (Number(pct) / 100) * p;
+      tot += p;
+    }
+    return tot > 0 ? Math.round((acc / tot) * 10000) / 100 : null;
+  };
+  return roundSeasonCountFields({
+    appearances: sum("appearances"),
+    minutesPlayed: sum("minutesPlayed"),
+    goals: sum("goals"),
+    assists: sum("assists"),
+    yellowCards: sum("yellowCards"),
+    redCards: sum("redCards"),
+    bench: sum("bench"),
+    passes: sum("passes"),
+    shotsTotal: sum("shotsTotal"),
+    shotsOnTarget: sum("shotsOnTarget"),
+    touches: sum("touches"),
+    tacklesWon: sum("tacklesWon"),
+    interceptions: sum("interceptions"),
+    rating: minutesWeighted("rating"),
+    passAccuracyPct: passWeighted(),
+    duelsWonPct: minutesWeighted("duelsWonPct"),
+    seasonXg: sumNullable("seasonXg"),
+    seasonXgot: sumNullable("seasonXgot"),
+    seasonXgOpenPlay: sumNullable("seasonXgOpenPlay"),
+    seasonXgSetPiece: sumNullable("seasonXgSetPiece"),
+    seasonXgCorners: sumNullable("seasonXgCorners"),
+    seasonXgNonPenalty: sumNullable("seasonXgNonPenalty"),
+    expectedPoints: sumNullable("expectedPoints"),
+    eshots: sumNullable("eshots"),
+    shootingPerformance: minutesWeighted("shootingPerformance"),
+  });
+}
+
+/**
+ * Stessa base di "Statistiche partite": aggreghiamo le righe latest per
+ * lega (fixture.league) così compaiono UCL, Coppa, etc. se mancano da statistics.
+ */
+function buildSeasonStatsFromMatchRows(rowsSource, teamId, seasonCtx) {
+  const n = (v) => (v == null || v === "" || !Number.isFinite(Number(v)) ? 0 : Number(v));
+  const rows = asArray(rowsSource);
+  const filteredRows =
+    seasonCtx && !seasonCtx.isEmpty
+      ? rows.filter((row) => isFixtureInCurrentSeasonContext(row?.fixture || row, seasonCtx))
+      : rows;
+  const readNumDetail = (details, aliases) => {
+    const d = asArray(details);
+    const p = pickStatDetail(d, aliases);
+    if (p == null || !Number.isFinite(Number(p))) return 0;
+    return Math.max(0, n(p));
+  };
+  const readNullableDetail = (details, aliases) => {
+    const p = pickStatDetail(asArray(details), aliases);
+    if (p == null || !Number.isFinite(Number(p))) return null;
+    return n(p);
+  };
+  const readPassPctForMatch = (details) => {
+    const d = asArray(details);
+    return readPassAccuracyPercentFromRows(
+      d,
+      (r) => {
+        const raw = r?.value ?? r?.data?.value;
+        if (raw == null) return null;
+        if (typeof raw === "number" || typeof raw === "string") return toNumber(raw);
+        if (typeof raw === "object" && raw) {
+          return toNumber(raw.total ?? raw.value ?? raw.average);
+        }
+        return null;
+      },
+      (r) =>
+        normalizeMetricKey(
+          r?.type?.developer_name || r?.type?.name || r?.name || r?.type_id,
+        ),
+    );
+  };
+  const readDuelsPctForMatch = (details) => {
+    const d = asArray(details);
+    return readDuelsWonPercentFromRows(
+      d,
+      (r) => {
+        const raw = r?.value ?? r?.data?.value;
+        if (raw == null) return null;
+        if (typeof raw === "number" || typeof raw === "string") return toNumber(raw);
+        if (typeof raw === "object" && raw) {
+          return toNumber(raw.total ?? raw.value ?? raw.average);
+        }
+        return null;
+      },
+      (r) =>
+        normalizeMetricKey(
+          r?.type?.developer_name || r?.type?.name || r?.name || r?.type_id,
+        ),
+    );
+  };
+  const groups = new Map();
+  for (const row of filteredRows) {
+    if (teamId) {
+      const rowTeam = String(row?.participant_id || row?.team_id || "").trim();
+      if (rowTeam && rowTeam !== String(teamId)) continue;
+    }
+    const fixture = row?.fixture || row;
+    const details = asArray(row?.details);
+    const leagueName = String(fixture?.league?.name || "Competizione").trim();
+    const gKey = leagueName;
+    if (!groups.has(gKey)) {
+      groups.set(gKey, {
+        _ratingNum: 0,
+        _ratingW: 0,
+        _passAccNum: 0,
+        _passW: 0,
+        _duelNum: 0,
+        _duelW: 0,
+        _shootingNum: 0,
+        _shootingW: 0,
+        minutesPlayed: 0,
+        goals: 0,
+        assists: 0,
+        yellowCards: 0,
+        redCards: 0,
+        shotsTotal: 0,
+        shotsOnTarget: 0,
+        passes: 0,
+        touches: 0,
+        tacklesWon: 0,
+        interceptions: 0,
+        bench: 0,
+        seasonXg: 0,
+        _hasXg: false,
+        seasonXgot: 0,
+        _hasXgot: false,
+        seasonXgOpenPlay: 0,
+        _hasXgOp: false,
+        seasonXgSetPiece: 0,
+        _hasXgSp: false,
+        seasonXgCorners: 0,
+        _hasXgCor: false,
+        seasonXgNonPenalty: 0,
+        _hasXgNp: false,
+        expectedPoints: 0,
+        _hasEp: false,
+        eshots: 0,
+        _hasEsh: false,
+        _minutesGames: 0,
+        leagueId: null,
+      });
+    }
+    const g = groups.get(gKey);
+    const leagueIdFromFix = fixture?.league?.id;
+    if (g.leagueId == null && leagueIdFromFix != null && String(leagueIdFromFix) !== "") {
+      g.leagueId = String(leagueIdFromFix);
+    }
+    const min = readNumDetail(details, ["minutes_played", "minutes", "119"]);
+    g.minutesPlayed += min;
+    if (min > 0) g._minutesGames += 1;
+    g.goals += readNumDetail(details, ["goals", "52"]);
+    g.assists += readNumDetail(details, ["assists"]);
+    g.yellowCards += readNumDetail(details, ["yellow_cards", "yellow_card"]);
+    g.redCards += readNumDetail(details, ["red_cards", "red_card"]);
+    g.shotsTotal += readNumDetail(details, ["shots_total", "shots", "42"]);
+    g.shotsOnTarget += readNumDetail(details, ["shots_on_target"]);
+    const pThis = readNumDetail(details, ["passes", "passes_total"]);
+    g.passes += pThis;
+    g.touches += readNumDetail(details, ["touches"]);
+    g.tacklesWon += readNumDetail(details, ["tackles_won", "tackleswon"]);
+    g.interceptions += readNumDetail(details, ["interceptions"]);
+    g.bench += readNumDetail(details, ["bench", "appearances_from_bench"]);
+    const rating = (() => {
+      const val = pickStatDetail(details, ["rating", "118", "average_rating"]);
+      if (val == null || !Number.isFinite(Number(val))) return null;
+      const rv = Number(val);
+      if (rv < 1 || rv > 10) return null;
+      return Math.round(rv * 100) / 100;
+    })();
+    if (rating != null && min > 0) {
+      g._ratingNum += rating * min;
+      g._ratingW += min;
+    }
+    const pPct = readPassPctForMatch(details);
+    if (pThis > 0 && pPct > 0 && pPct <= 100) {
+      g._passAccNum += (pPct / 100) * pThis;
+      g._passW += pThis;
+    }
+    const dPct = readDuelsPctForMatch(details);
+    if (dPct > 0 && dPct <= 100 && min > 0) {
+      g._duelNum += dPct * min;
+      g._duelW += min;
+    }
+    const shPerf = readNullableDetail(details, ["shooting_performance"]);
+    if (shPerf != null && min > 0) {
+      g._shootingNum += shPerf * min;
+      g._shootingW += min;
+    }
+    const addN = (key, hKey, aliases) => {
+      const v = readNullableDetail(details, aliases);
+      if (v == null) return;
+      g[key] += v;
+      g[hKey] = true;
+    };
+    addN("seasonXg", "_hasXg", ["expected_goals", "5304", "xg"]);
+    addN("seasonXgot", "_hasXgot", ["expected_goals_on_target", "5305", "xgot"]);
+    addN("seasonXgOpenPlay", "_hasXgOp", ["expected_goals_open_play"]);
+    addN("seasonXgSetPiece", "_hasXgSp", ["expected_goals_set_play"]);
+    addN("seasonXgCorners", "_hasXgCor", ["expected_goals_corners"]);
+    addN("seasonXgNonPenalty", "_hasXgNp", [
+      "expected_non_penalty_goals",
+      "expected_goals_non_penalty_goals",
+    ]);
+    addN("expectedPoints", "_hasEp", ["expected_points"]);
+    addN("eshots", "_hasEsh", ["expected_shots", "expected_shots_total"]);
+  }
+  const out = [];
+  let idx = 0;
+  for (const [leagueName, g] of groups) {
+    const xgN = (has, v) => (has ? v : null);
+    out.push(
+      roundSeasonCountFields({
+        season: `Da partite · ${leagueName}`,
+        seasonValue: `match:${encodeURIComponent(leagueName)}:${idx}`,
+        seasonLabel: leagueName,
+        competitionName: leagueName,
+        competitionValue: `match:${encodeURIComponent(leagueName)}:${idx}`,
+        leagueId: g.leagueId,
+        statsSource: "matches",
+        appearances: g._minutesGames,
+        minutesPlayed: g.minutesPlayed,
+        goals: g.goals,
+        assists: g.assists,
+        yellowCards: g.yellowCards,
+        redCards: g.redCards,
+        rating:
+          g._ratingW > 0 ? Math.round((g._ratingNum / g._ratingW) * 100) / 100 : null,
+        bench: g.bench,
+        passes: g.passes,
+        shotsTotal: g.shotsTotal,
+        shotsOnTarget: g.shotsOnTarget,
+        touches: g.touches,
+        tacklesWon: g.tacklesWon,
+        interceptions: g.interceptions,
+        passAccuracyPct: g._passW > 0 ? (g._passAccNum / g._passW) * 100 : null,
+        duelsWonPct: g._duelW > 0 ? g._duelNum / g._duelW : null,
+        seasonXg: xgN(g._hasXg, g.seasonXg),
+        seasonXgot: xgN(g._hasXgot, g.seasonXgot),
+        seasonXgOpenPlay: xgN(g._hasXgOp, g.seasonXgOpenPlay),
+        seasonXgSetPiece: xgN(g._hasXgSp, g.seasonXgSetPiece),
+        seasonXgCorners: xgN(g._hasXgCor, g.seasonXgCorners),
+        seasonXgNonPenalty: xgN(g._hasXgNp, g.seasonXgNonPenalty),
+        expectedPoints: xgN(g._hasEp, g.expectedPoints),
+        eshots: xgN(g._hasEsh, g.eshots),
+        shootingPerformance:
+          g._shootingW > 0
+            ? Math.round((g._shootingNum / g._shootingW) * 1000) / 1000
+            : null,
+      }),
+    );
+    idx += 1;
+  }
+  return out;
+}
+
+/** Stessa lega, metriche "expected" (API sovente le ha null; le partite le sommano). */
+const SEASON_NULLABLE_EXTRAS = [
+  "seasonXg",
+  "seasonXgot",
+  "seasonXgOpenPlay",
+  "seasonXgSetPiece",
+  "seasonXgCorners",
+  "seasonXgNonPenalty",
+  "expectedPoints",
+  "eshots",
+  "shootingPerformance",
+];
+
+function seasonRowLeagueKey(r) {
+  if (r?.leagueId != null && String(r.leagueId) !== "") {
+    return `id:${r.leagueId}`;
+  }
+  return `n:${normalizeLeagueName(r.competitionName || r.leagueName || "comp")}`;
+}
+
+/**
+ * Aggrouppa per lega. Base = riga API se c’è; altrimenti riga "da partite". Presenze e gol
+ * restano dall’API; i campi in SEASON_NULLABLE_EXTRAS vengono presi dalle partite se l’API è null
+ * (prima l’inclusione match veniva scartata del tutto per quella lega, perdendo l’xG sommato).
+ */
+function mergeByLeagueKey(rows) {
+  const groups = new Map();
+  for (const r of asArray(rows)) {
+    const k = seasonRowLeagueKey(r);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    if (g.length === 1) {
+      out.push(g[0]);
+      continue;
+    }
+    const apiRow = g.find((r) => r?.statsSource === "api");
+    if (apiRow) {
+      const result = { ...apiRow };
+      for (const other of g) {
+        if (other === apiRow) continue;
+        for (const field of SEASON_NULLABLE_EXTRAS) {
+          const oV = other[field];
+          if (oV == null || !Number.isFinite(Number(oV))) continue;
+          const cV = result[field];
+          if (cV == null || !Number.isFinite(Number(cV))) {
+            result[field] = oV;
+            continue;
+          }
+          if (Number(cV) === 0 && Number(oV) > 0) {
+            result[field] = oV;
+          }
+        }
+      }
+      out.push(roundSeasonCountFields(result));
+      continue;
+    }
+    const result = { ...g[0] };
+    for (const other of g.slice(1)) {
+      for (const field of SEASON_NULLABLE_EXTRAS) {
+        const oV = other[field];
+        if (oV == null || !Number.isFinite(Number(oV))) continue;
+        const cV = result[field];
+        if (cV == null || !Number.isFinite(Number(cV))) {
+          result[field] = oV;
+          continue;
+        }
+        if (Number(cV) === 0 && Number(oV) > 0) {
+          result[field] = oV;
+        }
+      }
+    }
+    out.push(roundSeasonCountFields(result));
+  }
+  return out;
+}
+
+function mergeApiAndMatchSeasonStats(apiSeason, matchDerivedRows) {
+  const apiRows = asArray(apiSeason?.byCompetition);
+  const mRows = asArray(matchDerivedRows);
+  if (!mRows.length) {
+    return apiSeason;
+  }
+  if (!apiRows.length) {
+    const sorted = mergeByLeagueKey(mRows).sort((a, b) =>
+      String(a.competitionName).localeCompare(String(b.competitionName), "it"),
+    );
+    return {
+      byCompetition: sorted,
+      allCompetitions: sorted.length
+        ? {
+            ...aggregateCurrentSeasonStats(sorted),
+            competitionName: "Tutte le competizioni",
+            competitionValue: "__all__",
+          }
+        : null,
+      seasonLabel: apiSeason?.seasonLabel || null,
+    };
+  }
+  const merged = [...apiRows, ...mRows];
+  const deduped = mergeByLeagueKey(merged);
+  deduped.sort((a, b) =>
+    String(a.competitionName).localeCompare(String(b.competitionName), "it"),
+  );
+  const all =
+    deduped.length > 0
+      ? {
+          ...aggregateCurrentSeasonStats(deduped),
+          competitionName: "Tutte le competizioni",
+          competitionValue: "__all__",
+        }
+      : null;
+  return {
+    byCompetition: deduped,
+    allCompetitions: all,
+    seasonLabel: apiSeason?.seasonLabel || null,
+  };
+}
+
+function buildCurrentSeasonByCompetition(playerData) {
+  const statistics = asArray(playerData?.statistics);
+  const withCurrent = statistics.filter((r) => r?.season?.is_current === true);
+  const seasonId = resolveCurrentSeasonId(statistics);
+  if (withCurrent.length === 0 && !seasonId) {
+    return { byCompetition: [], allCompetitions: null, seasonLabel: null };
+  }
+  const filtered =
+    withCurrent.length > 0
+      ? withCurrent
+      : statistics.filter(
+          (r) => String(r?.season?.id ?? r?.season_id ?? "") === String(seasonId),
+        );
+  const byCompetition = filtered
+    .map((row, idx) => {
+      const base = mapPlayerStatisticsEntry(row);
+      const league = row?.season?.league;
+      const cName = league?.name || base.leagueName || "Competizione";
+      const compId = league?.id ?? "n";
+      const leagueId = league?.id != null && league?.id !== "" ? String(league.id) : null;
       return {
-        season: seasonName || "Stagione",
-        __seasonScore: parseSeasonScore(row),
-        appearances: pickStatFromRowOrDetails(row, ["appearances", "matches_played"]) ?? 0,
-        minutesPlayed: pickStatFromRowOrDetails(row, ["minutes_played", "minutes"]) ?? 0,
-        goals: pickStatFromRowOrDetails(row, ["goals", "goals_scored"]) ?? 0,
-        assists: pickStatFromRowOrDetails(row, ["assists"]) ?? 0,
-        yellowCards: yellowCards ?? pickStatFromRowOrDetails(row, ["yellow_cards", "yellow_card"]) ?? 0,
-        redCards: redCards ?? pickStatFromRowOrDetails(row, ["red_cards", "red_card"]) ?? 0,
-        rating: pickStatFromRowOrDetails(row, ["rating", "average_rating"], null),
-        bench: bench ?? pickStatFromRowOrDetails(row, ["bench", "appearances_from_bench"]) ?? 0,
-        passes: pickStatFromRowOrDetails(row, ["passes_total", "passes"]) ?? 0,
-        shotsTotal: pickStatFromRowOrDetails(row, ["shots_total", "total_shots", "shots"]) ?? 0,
-        shotsOnTarget: pickStatFromRowOrDetails(row, ["shots_on_target"]) ?? 0,
+        ...base,
+        competitionName: cName,
+        competitionValue: `l${String(compId)}-i${idx}`,
+        leagueId,
+        statsSource: "api",
       };
     })
-    .filter((row) => String(row.season || "").trim().length > 0);
+    .sort((a, b) =>
+      String(a.competitionName).localeCompare(String(b.competitionName), "it"),
+    );
+  const allCompetitions = byCompetition.length
+    ? {
+        ...aggregateCurrentSeasonStats(byCompetition),
+        competitionName: "Tutte le competizioni",
+        competitionValue: "__all__",
+      }
+    : null;
+  const seasonLabel =
+    filtered[0]?.season?.name ||
+    filtered[0]?.season?.display_name ||
+    null;
+  return { byCompetition, allCompetitions, seasonLabel };
+}
 
-  if (mapped.length === 0) {
-    return [];
-  }
-
-  const activeEntry =
-    [...mapped]
-      .sort((left, right) => {
-        if ((right.__seasonScore || 0) !== (left.__seasonScore || 0)) {
-          return (right.__seasonScore || 0) - (left.__seasonScore || 0);
-        }
-        if ((right.appearances || 0) !== (left.appearances || 0)) {
-          return (right.appearances || 0) - (left.appearances || 0);
-        }
-        return (right.minutesPlayed || 0) - (left.minutesPlayed || 0);
-      })[0] || mapped[0];
-
-  return [
-    {
-      ...activeEntry,
-      season: "Stagione corrente",
-    },
-  ];
+function buildSeasonsFromStatistics() {
+  return [];
 }
 
 function buildCareer(playerData = {}, externalCareerRows = []) {
@@ -570,8 +1227,13 @@ function extractScore(fixture) {
   };
 }
 
-function buildMatchStatsRows(latestRows, teamId) {
-  return asArray(latestRows)
+function buildMatchStatsRows(latestRows, teamId, seasonCtx) {
+  const base = asArray(latestRows);
+  const pre =
+    seasonCtx && !seasonCtx.isEmpty
+      ? base.filter((row) => isFixtureInCurrentSeasonContext(row?.fixture || row, seasonCtx))
+      : base;
+  return pre
     .sort((left, right) => {
       const leftFixture = left?.fixture || left;
       const rightFixture = right?.fixture || right;
@@ -638,11 +1300,16 @@ export async function GET(request) {
       return NextResponse.json({ error: "playerId obbligatorio." }, { status: 400 });
     }
 
+    const debugProfile = request.nextUrl.searchParams.get("debugProfile") === "1";
     const cacheKey = `${PLAYER_PROFILE_CACHE_VERSION}:player:${String(playerId)}`;
     const cacheStore = getCacheStore();
     const now = Date.now();
     const cached = cacheStore.get(cacheKey);
-    if (cached && now - cached.updatedAt < PLAYER_PROFILE_CACHE_TTL_MS) {
+    if (
+      !debugProfile &&
+      cached &&
+      now - cached.updatedAt < PLAYER_PROFILE_CACHE_TTL_MS
+    ) {
       return NextResponse.json(cached.payload);
     }
 
@@ -655,7 +1322,7 @@ export async function GET(request) {
     }
 
     const teamInfo = getCurrentTeamData(playerData);
-    const seasons = buildSeasonsFromStatistics(playerData);
+    const seasons = buildSeasonsFromStatistics();
     const career = buildCareer(playerData, careerRows);
     const honors = buildHonors(playerData);
     const honorsByTeam = buildHonorsByTeam(honors);
@@ -665,9 +1332,13 @@ export async function GET(request) {
       statisticsRows[0] ||
       null;
     const currentSeasonId = Number(currentSeasonRow?.season?.id || currentSeasonRow?.season_id || null) || null;
-    const seasonFixtures = await fetchSportmonksCurrentSeasonFixturesForTeam(
+    const seasonCtx = getCurrentSeasonContextFromStatistics(statisticsRows);
+    const seasonFixturesRaw = await fetchSportmonksCurrentSeasonFixturesForTeam(
       teamInfo.teamId,
       statisticsRows,
+    );
+    const seasonFixtures = seasonFixturesRaw.filter((fx) =>
+      isFixtureInCurrentSeasonContext(fx, seasonCtx),
     );
     const latestByFixture = new Map(
       asArray(playerData?.latest).map((row) => [String((row?.fixture || row)?.id || ""), row]),
@@ -690,8 +1361,25 @@ export async function GET(request) {
         },
       };
     });
-    const rowsSource = mergedRows.length > 0 ? mergedRows : playerData?.latest;
-    const matchStats = buildMatchStatsRows(rowsSource, teamInfo.teamId);
+    const rowsSource =
+      mergedRows.length > 0
+        ? mergedRows
+        : filterLatestRowsToCurrentSeason(playerData?.latest, teamInfo.teamId, seasonCtx);
+    const matchStats = buildMatchStatsRows(
+      rowsSource,
+      teamInfo.teamId,
+      seasonCtx,
+    );
+    const byMatchesPerLeague = buildSeasonStatsFromMatchRows(
+      rowsSource,
+      teamInfo.teamId,
+      seasonCtx,
+    );
+    const fromApiSeason = buildCurrentSeasonByCompetition(playerData);
+    const currentSeason = mergeApiAndMatchSeasonStats(
+      fromApiSeason,
+      byMatchesPerLeague,
+    );
     const payload = {
       playerId: String(playerId),
       profile: {
@@ -726,12 +1414,32 @@ export async function GET(request) {
         media: pickMediaBundle(playerData),
       },
       seasons,
+      currentSeason,
       career,
       honors,
       honorsByTeam,
       matchStats,
     };
-    cacheStore.set(cacheKey, { payload, updatedAt: now });
+    if (debugProfile) {
+      payload._debug = {
+        version: PLAYER_PROFILE_CACHE_VERSION,
+        statsRows: statisticsRows.length,
+        isCurrentInStats: statisticsRows.filter(
+          (r) => r?.season?.is_current === true,
+        ).length,
+        seasonIdsInCtx: [...seasonCtx.seasonIdSet],
+        fixturesAfterFilter: seasonFixtures.length,
+        mergedRows: mergedRows.length,
+        matchAggregates: byMatchesPerLeague.length,
+        apiByComp: asArray(fromApiSeason?.byCompetition).length,
+        byCompAfterMerge: asArray(currentSeason?.byCompetition).length,
+        allCompGoals: currentSeason?.allCompetitions?.goals ?? null,
+        allCompMinutes: currentSeason?.allCompetitions?.minutesPlayed ?? null,
+      };
+    }
+    if (!debugProfile) {
+      cacheStore.set(cacheKey, { payload, updatedAt: now });
+    }
 
     return NextResponse.json(payload);
   } catch (error) {

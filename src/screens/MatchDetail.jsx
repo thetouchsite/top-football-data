@@ -1,7 +1,8 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation, Link } from "@/lib/router-compat";
 import { motion } from "framer-motion";
-import { ArrowLeft, Bell, Clock, Star, TrendingUp, Crown } from "lucide-react";
+import { ArrowLeft, Bell, ChevronDown, Clock, Star, TrendingUp, Crown } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GlassCard from "@/components/shared/GlassCard";
 import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
@@ -13,6 +14,11 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -23,6 +29,7 @@ import ConfidenceBar from "@/components/shared/ConfidenceBar";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import PremiumLock from "@/components/shared/PremiumLock";
 import FormationPitch from "@/components/stats/FormationPitch";
+import BenchPanchina from "@/components/stats/BenchPanchina";
 import PlayerCard from "@/components/stats/PlayerCard";
 import PlayerDetailPanel from "@/components/players/PlayerDetailPanel";
 import TopXgPlayers from "@/components/stats/TopXgPlayers";
@@ -31,6 +38,7 @@ import PressurePreviewChart from "@/components/match/PressurePreviewChart";
 import { useApp } from "@/lib/AppContext";
 import {
   getFixture,
+  getHeadToHeadByFixture,
   getPlayerOddsByFixture,
   getPlayerProps,
   getPlayerXgByFixture,
@@ -38,6 +46,11 @@ import {
 } from "@/api/football";
 import { getAlerts } from "@/api/alerts";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
+import { cn } from "@/lib/utils";
+import {
+  readDuelsWonPercentFromRows,
+  readPassAccuracyPercentFromRows,
+} from "@/lib/football/passAccuracyFromRows";
 
 const EMPTY_ARRAY = [];
 const FORMATIONS_DEEP_TABS = {
@@ -83,11 +96,144 @@ function statValueFromData(entry) {
   return 0;
 }
 
+function mergePassAccuracyPct(a, b) {
+  const x = Number(a);
+  const y = Number(b);
+  const ok = (n) => Number.isFinite(n) && n > 0 && n <= 100;
+  if (ok(x) && ok(y)) return Math.max(x, y);
+  if (ok(x)) return x;
+  if (ok(y)) return y;
+  return 0;
+}
+
+const mergeDuelsWonPct = mergePassAccuracyPct;
+
 function seasonRatingToneClass(value) {
   const rating = Number(value || 0);
   if (rating >= 7) return "bg-emerald-500/25 text-emerald-300";
   if (rating >= 6) return "bg-amber-400/25 text-amber-300";
   return "bg-rose-500/25 text-rose-300";
+}
+
+function computeH2hInsights(rows, homeTeam, awayTeam) {
+  const list = Array.isArray(rows) ? rows : [];
+  const base = {
+    total: list.length,
+    homeWins: 0,
+    awayWins: 0,
+    draws: 0,
+    bttsCount: 0,
+    over25Count: 0,
+    avgGoals: 0,
+    avgHomeGoals: 0,
+    avgAwayGoals: 0,
+    under25Count: 0,
+    cleanSheetHome: 0,
+    cleanSheetAway: 0,
+    currentSeasonRows: [],
+    seasonLabel: null,
+    recentTrend: [],
+    goalBands: [],
+    latest: [],
+  };
+  if (!list.length) return base;
+
+  let homeGoalsSum = 0;
+  let awayGoalsSum = 0;
+  const recentRows = list.slice(0, 8);
+  const goalBandMap = {
+    "0-1": 0,
+    "2-3": 0,
+    "4+": 0,
+  };
+  list.forEach((row) => {
+    if (row.result === "home") base.homeWins += 1;
+    else if (row.result === "away") base.awayWins += 1;
+    else base.draws += 1;
+    if (row.btts) base.bttsCount += 1;
+    if (row.over25) base.over25Count += 1;
+    else base.under25Count += 1;
+    const homeGoals = Number(row.homeGoals || 0);
+    const awayGoals = Number(row.awayGoals || 0);
+    homeGoalsSum += homeGoals;
+    awayGoalsSum += awayGoals;
+    if (awayGoals === 0) base.cleanSheetHome += 1;
+    if (homeGoals === 0) base.cleanSheetAway += 1;
+    const totalGoals = homeGoals + awayGoals;
+    if (totalGoals <= 1) goalBandMap["0-1"] += 1;
+    else if (totalGoals <= 3) goalBandMap["2-3"] += 1;
+    else goalBandMap["4+"] += 1;
+  });
+
+  base.avgHomeGoals = homeGoalsSum / list.length;
+  base.avgAwayGoals = awayGoalsSum / list.length;
+  base.avgGoals = (homeGoalsSum + awayGoalsSum) / list.length;
+  base.latest = list.slice(0, 5);
+  base.currentSeasonRows = list.filter((row) => row.isCurrentSeason);
+  base.seasonLabel =
+    base.currentSeasonRows.find((row) => row.seasonName)?.seasonName ||
+    base.currentSeasonRows[0]?.seasonId ||
+    null;
+  base.recentTrend = recentRows
+    .map((row, index) => ({
+      idx: recentRows.length - index,
+      label: row.date || `#${index + 1}`,
+      totalGoals: Number(row.homeGoals || 0) + Number(row.awayGoals || 0),
+      btts: row.btts ? 1 : 0,
+    }))
+    .reverse();
+  base.goalBands = Object.entries(goalBandMap).map(([label, value]) => ({ label, value }));
+  base.homeLabel = homeTeam || "Casa";
+  base.awayLabel = awayTeam || "Trasferta";
+  return base;
+}
+
+function h2hOutcomeLabel(row, homeName, awayName) {
+  if (row?.result === "draw") return "Pareggio";
+  if (row?.result === "home") return `Vittoria ${homeName || "casa"}`;
+  if (row?.result === "away") return `Vittoria ${awayName || "trasferta"}`;
+  return "—";
+}
+
+function resolveOpponentMedia(teamName, home, away, homeMedia, awayMedia) {
+  const t = String(teamName || "")
+    .trim()
+    .toLowerCase();
+  if (t === String(home || "")
+    .trim()
+    .toLowerCase()) {
+    return homeMedia;
+  }
+  if (t === String(away || "")
+    .trim()
+    .toLowerCase()) {
+    return awayMedia;
+  }
+  return null;
+}
+
+function toNumberOrZero(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function buildVsMetricRow(label, homeValue, awayValue, { lowerIsBetter = false } = {}) {
+  const left = toNumberOrZero(homeValue);
+  const right = toNumberOrZero(awayValue);
+  const max = Math.max(left, right, 1);
+  const leftPct = (left / max) * 100;
+  const rightPct = (right / max) * 100;
+  const leader =
+    left === right
+      ? "draw"
+      : lowerIsBetter
+        ? left < right
+          ? "home"
+          : "away"
+        : left > right
+          ? "home"
+          : "away";
+  return { label, left, right, leftPct, rightPct, leader };
 }
 
 function normalizePersonNameKey(value) {
@@ -489,6 +635,10 @@ export default function MatchDetail() {
   const [playerOddsPayload, setPlayerOddsPayload] = useState(null);
   const [playerOddsLoading, setPlayerOddsLoading] = useState(false);
   const [playerOddsError, setPlayerOddsError] = useState("");
+  const [headToHeadPayload, setHeadToHeadPayload] = useState(null);
+  const [headToHeadLoading, setHeadToHeadLoading] = useState(false);
+  const [headToHeadError, setHeadToHeadError] = useState("");
+  const [panchinaOpen, setPanchinaOpen] = useState(false);
 
   useEffect(() => {
     if (!fixtureIdToLoad) {
@@ -826,6 +976,8 @@ export default function MatchDetail() {
     () => buildBenchPlayers(awayLineup?.players, awaySquad),
     [awayLineup?.players, awaySquad],
   );
+  const selectedBench =
+    selectedLineupSide === "away" ? awayBench : homeBench;
   const hasRealPlayerStats = useMemo(
     () =>
       availablePlayers.some(
@@ -839,7 +991,7 @@ export default function MatchDetail() {
   const visibleFormationsTabs = useMemo(
     () =>
       [
-        { key: FORMATIONS_DEEP_TABS.lineups, label: "Probabili Formazioni" },
+        { key: FORMATIONS_DEEP_TABS.lineups, label: "Formazioni" },
         { key: FORMATIONS_DEEP_TABS.xgAnalysis, label: "Analisi XG" },
         hasRealPlayerStats
           ? { key: FORMATIONS_DEEP_TABS.playerStats, label: "Player Stats" }
@@ -1029,9 +1181,29 @@ export default function MatchDetail() {
         const goals = readByKey(metricRows, ["goals", "52"]);
         const shots = readByKey(metricRows, ["shots_total", "shots", "42"]);
         const passes = readByKey(metricRows, ["passes"]);
-        const passAccuracyPct = readByKey(metricRows, ["accurate_passes_percentage"]);
+        const passAccuracyPct = readPassAccuracyPercentFromRows(
+          metricRows,
+          (row) => statValueFromData(row),
+          (row) =>
+            normalizeStatKey(
+              row?.type?.developer_name ||
+                row?.type?.code ||
+                row?.type?.name ||
+                row?.type_id,
+            ),
+        );
         const touches = readByKey(metricRows, ["touches"]);
-        const duelsWonPct = readByKey(metricRows, ["duels_won_percentage"]);
+        const duelsWonPct = readDuelsWonPercentFromRows(
+          metricRows,
+          (r) => statValueFromData(r),
+          (r) =>
+            normalizeStatKey(
+              r?.type?.developer_name ||
+                r?.type?.code ||
+                r?.type?.name ||
+                r?.type_id,
+            ),
+        );
         const interceptions = readByKey(metricRows, ["interceptions"]);
         const tacklesWon = readByKey(metricRows, ["tackles_won"]);
         const eshots = readByKey(metricRows, ["expected_shots", "expected_shots_total"]);
@@ -1148,17 +1320,17 @@ export default function MatchDetail() {
           Number(existing.seasonPasses || 0),
           Number(row.seasonPasses || 0),
         ),
-        seasonPassAccuracyPct: Math.max(
-          Number(existing.seasonPassAccuracyPct || 0),
-          Number(row.seasonPassAccuracyPct || 0),
+        seasonPassAccuracyPct: mergePassAccuracyPct(
+          existing.seasonPassAccuracyPct,
+          row.seasonPassAccuracyPct,
         ),
         seasonTouches: Math.max(
           Number(existing.seasonTouches || 0),
           Number(row.seasonTouches || 0),
         ),
-        seasonDuelsWonPct: Math.max(
-          Number(existing.seasonDuelsWonPct || 0),
-          Number(row.seasonDuelsWonPct || 0),
+        seasonDuelsWonPct: mergeDuelsWonPct(
+          existing.seasonDuelsWonPct,
+          row.seasonDuelsWonPct,
         ),
         seasonInterceptions: Math.max(
           Number(existing.seasonInterceptions || 0),
@@ -1195,6 +1367,13 @@ export default function MatchDetail() {
       )
       .slice(0, 12);
   }, [fixtureBundle?.rawFixture, xgPlayersApiPayload?.rows]);
+
+  const matchMetricsForSelectedPlayer = useMemo(() => {
+    const pid = selectedPlayer?.id;
+    if (pid == null || String(pid).trim() === "") return null;
+    return xgPlayerRows.find((r) => String(r.id) === String(pid)) ?? null;
+  }, [selectedPlayer?.id, xgPlayerRows]);
+
   const xgCoverageLevel = useMemo(() => {
     if (!xgTeamRows.length) return "none";
     const hasAdvanced = xgTeamRows.some((row) => {
@@ -1219,9 +1398,13 @@ export default function MatchDetail() {
     setPlayerOddsPayload(null);
     setPlayerOddsLoading(false);
     setPlayerOddsError("");
+    setHeadToHeadPayload(null);
+    setHeadToHeadLoading(false);
+    setHeadToHeadError("");
     setTeamMomentumPayload(null);
     setTeamMomentumLoading(false);
     setTeamMomentumError("");
+    setPanchinaOpen(true);
   }, [match.id, snapshotVersionForRequest]);
 
   useEffect(() => {
@@ -1476,6 +1659,40 @@ export default function MatchDetail() {
   ]);
 
   useEffect(() => {
+    if (!match.id) {
+      return;
+    }
+
+    let active = true;
+    setHeadToHeadLoading(true);
+    setHeadToHeadError("");
+
+    getHeadToHeadByFixture(match.id, {
+      snapshotVersion: snapshotVersionForRequest,
+    })
+      .then((payload) => {
+        if (active) {
+          setHeadToHeadPayload(payload);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setHeadToHeadPayload(null);
+          setHeadToHeadError(error.message || "Head-to-head non disponibile.");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setHeadToHeadLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [match.id, snapshotVersionForRequest]);
+
+  useEffect(() => {
     if (
       activeMainTab !== "team-momentum" ||
       (teamMomentumPayload?.fixtureId === String(match.id) &&
@@ -1550,6 +1767,55 @@ export default function MatchDetail() {
       cancelled = true;
     };
   }, [fixtureIdToLoad]);
+
+  const headToHeadRows = Array.isArray(headToHeadPayload?.rows)
+    ? headToHeadPayload.rows
+    : Array.isArray(match.h2h)
+      ? match.h2h
+      : [];
+  const h2hInsights = computeH2hInsights(headToHeadRows, match.home, match.away);
+  const homeSeasonStats = {
+    points: toNumberOrZero(homeStandingRow?.points),
+    played: toNumberOrZero(homeStandingRow?.played),
+    wins: toNumberOrZero(homeStandingRow?.wins),
+    draws: toNumberOrZero(homeStandingRow?.draws),
+    losses: toNumberOrZero(homeStandingRow?.losses),
+    goalsFor: toNumberOrZero(homeStandingRow?.goalsFor),
+    goalsAgainst: toNumberOrZero(homeStandingRow?.goalsAgainst),
+    goalDifference: toNumberOrZero(homeStandingRow?.goalDifference),
+    position: toNumberOrZero(homeStandingRow?.position),
+  };
+  const awaySeasonStats = {
+    points: toNumberOrZero(awayStandingRow?.points),
+    played: toNumberOrZero(awayStandingRow?.played),
+    wins: toNumberOrZero(awayStandingRow?.wins),
+    draws: toNumberOrZero(awayStandingRow?.draws),
+    losses: toNumberOrZero(awayStandingRow?.losses),
+    goalsFor: toNumberOrZero(awayStandingRow?.goalsFor),
+    goalsAgainst: toNumberOrZero(awayStandingRow?.goalsAgainst),
+    goalDifference: toNumberOrZero(awayStandingRow?.goalDifference),
+    position: toNumberOrZero(awayStandingRow?.position),
+  };
+  const vsSeasonMetrics = [
+    buildVsMetricRow("Punti", homeSeasonStats.points, awaySeasonStats.points),
+    buildVsMetricRow("Partite giocate", homeSeasonStats.played, awaySeasonStats.played),
+    buildVsMetricRow("Vittorie", homeSeasonStats.wins, awaySeasonStats.wins),
+    buildVsMetricRow("Pareggi", homeSeasonStats.draws, awaySeasonStats.draws),
+    buildVsMetricRow(
+      "Sconfitte",
+      homeSeasonStats.losses,
+      awaySeasonStats.losses,
+      { lowerIsBetter: true },
+    ),
+    buildVsMetricRow("Gol fatti (stagione)", homeSeasonStats.goalsFor, awaySeasonStats.goalsFor),
+    buildVsMetricRow(
+      "Gol subiti (stagione)",
+      homeSeasonStats.goalsAgainst,
+      awaySeasonStats.goalsAgainst,
+      { lowerIsBetter: true },
+    ),
+    buildVsMetricRow("Differenza reti", homeSeasonStats.goalDifference, awaySeasonStats.goalDifference),
+  ];
 
   return (
     <div className="app-page">
@@ -1716,20 +1982,24 @@ export default function MatchDetail() {
           <div className="min-w-0 lg:col-span-2">
             <Tabs value={activeMainTab} onValueChange={setActiveMainTab}>
               <TabsList className="mb-5 flex h-auto min-h-10 w-full flex-wrap justify-start gap-1 p-1 glass">
-                {["panoramica", "formazioni", "analisi-xg", "team-momentum", "contesto", "h2h"].map((tab) => (
+                {["panoramica", "formazioni", "analisi-xg", "team-momentum", "h2h"].map((tab) => (
                   <TabsTrigger
                     key={tab}
                     value={tab}
                     className="shrink-0 text-xs capitalize data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
                   >
                     {tab === "h2h"
-                      ? "Testa a Testa"
+                      ? `Testa a testa${
+                          headToHeadRows.length
+                            ? ` (${headToHeadRows.length})`
+                            : headToHeadLoading
+                              ? " …"
+                              : ""
+                        }`
                       : tab === "analisi-xg"
                         ? "Analisi XG"
-                        : tab === "team-momentum"
+                      : tab === "team-momentum"
                           ? "Team Momentum"
-                      : tab === "contesto"
-                        ? "Contesto"
                         : tab}
                   </TabsTrigger>
                 ))}
@@ -2199,6 +2469,7 @@ export default function MatchDetail() {
                                 ? match.home
                                 : match.away
                             }
+                            lineupStatus={match.lineup_status}
                             onPlayerClick={(player) =>
                               handleSelectLineupPlayer(
                                 player,
@@ -2214,131 +2485,133 @@ export default function MatchDetail() {
                               </p>
                             </GlassCard>
                           )}
-                          {!selectedLineupPlayers.length &&
-                            selectedSquad.length > 0 && (
-                              <Accordion
-                                type="single"
-                                collapsible
-                                className="rounded-xl border border-border/40 bg-secondary/10 px-3"
+                          {(selectedBench.length > 0 || selectedSquad.length > 0) && (
+                            <GlassCard className="border-border/40">
+                              <Collapsible
+                                open={panchinaOpen}
+                                onOpenChange={setPanchinaOpen}
+                                className="w-full"
                               >
-                                <AccordionItem
-                                  value="rose-md"
-                                  className="border-0"
+                                <CollapsibleTrigger
+                                  type="button"
+                                  className="flex w-full items-center justify-between gap-2 rounded-lg py-1 text-left transition-colors hover:bg-secondary/20"
                                 >
-                                  <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">
-                                    Rosa {selectedLineupTeam} (lista compatta)
-                                  </AccordionTrigger>
-                                  <AccordionContent>
-                                    <div className="space-y-2 pb-2">
-                                      {selectedSquad
-                                        .slice(0, 16)
-                                        .map((player) => (
-                                          <button
-                                            key={player.id || player.name}
-                                            type="button"
-                                            onClick={() =>
-                                              handleSelectLineupPlayer(
-                                                player,
-                                                selectedLineupTeam,
-                                              )
-                                            }
-                                            className="flex w-full items-center justify-between rounded-lg bg-secondary/30 p-2 text-left text-xs transition-colors hover:bg-secondary/50"
-                                          >
-                                            <span className="min-w-0 truncate text-foreground">
-                                              {player.name}
-                                            </span>
-                                            <span className="ml-2 shrink-0 text-muted-foreground">
-                                              #{player.number || "--"} -{" "}
-                                              {player.position ||
-                                                player.pos ||
-                                                "--"}
-                                            </span>
-                                          </button>
-                                        ))}
+                                  <h3 className="text-sm font-semibold text-foreground">
+                                    Sostituzioni / Panchina
+                                  </h3>
+                                  <ChevronDown
+                                    className={cn(
+                                      "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                      panchinaOpen && "rotate-180",
+                                    )}
+                                  />
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="pt-2">
+                                  <p className="mb-3 text-[10px] text-muted-foreground">
+                                    {selectedLineupTeam}. Solo la squadra selezionata con lo switch sopra, max
+                                    14.{" "}
+                                    {selectedBench.length > 0
+                                      ? "Panchina o riserve dal feed se disponibili."
+                                      : "Usiamo le prime riserve dalla rosa se il feed non separa la panchina."}{" "}
+                                    Tap = pannello giocatore.
+                                  </p>
+                                  <div className="flex flex-col gap-4 md:flex-row md:items-stretch md:gap-5">
+                                    <div className="order-2 min-w-0 flex-1 space-y-2 md:order-1">
+                                      <div className="text-xs font-semibold text-primary">
+                                        {selectedLineupTeam} · elenco
+                                      </div>
+                                      <div className="max-h-[min(50vh,280px)] space-y-2 overflow-y-auto rounded-xl border border-border/30 bg-secondary/20 p-2 md:max-h-[320px]">
+                                        {(selectedBench.length ? selectedBench : selectedSquad)
+                                          .slice(0, 14)
+                                          .map((player) => (
+                                            <button
+                                              key={`bench-sel-${player.id || player.name}`}
+                                              type="button"
+                                              onClick={() =>
+                                                handleSelectLineupPlayer(
+                                                  player,
+                                                  selectedLineupTeam,
+                                                )
+                                              }
+                                              className="flex w-full items-center justify-between gap-2 rounded-lg bg-secondary/35 px-2.5 py-2 text-left text-xs transition-colors hover:bg-secondary/50"
+                                            >
+                                              <div className="flex min-w-0 items-center gap-2">
+                                                <FootballMediaImage
+                                                  media={player.media}
+                                                  fallbackLabel={player.name}
+                                                  alt={player.name}
+                                                  size="xs"
+                                                />
+                                                <span className="truncate text-foreground">
+                                                  {player.name}
+                                                </span>
+                                              </div>
+                                              <span className="shrink-0 text-muted-foreground">
+                                                #{player.number || "--"}
+                                              </span>
+                                            </button>
+                                          ))}
+                                      </div>
                                     </div>
-                                  </AccordionContent>
-                                </AccordionItem>
-                              </Accordion>
-                            )}
+                                    <BenchPanchina
+                                      className="order-1 w-full shrink-0 md:order-2 md:max-w-[300px] lg:max-w-[320px]"
+                                      players={(selectedBench.length ? selectedBench : selectedSquad).slice(0, 14)}
+                                      onPlayerClick={(player) =>
+                                        handleSelectLineupPlayer(
+                                          player,
+                                          selectedLineupTeam,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                </CollapsibleContent>
+                              </Collapsible>
+                            </GlassCard>
+                          )}
+                          {selectedSquad.length > 0 && (
+                            <Accordion
+                              type="single"
+                              collapsible
+                              className="rounded-xl border border-border/40 bg-secondary/10 px-3"
+                            >
+                              <AccordionItem value="rosa-completa" className="border-0">
+                                <AccordionTrigger className="py-3 text-sm font-semibold text-foreground hover:no-underline">
+                                  Rosa completa · {selectedLineupTeam}
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                  <p className="mb-2 text-[10px] text-muted-foreground">
+                                    Squadra selezionata con lo switch sopra. Elenco dal feed (max 50) · tap per
+                                    aprire il pannello giocatore.
+                                  </p>
+                                  <div className="space-y-2 pb-2">
+                                    {selectedSquad.slice(0, 50).map((player) => (
+                                      <button
+                                        key={`rosa-${player.id || player.name}`}
+                                        type="button"
+                                        onClick={() =>
+                                          handleSelectLineupPlayer(
+                                            player,
+                                            selectedLineupTeam,
+                                          )
+                                        }
+                                        className="flex w-full items-center justify-between rounded-lg bg-secondary/30 p-2 text-left text-xs transition-colors hover:bg-secondary/50"
+                                      >
+                                        <span className="min-w-0 truncate text-foreground">
+                                          {player.name}
+                                        </span>
+                                        <span className="ml-2 shrink-0 text-muted-foreground">
+                                          #{player.number || "--"} -{" "}
+                                          {player.position || player.pos || "--"}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
+                          )}
                         </div>
                       </div>
-
-                      {(homeBench.length > 0 || awayBench.length > 0) && (
-                        <GlassCard className="border-border/40">
-                          <h3 className="mb-3 text-sm font-semibold text-foreground">
-                            Sostituzioni / Panchina
-                          </h3>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="space-y-2 rounded-xl border border-border/30 bg-secondary/20 p-3">
-                              <div className="text-xs font-semibold text-primary">
-                                {match.home}
-                              </div>
-                              {(homeBench.length ? homeBench : homeSquad)
-                                .slice(0, 14)
-                                .map((player) => (
-                                  <button
-                                    key={`bench-home-${player.id || player.name}`}
-                                    type="button"
-                                    onClick={() =>
-                                      handleSelectLineupPlayer(
-                                        player,
-                                        match.home,
-                                      )
-                                    }
-                                    className="flex w-full items-center justify-between gap-2 rounded-lg bg-secondary/35 px-2.5 py-2 text-left text-xs transition-colors hover:bg-secondary/50"
-                                  >
-                                    <div className="flex min-w-0 items-center gap-2">
-                                      <FootballMediaImage
-                                        media={player.media}
-                                        fallbackLabel={player.name}
-                                        alt={player.name}
-                                        size="xs"
-                                      />
-                                      <span className="truncate text-foreground">{player.name}</span>
-                                    </div>
-                                    <span className="shrink-0 text-muted-foreground">
-                                      #{player.number || "--"}
-                                    </span>
-                                  </button>
-                                ))}
-                            </div>
-
-                            <div className="space-y-2 rounded-xl border border-border/30 bg-secondary/20 p-3">
-                              <div className="text-xs font-semibold text-primary">
-                                {match.away}
-                              </div>
-                              {(awayBench.length ? awayBench : awaySquad)
-                                .slice(0, 14)
-                                .map((player) => (
-                                  <button
-                                    key={`bench-away-${player.id || player.name}`}
-                                    type="button"
-                                    onClick={() =>
-                                      handleSelectLineupPlayer(
-                                        player,
-                                        match.away,
-                                      )
-                                    }
-                                    className="flex w-full items-center justify-between gap-2 rounded-lg bg-secondary/35 px-2.5 py-2 text-left text-xs transition-colors hover:bg-secondary/50"
-                                  >
-                                    <div className="flex min-w-0 items-center gap-2">
-                                      <FootballMediaImage
-                                        media={player.media}
-                                        fallbackLabel={player.name}
-                                        alt={player.name}
-                                        size="xs"
-                                      />
-                                      <span className="truncate text-foreground">{player.name}</span>
-                                    </div>
-                                    <span className="shrink-0 text-muted-foreground">
-                                      #{player.number || "--"}
-                                    </span>
-                                  </button>
-                                ))}
-                            </div>
-                          </div>
-                        </GlassCard>
-                      )}
 
                       <div className="space-y-4">
                         {Array.isArray(match.lineup_penalty?.penalties) &&
@@ -2501,7 +2774,7 @@ export default function MatchDetail() {
                                   : "text-muted-foreground"
                               }`}
                             >
-                              Contesto stagione
+                              Contesto partita
                             </button>
                             <button
                               type="button"
@@ -2531,7 +2804,7 @@ export default function MatchDetail() {
                                     {xgPlayersDetailMode === "xg"
                                       ? "Analisi xG"
                                       : xgPlayersDetailMode === "season"
-                                        ? "Contesto stagionale"
+                                        ? "Volume partita (lineup)"
                                         : "Quote giocatore"}
                                   </div>
                                 </div>
@@ -2539,7 +2812,7 @@ export default function MatchDetail() {
                                   <div className="text-[10px] text-muted-foreground">
                                     {xgPlayersDetailMode === "quote"
                                       ? "Quote disponibili"
-                                      : "Rating stagione"}
+                                      : "Rating (lineup)"}
                                   </div>
                                   <div
                                     className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${seasonRatingToneClass(row.seasonRating)}`}
@@ -2577,24 +2850,24 @@ export default function MatchDetail() {
                                     <span className="text-right text-foreground">{Number(row.expectedPoints || 0).toFixed(2)}</span>
                                     <span className="text-muted-foreground">eShots (atteso)</span>
                                     <span className="text-right text-foreground">{Number(row.eshots || 0).toFixed(2)}</span>
-                                    <span className="text-muted-foreground">Shooting Performance</span>
+                                    <span className="text-muted-foreground">Shooting perf. (indice API)</span>
                                     <span className="text-right text-foreground">{Number(row.shootingPerformance || 0).toFixed(2)}</span>
                                   </>
                                 ) : xgPlayersDetailMode === "season" ? (
                                   <>
-                                    <span className="text-muted-foreground">Minuti stagione</span>
+                                    <span className="text-muted-foreground">Minuti (questa partita)</span>
                                     <span className="text-right text-foreground">{row.seasonMinutes || 0}</span>
-                                    <span className="text-muted-foreground">Gol stagione</span>
+                                    <span className="text-muted-foreground">Gol (questa partita)</span>
                                     <span className="text-right text-foreground">{row.seasonGoals || 0}</span>
-                                    <span className="text-muted-foreground">Tiri stagione</span>
+                                    <span className="text-muted-foreground">Tiri (questa partita, lineup)</span>
                                     <span className="text-right text-foreground">{row.seasonShots || 0}</span>
-                                    <span className="text-muted-foreground">Passaggi stagione</span>
+                                    <span className="text-muted-foreground">Passaggi (questa partita)</span>
                                     <span className="text-right text-foreground">{row.seasonPasses || 0}</span>
-                                    <span className="text-muted-foreground">Precisione passaggi</span>
+                                    <span className="text-muted-foreground">Precisione passaggi (questa partita)</span>
                                     <span className="text-right text-foreground">{Number(row.seasonPassAccuracyPct || 0).toFixed(1)}%</span>
-                                    <span className="text-muted-foreground">Tocchi stagione</span>
+                                    <span className="text-muted-foreground">Tocchi (questa partita)</span>
                                     <span className="text-right text-foreground">{row.seasonTouches || 0}</span>
-                                    <span className="text-muted-foreground">Duelli vinti %</span>
+                                    <span className="text-muted-foreground">Duelli vinti % (questa partita)</span>
                                     <span className="text-right text-foreground">{Number(row.seasonDuelsWonPct || 0).toFixed(1)}%</span>
                                     <span className="text-muted-foreground">Intercetti</span>
                                     <span className="text-right text-foreground">{row.seasonInterceptions || 0}</span>
@@ -3095,7 +3368,7 @@ export default function MatchDetail() {
                               : "text-muted-foreground"
                           }`}
                         >
-                          Contesto stagione
+                          Contesto partita
                         </button>
                         <button
                           type="button"
@@ -3125,14 +3398,14 @@ export default function MatchDetail() {
                                 {xgPlayersDetailMode === "xg"
                                   ? "Analisi xG"
                                   : xgPlayersDetailMode === "season"
-                                    ? "Contesto stagionale"
+                                    ? "Volume partita (lineup)"
                                     : "Quote giocatore"}
                               </div>
                               <div className="mt-1 inline-flex items-center gap-1 text-xs">
                                 <span className="text-muted-foreground">
                                   {xgPlayersDetailMode === "quote"
                                     ? "Quote disponibili:"
-                                    : "Rating stagione:"}
+                                    : "Rating (lineup):"}
                                 </span>
                                 <span
                                   className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${seasonRatingToneClass(row.seasonRating)}`}
@@ -3171,24 +3444,24 @@ export default function MatchDetail() {
                                 <span className="px-3 py-1 text-right text-foreground">{Number(row.expectedPoints || 0).toFixed(2)}</span>
                                 <span className="px-3 py-1 text-muted-foreground">eShots (atteso)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{Number(row.eshots || 0).toFixed(2)}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Shooting Performance</span>
+                                <span className="px-3 py-1 text-muted-foreground">Shooting perf. (indice API)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{Number(row.shootingPerformance || 0).toFixed(2)}</span>
                               </>
                             ) : xgPlayersDetailMode === "season" ? (
                               <>
-                                <span className="px-3 py-1 text-muted-foreground">Minuti stagione</span>
+                                <span className="px-3 py-1 text-muted-foreground">Minuti (questa partita)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{row.seasonMinutes || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Gol stagione</span>
+                                <span className="px-3 py-1 text-muted-foreground">Gol (questa partita)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{row.seasonGoals || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Tiri stagione</span>
+                                <span className="px-3 py-1 text-muted-foreground">Tiri (questa partita, lineup)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{row.seasonShots || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Passaggi stagione</span>
+                                <span className="px-3 py-1 text-muted-foreground">Passaggi (questa partita)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{row.seasonPasses || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Precisione passaggi</span>
+                                <span className="px-3 py-1 text-muted-foreground">Precisione passaggi (questa partita)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{Number(row.seasonPassAccuracyPct || 0).toFixed(1)}%</span>
-                                <span className="px-3 py-1 text-muted-foreground">Tocchi stagione</span>
+                                <span className="px-3 py-1 text-muted-foreground">Tocchi (questa partita)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{row.seasonTouches || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Duelli vinti %</span>
+                                <span className="px-3 py-1 text-muted-foreground">Duelli vinti % (questa partita)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{Number(row.seasonDuelsWonPct || 0).toFixed(1)}%</span>
                                 <span className="px-3 py-1 text-muted-foreground">Intercetti</span>
                                 <span className="px-3 py-1 text-right text-foreground">{row.seasonInterceptions || 0}</span>
@@ -3313,188 +3586,351 @@ export default function MatchDetail() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="contesto" className="space-y-3">
-                <Accordion
-                  type="multiple"
-                  defaultValue={["standings", "coaches"]}
-                  className="space-y-2"
-                >
-                  <AccordionItem
-                    value="standings"
-                    className="rounded-xl border border-border/40 bg-secondary/10 px-3"
-                  >
-                    <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline py-3">
-                      Standings stagione
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      {standingsRows.length > 0 ? (
-                        <div className="space-y-2 pb-2">
-                          <div className="grid gap-3 pb-2 md:grid-cols-2">
-                            {[
-                              { label: match.home, row: homeStandingRow },
-                              { label: match.away, row: awayStandingRow },
-                            ].map((entry) => (
-                              <div
-                                key={entry.label}
-                                className="rounded-lg border border-border/40 bg-secondary/30 p-3"
-                              >
-                                <div className="text-[11px] text-muted-foreground">
-                                  Posizione campionato
-                                </div>
-                                <div className="mt-1 flex items-end justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="truncate text-sm font-semibold text-foreground">
-                                      {entry.label}
-                                    </div>
-                                    <div className="text-[11px] text-muted-foreground">
-                                      {entry.row
-                                        ? `${entry.row.points} pt · diff ${entry.row.goalDifference}`
-                                        : "n/d"}
-                                    </div>
-                                  </div>
-                                  <div className="text-xl font-black text-primary">
-                                    {entry.row
-                                      ? `#${entry.row.position}`
-                                      : "n/d"}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          {standingsRows.slice(0, 8).map((row) => (
-                            <div
-                              key={row.id}
-                              className={`grid min-w-0 grid-cols-[28px_minmax(0,1fr)_36px_36px_44px] gap-1.5 items-center rounded-lg p-2 sm:grid-cols-[32px_minmax(0,1fr)_40px_40px_48px] sm:gap-2 sm:p-2.5 ${
-                                row.highlighted
-                                  ? "bg-primary/10 border border-primary/20"
-                                  : "bg-secondary/30"
-                              }`}
-                            >
-                              <span className="text-xs font-bold text-muted-foreground">
-                                {row.position}
-                              </span>
-                              <span className="text-xs font-semibold text-foreground truncate">
-                                {row.team}
-                              </span>
-                              <span className="text-xs text-center text-muted-foreground">
-                                {row.played}
-                              </span>
-                              <span className="text-xs text-center text-muted-foreground">
-                                {row.goalDifference}
-                              </span>
-                              <span className="text-xs text-right font-bold text-primary">
-                                {row.points} pt
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground pb-2">
-                          Classifica stagione non disponibile nel feed corrente.
-                        </p>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  <AccordionItem
-                    value="coaches"
-                    className="rounded-xl border border-border/40 bg-secondary/10 px-3"
-                  >
-                    <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline py-3">
-                      Allenatori
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="grid md:grid-cols-2 gap-4 pb-2">
-                        <div className="space-y-2">
-                          <div className="text-xs font-semibold text-primary">
-                            {match.home}
-                          </div>
-                          {homeCoaches.length > 0 ? (
-                            homeCoaches.map((coach) => (
-                              <div
-                                key={coach.id}
-                                className="p-2.5 rounded-lg bg-secondary/30"
-                              >
-                                <div className="text-sm font-semibold text-foreground">
-                                  {coach.name}
-                                </div>
-                                {coach.dateOfBirth && (
-                                  <div className="text-xs text-muted-foreground">
-                                    Nato il {coach.dateOfBirth}
-                                  </div>
-                                )}
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              Coach non disponibile.
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <div className="text-xs font-semibold text-primary">
-                            {match.away}
-                          </div>
-                          {awayCoaches.length > 0 ? (
-                            awayCoaches.map((coach) => (
-                              <div
-                                key={coach.id}
-                                className="p-2.5 rounded-lg bg-secondary/30"
-                              >
-                                <div className="text-sm font-semibold text-foreground">
-                                  {coach.name}
-                                </div>
-                                {coach.dateOfBirth && (
-                                  <div className="text-xs text-muted-foreground">
-                                    Nato il {coach.dateOfBirth}
-                                  </div>
-                                )}
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              Coach non disponibile.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </TabsContent>
-
               <TabsContent value="h2h">
                 <GlassCard>
-                  <h3 className="font-semibold text-sm text-foreground mb-4">
-                    Testa a Testa
+                  <h3 className="font-semibold text-sm text-foreground mb-1">
+                    Testa a testa
                   </h3>
-                  {match.h2h.length > 0 ? (
-                    <div className="space-y-2">
-                      {match.h2h.map((entry, index) => (
-                        <div
-                          key={`${entry.date}-${index}`}
-                          className="flex min-w-0 flex-col gap-2 rounded-lg bg-secondary/30 p-3 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {entry.date}
-                          </span>
-                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="truncate text-xs text-foreground">
-                              {entry.home}
+                  <p className="mb-4 text-xs text-muted-foreground">
+                    In alto: classifica e numeri di stagione confrontabili. Sotto, solo quando ci sono dati, gli scontri
+                    diretti (H2H) tra {match.home} e {match.away} con statistiche e tabella: i gol in ogni riga sono
+                    riferiti a quella coppia di squadre, a prescindere da quale fosse in casa.
+                  </p>
+                  {headToHeadLoading && (
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Caricamento confronti...
+                    </p>
+                  )}
+                  {!headToHeadLoading && headToHeadError && (
+                    <p className="text-xs text-muted-foreground mb-3">{headToHeadError}</p>
+                  )}
+
+                  <div className="mb-6 rounded-xl border border-primary/25 bg-gradient-to-b from-primary/10 to-transparent p-4 md:p-5">
+                    <h4 className="text-sm font-bold text-foreground">Confronto in campionato</h4>
+                    <p className="mb-4 text-xs text-muted-foreground">
+                      Posizione in classifica e medie di stagione: tutto ciò che possiamo mettere a confronto tra le due squadre
+                      (stessi dati che usi in tabella).
+                    </p>
+                    <div className="mb-5 grid grid-cols-[1fr_auto_1fr] items-end gap-2 md:items-end md:gap-3">
+                      <div className="flex flex-col items-center text-center">
+                        <div className="mb-1 flex h-12 w-12 items-center justify-center sm:h-16 sm:w-16">
+                          <FootballMediaImage
+                            media={match.home_media}
+                            fallbackLabel={match.homeShort || match.home}
+                            alt=""
+                            size="lg"
+                            shape="card"
+                          />
+                        </div>
+                        <div className="line-clamp-2 text-xs font-semibold text-foreground">{match.home}</div>
+                        <div className="mt-2 text-3xl font-black leading-none text-primary sm:text-4xl">
+                          {homeSeasonStats.position ? `#${homeSeasonStats.position}` : "—"}
+                        </div>
+                        <div className="mt-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[10px]">
+                          in classifica
+                        </div>
+                        <div className="mt-2 text-[10px] text-muted-foreground sm:text-[11px]">
+                          {homeSeasonStats.played
+                            ? `${homeSeasonStats.points} pt · P ${homeSeasonStats.played} · GF ${homeSeasonStats.goalsFor} · GA ${homeSeasonStats.goalsAgainst}`
+                            : standingsRows.length
+                              ? "Dati posizione in aggiornamento"
+                              : "Classifica n/d per questa partita"}
+                        </div>
+                      </div>
+                      <div className="flex self-center justify-center pb-0 md:pb-2">
+                        <div className="rounded-full border-2 border-primary/40 bg-primary/15 px-3 py-1.5 text-xs font-black text-primary sm:px-4 sm:py-2 sm:text-sm">
+                          VS
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center text-center">
+                        <div className="mb-1 flex h-12 w-12 items-center justify-center sm:h-16 sm:w-16">
+                          <FootballMediaImage
+                            media={match.away_media}
+                            fallbackLabel={match.awayShort || match.away}
+                            alt=""
+                            size="lg"
+                            shape="card"
+                          />
+                        </div>
+                        <div className="line-clamp-2 text-xs font-semibold text-foreground">{match.away}</div>
+                        <div className="mt-2 text-3xl font-black leading-none text-indigo-300 sm:text-4xl">
+                          {awaySeasonStats.position ? `#${awaySeasonStats.position}` : "—"}
+                        </div>
+                        <div className="mt-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[10px]">
+                          in classifica
+                        </div>
+                        <div className="mt-2 text-[10px] text-muted-foreground sm:text-[11px]">
+                          {awaySeasonStats.played
+                            ? `${awaySeasonStats.points} pt · P ${awaySeasonStats.played} · GF ${awaySeasonStats.goalsFor} · GA ${awaySeasonStats.goalsAgainst}`
+                            : standingsRows.length
+                              ? "Dati posizione in aggiornamento"
+                              : "Classifica n/d per questa partita"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2.5">
+                      {vsSeasonMetrics.map((metric) => (
+                        <div key={`vs-${metric.label}`}>
+                          <div className="mb-1 grid grid-cols-[52px_minmax(0,1fr)_52px] items-center gap-2 text-[11px]">
+                            <span
+                              className={`text-left font-semibold ${metric.leader === "home" ? "text-primary" : "text-muted-foreground"}`}
+                            >
+                              {metric.left}
                             </span>
-                            <span className="shrink-0 font-bold text-foreground">
-                              {entry.score}
+                            <span className="truncate text-center text-muted-foreground">{metric.label}</span>
+                            <span
+                              className={`text-right font-semibold ${metric.leader === "away" ? "text-indigo-300" : "text-muted-foreground"}`}
+                            >
+                              {metric.right}
                             </span>
-                            <span className="truncate text-xs text-foreground">
-                              {entry.away}
-                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="h-2 overflow-hidden rounded-full bg-background/70">
+                              <div
+                                className="ml-auto h-full rounded-full bg-primary/90"
+                                style={{ width: `${metric.leftPct}%` }}
+                              />
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-background/70">
+                              <div
+                                className="h-full rounded-full bg-indigo-400/90"
+                                style={{ width: `${metric.rightPct}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
-                  ) : (
+                    {standingsRows.length === 0 && (
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Classifica di competizione non ancora collegata per questa partita nel feed.
+                      </p>
+                    )}
+                  </div>
+
+                  {h2hInsights.total > 0 && (
+                    <div className="space-y-4">
+                      {h2hInsights.total > 0 && h2hInsights.total <= 2 && (
+                        <p className="mb-0 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[11px] text-amber-200">
+                          Storico H2H limitato: poche partite in elenco, le percentuali sotto le riflettono tutte.
+                        </p>
+                      )}
+
+                      <div>
+                        <h4 className="text-sm font-bold text-foreground">Scontri diretti (H2H)</h4>
+                        <p className="text-xs text-muted-foreground">
+                          Numeri e grafici sotto fanno riferimento solo agli scontri tra queste due squadre; distribuzione
+                          di gol, trend e elenco sotto sono tutti sull’H2H, non duplicano il blocco “stagione” sopra.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                        <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                          <div className="text-[11px] text-muted-foreground">Partite in storico</div>
+                          <div className="mt-1 text-lg font-bold text-foreground">{h2hInsights.total}</div>
+                        </div>
+                        <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                          <div className="text-[11px] text-muted-foreground">Media gol a partita</div>
+                          <div className="mt-1 text-lg font-bold text-foreground">{h2hInsights.avgGoals.toFixed(2)}</div>
+                        </div>
+                        <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                          <div className="text-[11px] text-muted-foreground">Entrambe segnano</div>
+                          <div className="mt-1 text-lg font-bold text-foreground">
+                            {Math.round((h2hInsights.bttsCount / h2hInsights.total) * 100)}%
+                          </div>
+                          <p className="mt-0.5 text-[9px] leading-tight text-muted-foreground">% in cui hanno segnato entrambe</p>
+                        </div>
+                        <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                          <div className="text-[11px] text-muted-foreground">Con più di 2 gol</div>
+                          <div className="mt-1 text-lg font-bold text-foreground">
+                            {Math.round((h2hInsights.over25Count / h2hInsights.total) * 100)}%
+                          </div>
+                          <p className="mt-0.5 text-[9px] leading-tight text-muted-foreground">somma gol totali oltre 2</p>
+                        </div>
+                        <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                          <div className="text-[11px] text-muted-foreground">Con 2 o meno gol</div>
+                          <div className="mt-1 text-lg font-bold text-foreground">
+                            {Math.round((h2hInsights.under25Count / h2hInsights.total) * 100)}%
+                          </div>
+                          <p className="mt-0.5 text-[9px] leading-tight text-muted-foreground">partite “basse” (≤2 reti totali)</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                        <div className="mb-2 text-xs font-semibold text-foreground">Bilancio scontri diretti</div>
+                        <div className="mb-2 grid grid-cols-3 gap-2 text-[11px]">
+                          <div className="rounded-md bg-primary/10 px-2 py-1 text-center text-primary">
+                            {h2hInsights.homeWins} {h2hInsights.homeLabel}
+                          </div>
+                          <div className="rounded-md bg-cyan-500/10 px-2 py-1 text-center text-cyan-300">
+                            {h2hInsights.draws} Pareggi
+                          </div>
+                          <div className="rounded-md bg-indigo-500/10 px-2 py-1 text-center text-indigo-300">
+                            {h2hInsights.awayWins} {h2hInsights.awayLabel}
+                          </div>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-background/70">
+                          <div className="flex h-full">
+                            <div
+                              className="bg-primary"
+                              style={{ width: `${(h2hInsights.homeWins / h2hInsights.total) * 100}%` }}
+                            />
+                            <div
+                              className="bg-cyan-500"
+                              style={{ width: `${(h2hInsights.draws / h2hInsights.total) * 100}%` }}
+                            />
+                            <div
+                              className="bg-indigo-500"
+                              style={{ width: `${(h2hInsights.awayWins / h2hInsights.total) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        className={
+                          h2hInsights.recentTrend.length >= 2
+                            ? "grid gap-3 lg:grid-cols-2"
+                            : "grid gap-3"
+                        }
+                      >
+                        <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                          <div className="mb-2 text-xs font-semibold text-foreground">
+                            Trend gol (sugli scontri diretti)
+                            {h2hInsights.recentTrend.length > 1 ? " · ultimi in elenco" : ""}
+                          </div>
+                          {h2hInsights.recentTrend.length >= 2 ? (
+                            <div className="h-52 w-full">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={h2hInsights.recentTrend}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" />
+                                  <XAxis dataKey="idx" tick={{ fontSize: 10 }} />
+                                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                                  <Tooltip
+                                    contentStyle={{
+                                      backgroundColor: "rgba(10, 18, 36, 0.95)",
+                                      border: "1px solid rgba(148,163,184,0.25)",
+                                      borderRadius: "8px",
+                                      color: "#e2e8f0",
+                                      fontSize: "11px",
+                                    }}
+                                  />
+                                  <Bar dataKey="totalGoals" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Con un solo scontro nello storico mostriamo sotto punteggio e riepilogo, senza curva d’andamento.
+                            </p>
+                          )}
+                        </div>
+                        <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                          <div className="mb-2 text-xs font-semibold text-foreground">Distribuzione reti (H2H)</div>
+                          <div className="space-y-2">
+                            {h2hInsights.goalBands.map((band) => (
+                              <div key={band.label}>
+                                <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                                  <span>{band.label} gol in partita</span>
+                                  <span>{band.value}</span>
+                                </div>
+                                <div className="h-1.5 w-full overflow-hidden rounded-full bg-background/70">
+                                  <div
+                                    className="h-full rounded-full bg-primary/80"
+                                    style={{ width: `${(band.value / h2hInsights.total) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
+                            <div className="rounded-md bg-secondary/50 px-2 py-1 text-muted-foreground">
+                              <span className="line-clamp-2">H2H in cui {h2hInsights.awayLabel} non ha segnato:</span>{" "}
+                              <span className="font-semibold text-foreground">{h2hInsights.cleanSheetHome}</span>
+                            </div>
+                            <div className="rounded-md bg-secondary/50 px-2 py-1 text-muted-foreground">
+                              <span className="line-clamp-2">H2H in cui {h2hInsights.homeLabel} non ha segnato:</span>{" "}
+                              <span className="font-semibold text-foreground">{h2hInsights.cleanSheetAway}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-border/40 bg-secondary/30 p-3">
+                        <div className="mb-2 text-xs font-semibold text-foreground">
+                          Tutti gli scontri ({headToHeadRows.length}) · ordine: più recente in alto
+                        </div>
+                        <div className="space-y-2">
+                          {headToHeadRows.map((entry, index) => {
+                            const homeLogo = resolveOpponentMedia(
+                              entry.home,
+                              match.home,
+                              match.away,
+                              match.home_media,
+                              match.away_media,
+                            );
+                            const awayLogo = resolveOpponentMedia(
+                              entry.away,
+                              match.home,
+                              match.away,
+                              match.home_media,
+                              match.away_media,
+                            );
+                            return (
+                              <div
+                                key={`${entry.id || entry.date}-${index}`}
+                                className="flex gap-2 rounded-lg border border-border/25 bg-secondary/20 p-2 text-xs"
+                              >
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <FootballMediaImage
+                                    media={homeLogo}
+                                    fallbackLabel={entry.home}
+                                    alt=""
+                                    size="sm"
+                                    shape="card"
+                                  />
+                                  <span className="text-muted-foreground">·</span>
+                                  <FootballMediaImage
+                                    media={awayLogo}
+                                    fallbackLabel={entry.away}
+                                    alt=""
+                                    size="sm"
+                                    shape="card"
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {entry.date}
+                                    {entry.seasonName ? ` · ${entry.seasonName}` : ""} · {entry.league}
+                                  </div>
+                                  <div className="mt-0.5 text-foreground">
+                                    <span className="font-semibold">{entry.home}</span>{" "}
+                                    <span className="font-bold text-primary">{entry.score}</span>{" "}
+                                    <span className="font-semibold">{entry.away}</span>
+                                  </div>
+                                  {entry.venue ? (
+                                    <div className="truncate text-[10px] text-muted-foreground">{entry.venue}</div>
+                                  ) : null}
+                                  <div className="mt-0.5 text-[10px] font-medium text-primary">
+                                    {h2hOutcomeLabel(entry, match.home, match.away)}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 self-center text-right text-[10px] text-muted-foreground">
+                                  {entry.btts ? "Gol: entrambe" : "Gol: una a secco"} ·{" "}
+                                  {entry.over25 ? "Più di 2 reti" : "2 o meno reti"}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!headToHeadLoading && h2hInsights.total === 0 && !headToHeadError && (
                     <p className="text-xs text-muted-foreground">
-                      Nessun H2H disponibile con il feed corrente.
+                      Il feed non restituisce scontri precedenti tra {match.home} e {match.away}: vedi il confronto di stagione
+                      in alto. Quando l’H2H sarà disponibile, compaiono qui.
                     </p>
                   )}
                 </GlassCard>
@@ -3561,6 +3997,7 @@ export default function MatchDetail() {
               <PlayerDetailPanel
                 fixtureId={match.id || fixtureId}
                 player={selectedPlayer}
+                matchMetrics={matchMetricsForSelectedPlayer}
               />
             </div>
           </SheetContent>

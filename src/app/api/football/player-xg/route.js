@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getFixturePayload } from "@/server/football/service";
 import { fetchSportmonksPlayerById } from "@/lib/providers/sportmonks";
+import {
+  readDuelsWonPercentFromRows,
+  readPassAccuracyPercentFromRows,
+} from "@/lib/football/passAccuracyFromRows";
 
 export const runtime = "nodejs";
 const PLAYER_XG_CACHE_TTL_MS = 2 * 60_000;
@@ -97,11 +101,49 @@ function mapPlayerXg(playerData, lineupEntry, fixtureId) {
     seasonMinutes: statFromRows(seasonStatRows, ["minutes_played", "minutes", "119"]),
     seasonShots: statFromRows(seasonStatRows, ["shots_total", "shots", "42"]),
     seasonPasses: statFromRows(seasonStatRows, ["passes"]),
-    seasonPassAccuracyPct: statFromRows(seasonStatRows, [
-      "accurate_passes_percentage",
-    ]),
+    seasonPassAccuracyPct: readPassAccuracyPercentFromRows(
+      seasonStatRows,
+      (row) => {
+        const raw = row?.data?.value ?? row?.value;
+        if (typeof raw === "number" || typeof raw === "string") return toNumber(raw);
+        if (raw && typeof raw === "object") {
+          return (
+            toNumber(raw.total) ||
+            toNumber(raw.value) ||
+            toNumber(raw.average) ||
+            toNumber(raw.avg) ||
+            0
+          );
+        }
+        return 0;
+      },
+      (row) =>
+        normalizeKey(
+          row?.type?.developer_name || row?.type?.code || row?.type?.name || row?.type_id,
+        ),
+    ),
     seasonTouches: statFromRows(seasonStatRows, ["touches"]),
-    seasonDuelsWonPct: statFromRows(seasonStatRows, ["duels_won_percentage"]),
+    seasonDuelsWonPct: readDuelsWonPercentFromRows(
+      seasonStatRows,
+      (row) => {
+        const raw = row?.data?.value ?? row?.value;
+        if (typeof raw === "number" || typeof raw === "string") return toNumber(raw);
+        if (raw && typeof raw === "object") {
+          return (
+            toNumber(raw.total) ||
+            toNumber(raw.value) ||
+            toNumber(raw.average) ||
+            toNumber(raw.avg) ||
+            0
+          );
+        }
+        return 0;
+      },
+      (row) =>
+        normalizeKey(
+          row?.type?.developer_name || row?.type?.code || row?.type?.name || row?.type_id,
+        ),
+    ),
     seasonInterceptions: statFromRows(seasonStatRows, ["interceptions"]),
     seasonTacklesWon: statFromRows(seasonStatRows, ["tackles_won"]),
     seasonRating: (() => {

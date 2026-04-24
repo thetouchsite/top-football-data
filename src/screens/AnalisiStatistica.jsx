@@ -272,6 +272,7 @@ export default function AnalisiStatistica() {
                   homeLineup={fixture?.lineups?.home || { formation: "--", players: [] }}
                   awayTeam={fixture?.away || "Away"}
                   homeTeam={fixture?.home || "Home"}
+                  lineupStatus={fixture?.lineup_status}
                   onPlayerClick={(player) => {
                     const found =
                       sortedPlayers.find(
