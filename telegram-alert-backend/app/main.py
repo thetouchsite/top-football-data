@@ -23,7 +23,6 @@ from app.sportmonks import SportmonksClient
 from app.storage import AlertStore
 from app.telegram import (
     TelegramClient,
-    build_single_alert_logo_urls,
     build_multibet_alert_buttons,
     build_performance_buttons,
     build_settlement_buttons,
@@ -111,15 +110,15 @@ class AlertWorker:
             if should_send and self.settings.alerts_webhook_url:
                 await post_from_single(self.settings.alerts_webhook_url, market)
             if should_send and self.telegram.configured:
-                logo_urls = build_single_alert_logo_urls(market)
-                if logo_urls:
-                    await self.telegram.send_media_group(logo_urls)
-                await self.telegram.send_message(
-                    format_single_alert(market, self.settings.cta_label, app_url),
-                    buttons=build_single_alert_buttons(market, app_url),
-                )
-                self.repository.mark_telegram_sent(market.alert_key)
-                sent += 1
+                try:
+                    await self.telegram.send_message(
+                        format_single_alert(market, self.settings.cta_label, app_url),
+                        buttons=build_single_alert_buttons(market, app_url),
+                    )
+                    self.repository.mark_telegram_sent(market.alert_key)
+                    sent += 1
+                except Exception as error:
+                    logger.warning("Single Telegram alert failed for %s: %s", market.alert_key, error)
 
         remaining_slots = max(0, self.settings.max_alerts_per_run - sent)
         for multibet in multibets[:remaining_slots]:
@@ -139,12 +138,15 @@ class AlertWorker:
             if should_send and self.settings.alerts_webhook_url:
                 await post_from_multibet(self.settings.alerts_webhook_url, multibet)
             if should_send and self.telegram.configured:
-                await self.telegram.send_message(
-                    format_multibet_alert(multibet, self.settings.cta_label, app_url),
-                    buttons=build_multibet_alert_buttons(multibet, app_url),
-                )
-                self.repository.mark_telegram_sent(multibet.alert_key)
-                sent += 1
+                try:
+                    await self.telegram.send_message(
+                        format_multibet_alert(multibet, self.settings.cta_label, app_url),
+                        buttons=build_multibet_alert_buttons(multibet, app_url),
+                    )
+                    self.repository.mark_telegram_sent(multibet.alert_key)
+                    sent += 1
+                except Exception as error:
+                    logger.warning("Multibet Telegram alert failed for %s: %s", multibet.alert_key, error)
 
         result = {
             "status": "ok",

@@ -54,15 +54,6 @@ def _tracked_affiliate_url(
     return _tracked_url(raw_url, campaign=campaign, content=content)
 
 
-def build_single_alert_logo_urls(market: FixtureMarket) -> list[str]:
-    urls: list[str] = []
-    for media in (market.home_media, market.away_media):
-        url = str((media or {}).get("imageUrl") or (media or {}).get("thumbUrl") or "").strip()
-        if url and url not in urls:
-            urls.append(url)
-    return urls[:2]
-
-
 def build_single_alert_buttons(
     market: FixtureMarket,
     app_base_url: str = "",
@@ -420,21 +411,3 @@ class TelegramClient:
                     ) from None
                 raise RuntimeError(f"Telegram sendMessage fallito con status {status_code}.") from None
 
-    async def send_media_group(self, media_urls: list[str]) -> None:
-        if not self.configured:
-            raise RuntimeError("TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID non configurati.")
-        urls = [str(url or "").strip() for url in (media_urls or []) if str(url or "").strip()]
-        if not urls:
-            return
-
-        url = f"https://api.telegram.org/bot{self.bot_token}/sendMediaGroup"
-        payload = {
-            "chat_id": self.chat_id,
-            "media": [{"type": "photo", "media": media_url} for media_url in urls[:2]],
-        }
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.post(url, json=payload)
-            if response.status_code in {400, 404}:
-                # Non bloccare il flusso alert se Telegram non accetta una delle immagini.
-                return
-            response.raise_for_status()
