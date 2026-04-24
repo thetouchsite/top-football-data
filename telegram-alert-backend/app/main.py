@@ -23,6 +23,7 @@ from app.sportmonks import SportmonksClient
 from app.storage import AlertStore
 from app.telegram import (
     TelegramClient,
+    build_single_alert_logo_urls,
     build_multibet_alert_buttons,
     build_performance_buttons,
     build_settlement_buttons,
@@ -110,6 +111,9 @@ class AlertWorker:
             if should_send and self.settings.alerts_webhook_url:
                 await post_from_single(self.settings.alerts_webhook_url, market)
             if should_send and self.telegram.configured:
+                logo_urls = build_single_alert_logo_urls(market)
+                if logo_urls:
+                    await self.telegram.send_media_group(logo_urls)
                 await self.telegram.send_message(
                     format_single_alert(market, self.settings.cta_label, app_url),
                     buttons=build_single_alert_buttons(market, app_url),

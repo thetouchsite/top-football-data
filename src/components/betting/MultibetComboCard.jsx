@@ -22,6 +22,18 @@ const TAG_COLORS = {
   Value: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400",
 };
 
+function formatEuroAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    return "€0";
+  }
+  const formatted = new Intl.NumberFormat("it-IT", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount));
+  return `€${formatted}`;
+}
+
 /**
  * @param {object} props
  * @param {object} props.combo — output `mapMultibetAlertToCombo`
@@ -78,7 +90,7 @@ export default function MultibetComboCard({ combo, isPremium, highlightKey }) {
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Potenziale (stake 100)</div>
-              <div className="text-lg font-bold text-accent">€{combo.potentialWin}</div>
+              <div className="text-lg font-bold text-accent">{formatEuroAmount(combo.potentialWin)}</div>
             </div>
             {eng.dataEdgePercent != null && (
               <div>
@@ -245,15 +257,25 @@ export default function MultibetComboCard({ combo, isPremium, highlightKey }) {
 
       <div className="mt-4">
         {isPremium ? (
-          <Button
-            className="h-10 w-full bg-primary text-xs font-bold text-primary-foreground glow-green-sm"
-            asChild
-          >
-            <a href={bookmakers[0]?.affiliateUrl || "/premium"} target="_blank" rel="noreferrer">
-              {bookmakers[0]?.affiliateUrl ? "Vai al book (miglior quota)" : "Scopri premium"}
-              <ChevronRight className="ml-1 h-3.5 w-3.5" />
-            </a>
-          </Button>
+          bookmakers[0]?.affiliateUrl ? (
+            <Button
+              className="h-10 w-full bg-primary text-xs font-bold text-primary-foreground glow-green-sm"
+              asChild
+            >
+              <a href={bookmakers[0].affiliateUrl} target="_blank" rel="noreferrer">
+                Vai al book (miglior quota)
+                <ChevronRight className="ml-1 h-3.5 w-3.5" />
+              </a>
+            </Button>
+          ) : (
+            <Button
+              className="h-10 w-full border border-border/40 bg-secondary/40 text-xs font-bold text-muted-foreground"
+              variant="ghost"
+              disabled
+            >
+              Link bookmaker non disponibile
+            </Button>
+          )
         ) : (
           <Button
             className="h-10 w-full border border-accent/30 bg-accent/20 text-xs font-bold text-accent glow-gold"

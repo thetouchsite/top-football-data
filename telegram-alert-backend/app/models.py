@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,9 @@ class FixtureMarket:
     best_odd: float
     value_percent: float
     edge: float
+    league_media: dict[str, Any] | None = None
+    home_media: dict[str, Any] | None = None
+    away_media: dict[str, Any] | None = None
     comparator: tuple[BookmakerOdd, ...] = field(default_factory=tuple)
     source: str = "sportmonks_predictions_odds"
     leg_profile: str = LegProfile.MODEL_VALUE

@@ -29,6 +29,19 @@ function averageValuePercent(events) {
   return fin.reduce((a, b) => a + b, 0) / fin.length;
 }
 
+function confidenceFromTotalEv(totalEv) {
+  const ev = Number(totalEv);
+  if (!Number.isFinite(ev) || ev <= 0) {
+    return 1;
+  }
+  if (ev <= 1) {
+    return 48;
+  }
+  const normalized = Math.log1p((ev - 1) * 6) / Math.log1p(24);
+  const clamped = Math.max(0, Math.min(1, normalized));
+  return Math.max(1, Math.min(100, Math.round(48 + clamped * 48)));
+}
+
 const MODUS_KEYS = new Set(["algorithmic", "safe", "value"]);
 
 /**
@@ -100,9 +113,9 @@ function mapEventToSelection(ev) {
     home: String(ev?.home || "Home"),
     away: String(ev?.away || "Away"),
     league: String(ev?.league || "—"),
-    league_media: null,
-    home_media: null,
-    away_media: null,
+    league_media: ev?.league_media || ev?.leagueMedia || null,
+    home_media: ev?.home_media || ev?.homeMedia || null,
+    away_media: ev?.away_media || ev?.awayMedia || null,
     market: [ev?.market, ev?.selection].filter(Boolean).join(" · ") || "—",
     odds: formatDisplayOdd(ev?.bestOdd),
     confidence: conf,
@@ -148,10 +161,9 @@ export function mapMultibetAlertToCombo(alert) {
   const modeFilters = fromServer || inferLegacyModeFilters(mb);
   const { tag, risk } = tagRiskFromModes(modeFilters);
   const totalOdd = Number(mb.totalOdd);
-  const conf = Math.min(
-    100,
-    Math.max(0, Math.round(Number(mb.confidenceScore) || 0))
-  );
+  const confidenceFromEv = confidenceFromTotalEv(mb.totalEv);
+  const storedConfidence = Math.min(100, Math.max(0, Math.round(Number(mb.confidenceScore) || 0)));
+  const conf = Number.isFinite(Number(mb.totalEv)) ? confidenceFromEv : storedConfidence;
   const stake = 100;
   const potentialWin = Math.round(stake * (Number.isFinite(totalOdd) ? totalOdd : 0));
 
@@ -214,6 +226,9 @@ export function mapSingleAlertToPick(alert) {
     home: String(single.home || "Home"),
     away: String(single.away || "Away"),
     league: String(single.league || "—"),
+    league_media: single.league_media || single.leagueMedia || null,
+    home_media: single.home_media || single.homeMedia || null,
+    away_media: single.away_media || single.awayMedia || null,
     kickoff: single.kickoff || null,
     market: String(single.market || "Mercato"),
     selection: String(single.selection || "Selezione"),

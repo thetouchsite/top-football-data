@@ -77,6 +77,66 @@ def _participant_names(fixture: dict[str, Any]) -> tuple[str, str]:
     return str(home.get("name") or "Home"), str(away.get("name") or "Away")
 
 
+def _pick_media_url(entity: dict[str, Any] | None) -> str | None:
+    if not isinstance(entity, dict):
+        return None
+    for key in (
+        "image_path",
+        "imagePath",
+        "logo_path",
+        "logoPath",
+        "photo_path",
+        "photo",
+        "image",
+        "logo",
+    ):
+        raw = entity.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def _media_from_url(url: str | None) -> dict[str, str] | None:
+    if not isinstance(url, str) or not url.strip():
+        return None
+    clean = url.strip()
+    return {
+        "imageUrl": clean,
+        "thumbUrl": clean,
+    }
+
+
+def _participant_media(fixture: dict[str, Any]) -> tuple[dict[str, str] | None, dict[str, str] | None]:
+    participants = _as_list(fixture.get("participants"))
+    home_url = None
+    away_url = None
+
+    for participant in participants:
+        if not isinstance(participant, dict):
+            continue
+        location = _norm(
+            participant.get("location")
+            or participant.get("meta", {}).get("location")
+            or participant.get("meta", {}).get("position")
+        )
+        if location == "home" and not home_url:
+            home_url = _pick_media_url(participant)
+        elif location == "away" and not away_url:
+            away_url = _pick_media_url(participant)
+
+    if not home_url and participants and isinstance(participants[0], dict):
+        home_url = _pick_media_url(participants[0])
+    if not away_url and len(participants) > 1 and isinstance(participants[1], dict):
+        away_url = _pick_media_url(participants[1])
+
+    return _media_from_url(home_url), _media_from_url(away_url)
+
+
+def _league_media(fixture: dict[str, Any]) -> dict[str, str] | None:
+    league = fixture.get("league") if isinstance(fixture.get("league"), dict) else {}
+    return _media_from_url(_pick_media_url(league))
+
+
 def _probability_from_value(value: Any) -> float:
     parsed = _safe_float(value)
     if not math.isfinite(parsed) or parsed <= 0:
@@ -335,6 +395,8 @@ def build_official_value_markets(
         return []
 
     home, away = _participant_names(fixture)
+    home_media, away_media = _participant_media(fixture)
+    league_media = _league_media(fixture)
     league = str((fixture.get("league") or {}).get("name") or "Competizione")
     kickoff = _parse_kickoff(fixture.get("starting_at") or fixture.get("startingAt"))
     markets: list[FixtureMarket] = []
@@ -396,6 +458,9 @@ def build_official_value_markets(
                 best_odd=best.odd,
                 value_percent=value_percent,
                 edge=edge,
+                league_media=league_media,
+                home_media=home_media,
+                away_media=away_media,
                 comparator=tuple(comparator[:4]),
                 source="sportmonks_value_bets",
                 leg_profile=leg_profile,
@@ -425,6 +490,8 @@ def build_fixture_markets(
 ) -> list[FixtureMarket]:
     fixture_id = str(fixture.get("id") or "")
     home, away = _participant_names(fixture)
+    home_media, away_media = _participant_media(fixture)
+    league_media = _league_media(fixture)
     league = str((fixture.get("league") or {}).get("name") or "Competizione")
     kickoff = _parse_kickoff(fixture.get("starting_at") or fixture.get("startingAt"))
     probabilities = _extract_probabilities(fixture)
@@ -467,6 +534,9 @@ def build_fixture_markets(
                 best_odd=best.odd,
                 value_percent=value_percent,
                 edge=edge,
+                league_media=league_media,
+                home_media=home_media,
+                away_media=away_media,
                 comparator=comparator,
                 leg_profile=LegProfile.MODEL_VALUE,
             )
@@ -496,6 +566,16 @@ def filter_markets_for_modus(
     if modus == MultibetModus.VALUE:
         return [m for m in markets if m.leg_profile == LegProfile.BOOK_DISCREPANCY]
     return []
+
+
+def _confidence_from_total_ev(total_ev: float) -> int:
+    if not math.isfinite(total_ev) or total_ev <= 0:
+        return 1
+    if total_ev <= 1:
+        return 48
+    normalized = math.log1p((total_ev - 1) * 6) / math.log1p(24)
+    normalized = max(0.0, min(1.0, normalized))
+    return max(1, min(100, round(48 + normalized * 48)))
 
 
 def build_multibets_for_modus(
@@ -532,7 +612,7 @@ def build_multibets_for_modus(
             total_ev = math.prod(item.edge for item in combo)
             if total_ev < min_total_ev:
                 continue
-            confidence_score = max(1, min(100, round(55 + (total_ev - 1) * 100)))
+            confidence_score = _confidence_from_total_ev(total_ev)
             multibets.append(
                 MultiBet(
                     events=tuple(combo),
