@@ -4,19 +4,29 @@ STATO SVILUPPO OPERATIVO
 Data aggiornamento: 2026-04-24
 Stato documento: allineato al codice reale del repository e ai backend attivi (Next.js + worker Telegram Railway)
 
+Aggiornamento chiusure (stessa data):
+- Allineamento dati cross-piattaforma chiuso con `snapshotVersion` condivisa tra feed schedule e match detail.
+- Allineamento cache feed/fixture aggiornato (TTL e policy SWR coerenti) mantenendo reattivita/performance.
+- Confidenza resa coerente tra card/feed/detail.
+- Multi-Bet riallineato agli alert reali Mongo:
+  - tab Single aggiunta
+  - fetch e rendering alert `type=single` attivi
+- Logica Gold rimossa ovunque (frontend mapping/UI + backend Python generator).
+- Modi effettivi supportati: `algorithmic`, `safe`, `value` (+ `single` come tipo alert, non come modus multibet).
+
 ====================================================================
 STATO GENERALE PROGETTO
 ====================================================================
 
 Stima avanzamento complessivo:
-- MVP cliente consegnabile: circa 85%
-- Progetto totale rispetto al brief completo: circa 80%
+- MVP cliente consegnabile: circa 90%
+- Progetto totale rispetto al brief completo: circa 85%
 
 Stato sintetico per macro-area:
-- Modelli predittivi singolo match: 85-90%
-- Analisi statistica deep data: 65-75%
-- Smart Multi-Bet Engine: 85-90%
-- Automazione Telegram / retention / conversione: 85-90%
+- Modelli predittivi singolo match: 90%
+- Analisi statistica deep data: 70-78%
+- Smart Multi-Bet Engine: 92%
+- Automazione Telegram / retention / conversione: 90%
 - Tracking marketing proprietario avanzato: 50-60%
 
 ====================================================================
@@ -38,6 +48,12 @@ DONE
 - Barre di confidenza e pressure preview presenti.
 - Toggle / filtro value nel modulo modelli predittivi.
 - Feed match reali su dashboard, modelli e dettaglio.
+- Allineamento feed/detail con snapshot versioning end-to-end.
+- Link a match detail con `sv` propagato dalla lista (coerenza snapshot).
+- 1X2 deterministic bundle selection in normalizer.
+- `ensureProbabilitySum()` robusto (no negativi, somma 100 sempre).
+- TTL fixture/feed e policy SWR riallineati.
+- Confidence allineata tra superfici (rimosso fattore lineup dalla confidenza principale).
 
 PARZIALE
 - Comparatore quote player-aware per mercati giocatore.
@@ -87,6 +103,8 @@ DONE
   - Algoritmico
   - Safe
   - Value
+- Tab "Single" aggiunta per visualizzare gli alert `type=single`.
+- Feed Multi-Bet ora mostra pending multibet + pending single dallo stesso backend Mongo.
 - Tab "Algoritmico" ora mostra l'elenco completo.
 - Fallback pagina Multi-Bet su storico recente se non esistono pending.
 - Persistenza Mongo `betAlerts` funzionante.
@@ -103,6 +121,11 @@ DONE - correzioni backend worker
 - Niente rigenerazione alert su fixture gia finali.
 - Riparazione status top-level degli alert gia settle-ati.
 - Salvataggio Mongo prima dell'invio Telegram.
+- Rimozione completa logica Gold dal backend Python:
+  - rimosso `MultibetModus.GOLD`
+  - rimosso `LegProfile.EXOTIC`
+  - rimossa detection mercati gold/exotic in engine
+  - rimossi filtri di generazione Gold
 
 
 D. Bot Telegram / automazione canale
@@ -127,6 +150,10 @@ DONE
   - top value day
 - Daily post "Top 3 Value Bet del giorno" introdotto.
 - Deduplica giornaliera per il post daily.
+- Output multibet stabilizzato su soli modus:
+  - algorithmic
+  - safe
+  - value
 
 PARZIALE
 - Click tracking proprietario interno non ancora fatto.
@@ -297,6 +324,7 @@ Le parti centrali gia funzionanti sono:
 - modelli match
 - detail match
 - multibet engine
+- single alerts su multi-bet
 - alert Telegram
 - settlement
 - performance storiche

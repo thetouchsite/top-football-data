@@ -107,6 +107,11 @@ Il backend Python Railway salva:
 
 La dashboard Next legge `/api/alerts` e `/api/performance` per mostrare segnali persistiti e storico quasi in tempo reale. Telegram riceve gli stessi segnali salvati su MongoDB, con comparatore quote e CTA configurabile.
 
+Allineamento prodotto 2026-04-24:
+- `/multi-bet` mostra sia multibet sia single (tab dedicata).
+- Le modalita multibet supportate sono solo `algorithmic`, `safe`, `value`.
+- La logica `gold` e stata rimossa lato backend generator e lato frontend mapping/UI.
+
 ## Provider Strategy
 
 - Sportmonks Football API v3 e la fonte dati principale.
@@ -177,6 +182,7 @@ Worker:
 
 - Feed calcio: Sportmonks, nessun fallback Sportradar.
 - Layer football (endpoint, allowlist, prossime mosse): [docs/football-api-layer.md](docs/football-api-layer.md).
+- Coerenza feed/detail migliorata con snapshot versioning e policy cache allineata.
 - Telegram test: validato con bot e canale di test.
 - MongoDB condiviso: supportato dal worker Python e letto dal sito Next.
 - Performance storiche: collection e API pronte; il settlement dipende dalla disponibilita dei risultati finali Sportmonks.

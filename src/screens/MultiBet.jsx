@@ -3,17 +3,22 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Crown, Cpu, Lightbulb, Lock, Shield } from "lucide-react";
+import { Crown, Cpu, Lightbulb, Lock, Shield, TrendingUp } from "lucide-react";
 
 import { getAlerts } from "@/api/alerts";
 import MultibetComboCard from "@/components/betting/MultibetComboCard";
+import SingleAlertCard from "@/components/betting/SingleAlertCard";
 import FeedMetaPanel from "@/components/shared/FeedMetaPanel";
 import GlassCard from "@/components/shared/GlassCard";
 import PageIntro from "@/components/shared/PageIntro";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/lib/AppContext";
-import { filterCombosByMode, mapMultibetAlertToCombo } from "@/lib/multibet-alert";
+import {
+  filterCombosByMode,
+  mapMultibetAlertToCombo,
+  mapSingleAlertToPick,
+} from "@/lib/multibet-alert";
 
 const COMBO_TABS = [
   {
@@ -23,6 +28,14 @@ const COMBO_TABS = [
     icon: Cpu,
     description:
       "Palinsesto top (Serie A, PL, UCL, ecc.): tutte le multiple del motore con convergenza tra probabilita modello e quota.",
+  },
+  {
+    key: "single",
+    label: "Single",
+    kicker: "Bot picks",
+    icon: TrendingUp,
+    description:
+      "Segnali singoli del bot (type=single): mercato, selezione, quota migliore e confidenza modello.",
   },
   {
     key: "safe",
@@ -46,6 +59,7 @@ export default function MultiBet() {
   const searchParams = useSearchParams();
   const refKey = (searchParams.get("ref") || "").trim() || null;
   const [combos, setCombos] = useState([]);
+  const [singlePicks, setSinglePicks] = useState([]);
   const [feedMode, setFeedMode] = useState("pending");
   const [loadState, setLoadState] = useState("loading");
   const [loadError, setLoadError] = useState("");
@@ -68,8 +82,14 @@ export default function MultiBet() {
           .map(mapMultibetAlertToCombo)
           .filter(Boolean);
 
-        if (pendingMapped.length > 0) {
+        const pendingSinglesPayload = await getAlerts({ type: "single", status: "pending", limit: 50 });
+        const pendingSinglesMapped = (pendingSinglesPayload.alerts || [])
+          .map(mapSingleAlertToPick)
+          .filter(Boolean);
+
+        if (pendingMapped.length > 0 || pendingSinglesMapped.length > 0) {
           setCombos(pendingMapped);
+          setSinglePicks(pendingSinglesMapped);
           setFeedMode("pending");
           setLoadState("ready");
           return;
@@ -83,9 +103,14 @@ export default function MultiBet() {
         const recentMapped = (recentPayload.alerts || [])
           .map(mapMultibetAlertToCombo)
           .filter(Boolean);
+        const recentSinglesPayload = await getAlerts({ type: "single", limit: 50 });
+        const recentSinglesMapped = (recentSinglesPayload.alerts || [])
+          .map(mapSingleAlertToPick)
+          .filter(Boolean);
 
         setCombos(recentMapped);
-        setFeedMode(recentMapped.length > 0 ? "history" : "pending");
+        setSinglePicks(recentSinglesMapped);
+        setFeedMode(recentMapped.length > 0 || recentSinglesMapped.length > 0 ? "history" : "pending");
         setLoadState("ready");
       } catch (error) {
         if (!active) {
@@ -93,6 +118,7 @@ export default function MultiBet() {
         }
         setLoadError(error?.message || "Caricamento fallito.");
         setCombos([]);
+        setSinglePicks([]);
         setFeedMode("pending");
         setLoadState("ready");
       }
@@ -122,10 +148,10 @@ export default function MultiBet() {
       return "Caricamento alert multibet...";
     }
     if (feedMode === "history") {
-      return `Nessuna multipla pending: mostro gli ultimi documenti betAlerts (type=multibet): ${combos.length} elementi.`;
+      return `Nessun alert pending: mostro storico betAlerts (multibet ${combos.length} · single ${singlePicks.length}).`;
     }
-    return `Sincronizzato con betAlerts (type=multibet, pending): ${combos.length} elementi.`;
-  }, [combos.length, feedMode, loadState]);
+    return `Sincronizzato con betAlerts pending (multibet ${combos.length} · single ${singlePicks.length}).`;
+  }, [combos.length, singlePicks.length, feedMode, loadState]);
 
   return (
     <div className="app-page">
@@ -203,25 +229,44 @@ export default function MultiBet() {
 
             {COMBO_TABS.map((tab) => {
               const inTab = filterCombosByMode(combos, tab.key);
+              const isSingleTab = tab.key === "single";
+              const singleInTab = isSingleTab ? singlePicks : [];
 
               return (
                 <TabsContent key={tab.key} value={tab.key}>
                   {isPremium ? (
                     <div className="space-y-4" ref={highlightRef}>
-                      {inTab.map((combo) => (
-                        <motion.div key={combo.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
-                          <MultibetComboCard combo={combo} isPremium highlightKey={refKey} />
-                        </motion.div>
-                      ))}
+                      {!isSingleTab &&
+                        inTab.map((combo) => (
+                          <motion.div
+                            key={combo.id}
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                          >
+                            <MultibetComboCard combo={combo} isPremium highlightKey={refKey} />
+                          </motion.div>
+                        ))}
+                      {isSingleTab &&
+                        singleInTab.map((single) => (
+                          <motion.div
+                            key={single.id}
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                          >
+                            <SingleAlertCard alert={single} isPremium />
+                          </motion.div>
+                        ))}
 
-                      {inTab.length === 0 && (
+                      {((!isSingleTab && inTab.length === 0) || (isSingleTab && singleInTab.length === 0)) && (
                         <GlassCard>
                           <p className="text-xs text-muted-foreground">
-                            {combos.length === 0 ? (
+                            {combos.length === 0 && singlePicks.length === 0 ? (
                               <>
-                                Nessuna multipla pending: attendi un ciclo del worker su Railway, oppure controlla Mongo
-                                e variabili Sportmonks.
+                                Nessun alert pending: attendi un ciclo del worker su Railway, oppure controlla Mongo e
+                                variabili Sportmonks.
                               </>
+                            ) : isSingleTab ? (
+                              <>Nessun alert single disponibile in questo momento.</>
                             ) : tab.key === "algorithmic" ? (
                               <>Nessuna multipla disponibile in elenco completo.</>
                             ) : (
@@ -238,14 +283,18 @@ export default function MultiBet() {
                   ) : (
                     <div className="relative">
                       <div className="pointer-events-none select-none space-y-4 opacity-40">
-                        {(inTab.length ? inTab : combos).slice(0, 2).map((combo) => (
-                          <MultibetComboCard
-                            key={combo.id}
-                            combo={combo}
-                            isPremium={false}
-                            highlightKey={refKey}
-                          />
-                        ))}
+                        {isSingleTab
+                          ? (singleInTab.length ? singleInTab : singlePicks).slice(0, 2).map((single) => (
+                              <SingleAlertCard key={single.id} alert={single} isPremium={false} />
+                            ))
+                          : (inTab.length ? inTab : combos).slice(0, 2).map((combo) => (
+                              <MultibetComboCard
+                                key={combo.id}
+                                combo={combo}
+                                isPremium={false}
+                                highlightKey={refKey}
+                              />
+                            ))}
                       </div>
                       <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-background/60 backdrop-blur-sm">
                         <div className="p-8 text-center">

@@ -64,7 +64,6 @@ function getAlertMetrics(alert) {
     algorithmic: "Algoritmico",
     safe: "Safe",
     value: "Value",
-    gold: "Gold",
   }[String(modus || "").toLowerCase()];
   return {
     title: modusLabel

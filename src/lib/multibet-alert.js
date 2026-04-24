@@ -1,6 +1,6 @@
 /**
- * Mappa `betAlerts` type multibet (worker Railway) in UI. Quattro modi prodotto:
- * Algorithmic · Safe · Value · Gold (vedi brief cliente).
+ * Mappa `betAlerts` type multibet (worker Railway) in UI.
+ * Modi supportati: Algorithmic · Safe · Value.
  * @see telegram-alert-backend/app/mongodb.py — `_multibet_to_doc`
  */
 
@@ -20,22 +20,6 @@ function formatDisplayOdd(n) {
   return x.toFixed(2);
 }
 
-/**
- * Rileva mercati “Gold”: risultato esatto, scorecast, combo avanzate (euristica su testi API).
- * Quando il worker espone altri `market`/`source`, estendere qui o aggiungere `modus: "gold"` in Mongo.
- */
-function eventLooksGoldLike(ev) {
-  const m = String(ev?.market || "");
-  const s = String(ev?.selection || "");
-  const blob = `${m} ${s}`.toLowerCase();
-  if (/^\s*\d+\s*[-–:]\s*\d+\s*$/.test(s.trim())) {
-    return true;
-  }
-  return /risultat|exact|corrett|scorecast|esatto|correct\s*score|combo\s+score|ht\/ft|half\s*time|corners|cartell/i.test(
-    blob
-  );
-}
-
 function averageValuePercent(events) {
   const list = (events || []).map((e) => Number(e?.valuePercent));
   const fin = list.filter((x) => Number.isFinite(x) && x !== 0);
@@ -45,12 +29,12 @@ function averageValuePercent(events) {
   return fin.reduce((a, b) => a + b, 0) / fin.length;
 }
 
-const MODUS_KEYS = new Set(["algorithmic", "safe", "value", "gold"]);
+const MODUS_KEYS = new Set(["algorithmic", "safe", "value"]);
 
 /**
  * Sorgente: campo `multibet.modus` scritto dal worker Python (generazione reale per tab).
  * @param {string|undefined} modus
- * @returns {{ algorithmic: boolean, safe: boolean, value: boolean, gold: boolean } | null}
+ * @returns {{ algorithmic: boolean, safe: boolean, value: boolean } | null}
  */
 export function modeFiltersFromServerModus(modus) {
   const m = String(modus || "").toLowerCase();
@@ -61,26 +45,24 @@ export function modeFiltersFromServerModus(modus) {
     algorithmic: m === "algorithmic",
     safe: m === "safe",
     value: m === "value",
-    gold: m === "gold",
   };
 }
 
 /**
- * Euristica per documenti senza `modus` (dati pre-migrazione). Un solo flag true, priorità gold → safe → value → algorithmic.
+ * Euristica per documenti senza `modus` (dati pre-migrazione). Un solo flag true, priorità safe → value → algorithmic.
  * @param {object} mb — alert.multibet
  */
 function inferLegacyModeFilters(mb) {
   if (!mb) {
-    return { algorithmic: true, safe: false, value: false, gold: false };
+    return { algorithmic: true, safe: false, value: false };
   }
   const events = Array.isArray(mb.events) ? mb.events : [];
   const c = Number(mb.confidenceScore);
   const de = Number(mb.dataEdgePercent);
   const tev = Number(mb.totalEv);
-  const nullFlags = { algorithmic: false, safe: false, value: false, gold: false };
+  const nullFlags = { algorithmic: false, safe: false, value: false };
 
   const safe = Number.isFinite(c) && c >= 80;
-  const gold = events.some((e) => eventLooksGoldLike(e));
   const avgVp = averageValuePercent(events);
   const anyHighLegValue = events.some((e) => Math.abs(Number(e?.valuePercent) || 0) >= 4);
   const value =
@@ -89,10 +71,7 @@ function inferLegacyModeFilters(mb) {
     anyHighLegValue ||
     avgVp >= 3.5;
 
-  if (gold) {
-    return { ...nullFlags, gold: true };
-  }
-  if (safe && !gold) {
+  if (safe) {
     return { ...nullFlags, safe: true };
   }
   if (value) {
@@ -102,9 +81,6 @@ function inferLegacyModeFilters(mb) {
 }
 
 function tagRiskFromModes(modes) {
-  if (modes.gold) {
-    return { tag: "Gold", risk: "alto" };
-  }
   if (modes.safe) {
     return { tag: "Conservativa", risk: "basso" };
   }
@@ -188,15 +164,8 @@ export function mapMultibetAlertToCombo(alert) {
       algoritmiche: modeFilters.algorithmic,
       safe: modeFilters.safe,
       value: modeFilters.value,
-      gold: modeFilters.gold,
     },
-    type: modeFilters.gold
-      ? "gold"
-      : modeFilters.safe
-        ? "safe"
-        : modeFilters.value
-          ? "value"
-          : "algorithmic",
+    type: modeFilters.safe ? "safe" : modeFilters.value ? "value" : "algorithmic",
     tag,
     risk,
     odds: formatDisplayOdd(totalOdd),
@@ -218,7 +187,50 @@ export function mapMultibetAlertToCombo(alert) {
 }
 
 /**
- * @param {"algorithmic"|"safe"|"value"|"gold"} modeKey
+ * @param {object} alert — betAlerts type=single
+ */
+export function mapSingleAlertToPick(alert) {
+  if (!alert || alert.type !== "single" || !alert.single) {
+    return null;
+  }
+  const single = alert.single || {};
+  const modelProbabilityRaw = Number(single.modelProbability);
+  const confidence =
+    Number.isFinite(modelProbabilityRaw) && modelProbabilityRaw > 0
+      ? Math.min(
+          100,
+          Math.max(0, Math.round(modelProbabilityRaw <= 1 ? modelProbabilityRaw * 100 : modelProbabilityRaw))
+        )
+      : 0;
+  const edge = Number(single.edge);
+
+  return {
+    id: String(alert._id || alert.alertKey || `single:${single.fixtureId || "na"}`),
+    alertKey: String(alert.alertKey || ""),
+    status: String(alert.status || "pending"),
+    telegramSent: Boolean(alert.telegramSent),
+    createdAt: alert.createdAt || null,
+    fixtureId: single.fixtureId != null ? String(single.fixtureId) : null,
+    home: String(single.home || "Home"),
+    away: String(single.away || "Away"),
+    league: String(single.league || "—"),
+    kickoff: single.kickoff || null,
+    market: String(single.market || "Mercato"),
+    selection: String(single.selection || "Selezione"),
+    modelProbability: Number.isFinite(modelProbabilityRaw) ? modelProbabilityRaw : null,
+    modelOdd: Number(single.modelOdd) || null,
+    bestBookmaker: String(single.bestBookmaker || "Bookmaker"),
+    bestOdd: Number(single.bestOdd) || null,
+    valuePercent: Number(single.valuePercent) || null,
+    edge: Number.isFinite(edge) ? edge : null,
+    source: String(single.source || "orchestrator"),
+    comparator: Array.isArray(single.comparator) ? single.comparator : [],
+    confidence,
+  };
+}
+
+/**
+ * @param {"algorithmic"|"safe"|"value"} modeKey
  */
 export function filterCombosByMode(combos, modeKey) {
   const list = combos || [];
@@ -230,9 +242,6 @@ export function filterCombosByMode(combos, modeKey) {
   }
   if (modeKey === "value") {
     return list.filter((c) => c?.modeFilters?.value || c?.tabFilters?.value);
-  }
-  if (modeKey === "gold") {
-    return list.filter((c) => c?.modeFilters?.gold || c?.tabFilters?.gold);
   }
   return list;
 }

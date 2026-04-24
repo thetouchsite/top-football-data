@@ -2,6 +2,11 @@ Automazione Bot Telegram - Stato Attuale
 
 Aggiornamento: 2026-04-24
 
+Allineamento piattaforma (ultimo update):
+- Multi-Bet lato sito ora include anche gli alert `single` (tab dedicata).
+- Logica Gold rimossa completamente dal backend di generazione alert.
+- Modi multibet attivi e persistiti: `algorithmic`, `safe`, `value`.
+
 Il bot Telegram e collegato alla piattaforma tramite un backend dedicato su Railway ed e operativo in produzione.
 
 ====================================================================

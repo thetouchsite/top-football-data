@@ -20,7 +20,6 @@ const TAG_COLORS = {
   Bilanciata: "bg-accent/10 text-accent border-accent/20",
   Aggressiva: "bg-destructive/10 text-destructive border-destructive/20",
   Value: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400",
-  Gold: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400",
 };
 
 /**
@@ -33,16 +32,13 @@ export default function MultibetComboCard({ combo, isPremium, highlightKey }) {
   const [expanded, setExpanded] = useState(false);
   const isLive = combo.dataSource === "orchestrator";
   const isHighlighted = highlightKey && combo.alertKey && highlightKey === combo.alertKey;
-  const isGold = Boolean(combo.modeFilters?.gold || combo.tabFilters?.gold);
   const bookmakers = Array.isArray(combo.bookmakers) ? combo.bookmakers : [];
   const eng = combo.engine || {};
 
   return (
     <GlassCard
       id={combo.alertKey ? `multibet-${combo.alertKey}` : undefined}
-      className={`${
-        isGold ? "border-amber-500/25 bg-amber-500/[0.03]" : "border-accent/10"
-      } ${isHighlighted ? "ring-2 ring-primary/40" : ""}`}
+      className={`border-accent/10 ${isHighlighted ? "ring-2 ring-primary/40" : ""}`}
     >
       <div className="flex items-start justify-between mb-3">
         <div>

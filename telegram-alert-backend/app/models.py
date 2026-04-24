@@ -11,15 +11,13 @@ class BookmakerOdd:
 
 class LegProfile:
     """
-    Categoria gamba lato generazione (quattro modi in UI).
+    Categoria gamba lato generazione.
     - model_value: probabilita modello + quote (convergenza)
     - book_discrepancy: value bet ufficiale API (fair odd vs book)
-    - exotic: risultati esatti, HT/FT, special — pool Gold
     """
 
     MODEL_VALUE = "model_value"
     BOOK_DISCREPANCY = "book_discrepancy"
-    EXOTIC = "exotic"
 
 
 @dataclass(frozen=True)
@@ -59,7 +57,6 @@ class MultibetModus:
     ALGORITHMIC = "algorithmic"
     SAFE = "safe"
     VALUE = "value"
-    GOLD = "gold"
 
 
 @dataclass(frozen=True)

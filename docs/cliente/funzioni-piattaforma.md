@@ -10,14 +10,16 @@ Lo stato implementato oggi, in sintesi, e questo:
 
 - Sezione A - Modelli predittivi: largamente implementata
 - Sezione B - Deep data: implementata in parte rilevante, ma ancora parziale sui dati avanzati giocatore
-- Sezione C - Multi-Bet: implementata e operativa su 3 modalita
+- Sezione C - Multi-Bet: implementata e operativa su 3 modalita + tab single
 - Automazione Telegram / performance / retention: implementata in modo sostanziale
+- Coerenza dati cross-pagine: rafforzata con snapshot versioning e cache policy allineata
+- Logica Gold: rimossa dal prodotto e dal backend (non piu categoria attiva)
 
 Stato reale pratico:
-- Modelli singolo match: circa 85-90%
-- Analisi statistica deep data: circa 65-75%
-- Smart Multi-Bet Engine: circa 85-90%
-- Automazione Telegram: circa 85-90%
+- Modelli singolo match: circa 90%
+- Analisi statistica deep data: circa 70-78%
+- Smart Multi-Bet Engine: circa 92%
+- Automazione Telegram: circa 90%
 
 Per il dettaglio operativo aggiornato fare riferimento a:
 - `TODO_SVILUPPO_TOP_FOOTBALL_DATA.txt`

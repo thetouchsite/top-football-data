@@ -6,6 +6,19 @@ Documento operativo per chi lavora sul repository: architettura attuale del feed
 
 ---
 
+## Aggiornamento rapido 2026-04-24 (coerenza dati)
+
+- Implementato allineamento schedule/detail tramite `snapshotVersion` condivisa:
+  - schedule payload include `snapshotVersion`
+  - fixture route accetta/usa `snapshotVersion` per leggere lo stesso snapshot logico
+  - client propaga `sv` nei link verso match detail
+- Riallineati TTL/policy cache tra feed 7 giorni e fixture per ridurre divergenze temporali.
+- `ensureProbabilitySum()` resa robusta (nessun valore negativo, somma 100 garantita).
+- Selezione bundle predizioni 1X2 resa deterministica (niente scelta "first hit").
+- Confidenza principale resa coerente tra card/feed/detail (lineup reliability esclusa dal calcolo principale).
+
+---
+
 ## 1. Stato attuale del layer football
 
 ### Superfici API esposte

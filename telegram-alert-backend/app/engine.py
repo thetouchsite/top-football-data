@@ -293,21 +293,6 @@ def _selection_from_value_bet(value_bet: dict[str, Any]) -> str | None:
     return None
 
 
-_GOLD_EXOTIC_PATTERN = re.compile(
-    r"(?i)correct|esatt|cs\b|ht\s*[/\s]\s*ft|scorecast|risultat|anytime|primo_?gol|multi_?scorer|corners?|gialli|cartell"
-)
-_SCORELINE = re.compile(r"^\d+\s*[-:]\s*\d+$")
-
-
-def _is_gold_exotic_label(raw: str) -> bool:
-    s = (raw or "").strip()
-    if len(s) < 2:
-        return False
-    if _SCORELINE.match(s):
-        return True
-    return bool(_GOLD_EXOTIC_PATTERN.search(s))
-
-
 def _market_name_for_selection(selection: str) -> str:
     if selection in {"1", "X", "2"}:
         return "1X2"
@@ -365,10 +350,6 @@ def build_official_value_markets(
             selection = standard_sel
             leg_profile = LegProfile.BOOK_DISCREPANCY
             market_name = _market_name_for_selection(selection)
-        elif _is_gold_exotic_label(raw_bet):
-            selection = raw_bet[:200]
-            leg_profile = LegProfile.EXOTIC
-            market_name = "Exact / Special / Combo"
         else:
             continue
 
@@ -501,7 +482,7 @@ def filter_markets_for_modus(
     algorithmic_min_leg_prob: float = 0.32,
     algorithmic_min_value_percent: float = 1.0,
 ) -> list[FixtureMarket]:
-    """Pool di gambe per generatore multipla (quattro modi, pool disgiunti)."""
+    """Pool di gambe per generatore multipla (algorithmic/safe/value)."""
     if modus == MultibetModus.ALGORITHMIC:
         return [
             m
@@ -514,8 +495,6 @@ def filter_markets_for_modus(
         return [m for m in markets if m.leg_profile == LegProfile.MODEL_VALUE and m.model_probability >= 0.80]
     if modus == MultibetModus.VALUE:
         return [m for m in markets if m.leg_profile == LegProfile.BOOK_DISCREPANCY]
-    if modus == MultibetModus.GOLD:
-        return [m for m in markets if m.leg_profile == LegProfile.EXOTIC]
     return []
 
 
