@@ -14,7 +14,7 @@ function normalizeLeagueName(name) {
 
 export const runtime = "nodejs";
 const PLAYER_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
-const PLAYER_PROFILE_CACHE_VERSION = "v19";
+const PLAYER_PROFILE_CACHE_VERSION = "v21";
 
 /** Statistiche conteggio: evita artefatti float (es. 30.602600000000002) dopo somma su più partite. */
 const SEASON_COUNT_FIELDS = new Set([
@@ -65,6 +65,135 @@ function normalizeMetricKey(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "")
     .trim();
+}
+
+/** Evita di leggere "goals" dalle solite metriche partita-squadra (hometeamgoals, expectedgoals, …). */
+function shouldIgnoreDetailKeyForPlayerCountStat(nKey, aliasNeedle) {
+  if (!nKey) return false;
+  const a = String(aliasNeedle);
+  if (a !== "goals" && a !== "52" && a !== "assists" && a !== "79" && a !== "80" && a !== "83" && a !== "84" && a !== "shot" && a !== "shots" && a !== "42" && a !== "shotstotal") {
+    return false;
+  }
+  if (a === "goals" || a === "52") {
+    if (nKey === "hometeamgoals" || nKey === "awayteamgoals") return true;
+    if (nKey.includes("hometeam") || nKey.includes("awayteam")) return true;
+    if (nKey.includes("hometotal") || nKey.includes("awaytotal")) return true;
+    if (nKey.includes("opponent") && nKey.includes("goal")) return true;
+    if (nKey.includes("opposition") && nKey.includes("goal")) return true;
+    if (nKey === "expectedgoals" || (nKey.includes("expected") && nKey.includes("goal") && nKey !== "goals" && nKey !== "goalsn")) {
+      return true;
+    }
+    if (nKey.includes("xgt") || nKey === "5304" || nKey === "5305") return true;
+    if (nKey === "hometotalgoals" || nKey === "awaytotalgoals") return true;
+    if (nKey !== "goals" && nKey !== "goalsn" && nKey !== "goal" && nKey !== "goals_scored" && nKey !== "goals5" && nKey.length > 6 && nKey.includes("goals") && nKey.includes("team")) {
+      return true;
+    }
+  }
+  if (a === "assists" || a === "79" || a === "84") {
+    if (nKey.includes("hometeam") || nKey.includes("awayteam") || nKey.includes("hometotal") || nKey.includes("awaytotal")) {
+      if (nKey.includes("assist")) return true;
+    }
+  }
+  if (a === "shot" || a === "shots" || a === "42" || a === "shotstotal" || a === "86") {
+    if (nKey === "hometeamshots" || nKey === "awayteamshots") return true;
+    if (nKey.includes("hometotalshots") || nKey.includes("awaytotalshots")) return true;
+    if (nKey.includes("expected") && nKey.includes("shot")) return true;
+  }
+  return false;
+}
+
+function readDetailRowAsNumber(row) {
+  if (!row) return null;
+  const take = (raw) => {
+    if (raw == null) return null;
+    if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+    if (typeof raw === "string") {
+      const p = Number(raw);
+      return Number.isFinite(p) ? p : null;
+    }
+    if (typeof raw === "object") {
+      for (const c of [raw.total, raw.value, raw.goals, raw.average, raw.count]) {
+        const t = toNumber(c);
+        if (t != null) return t;
+      }
+      for (const v of Object.values(raw)) {
+        const t = toNumber(v);
+        if (t != null) return t;
+      }
+    }
+    return null;
+  };
+  return take(row.value) ?? take(row.data?.value) ?? take(row.amount) ?? null;
+}
+
+/**
+ * Gol del giocatore in singola partita: preferisce type_id 52, poi label esatte.
+ * (pickStatDetail con alias "goals" pescava hometeamgoals / expectedgoals, cifre = gol partita, non del giocatore.)
+ */
+function pickPlayerMatchGoalsCount(details) {
+  const d = asArray(details);
+  for (const row of d) {
+    const tid = String(row?.type_id ?? row?.type?.id ?? "");
+    if (tid === "52") {
+      const v = readDetailRowAsNumber(row);
+      if (v != null) return Math.max(0, Math.min(20, Math.round(v)));
+    }
+  }
+  for (const row of d) {
+    const nKey = normalizeMetricKey(
+      row?.type?.developer_name || row?.type?.name || row?.name || row?.type_id,
+    );
+    if (shouldIgnoreDetailKeyForPlayerCountStat(nKey, "goals")) continue;
+    if (nKey === "goals" || nKey === "goal" || nKey === "goalsn" || nKey === "goalsscored") {
+      const v = readDetailRowAsNumber(row);
+      if (v != null) return Math.max(0, Math.min(20, Math.round(v)));
+    }
+  }
+  return 0;
+}
+
+function pickPlayerMatchAssistsCount(details) {
+  const d = asArray(details);
+  for (const tid of ["79", "80", "83", "84"]) {
+    for (const row of d) {
+      if (String(row?.type_id ?? row?.type?.id ?? "") === tid) {
+        const v = readDetailRowAsNumber(row);
+        if (v != null) return Math.max(0, Math.min(20, Math.round(v)));
+      }
+    }
+  }
+  for (const row of d) {
+    const nKey = normalizeMetricKey(
+      row?.type?.developer_name || row?.type?.name || row?.name || row?.type_id,
+    );
+    if (shouldIgnoreDetailKeyForPlayerCountStat(nKey, "assists")) continue;
+    if (nKey === "assists" || nKey === "assist" || nKey === "goalassists") {
+      const v = readDetailRowAsNumber(row);
+      if (v != null) return Math.max(0, Math.min(20, Math.round(v)));
+    }
+  }
+  return 0;
+}
+
+function pickPlayerMatchShotsCount(details) {
+  const d = asArray(details);
+  for (const row of d) {
+    if (String(row?.type_id ?? row?.type?.id ?? "") === "42") {
+      const v = readDetailRowAsNumber(row);
+      if (v != null) return Math.max(0, Math.min(100, Math.round(v)));
+    }
+  }
+  for (const row of d) {
+    const nKey = normalizeMetricKey(
+      row?.type?.developer_name || row?.type?.name || row?.name || row?.type_id,
+    );
+    if (shouldIgnoreDetailKeyForPlayerCountStat(nKey, "shotstotal")) continue;
+    if (nKey === "shotstotal" || nKey === "shots" || nKey === "totalshots" || nKey === "shot") {
+      const v = readDetailRowAsNumber(row);
+      if (v != null) return Math.max(0, Math.min(100, Math.round(v)));
+    }
+  }
+  return 0;
 }
 
 function pickMediaBundle(entity) {
@@ -312,7 +441,8 @@ function pickStatDetail(details, aliases) {
     // Evita: alias "…passes…percentage" che matcha la chiave "passes" (conteggio) via alias.includes(key).
     const matchedAlias = normalizedAliases.find(
       (alias) =>
-        key === alias || key.includes(alias) || (key.length >= 10 && alias.includes(key)),
+        (key === alias || key.includes(alias) || (key.length >= 10 && alias.includes(key))) &&
+        !shouldIgnoreDetailKeyForPlayerCountStat(key, alias),
     );
     if (matchedAlias) {
       const parsed =
@@ -793,11 +923,11 @@ function buildSeasonStatsFromMatchRows(rowsSource, teamId, seasonCtx) {
     const min = readNumDetail(details, ["minutes_played", "minutes", "119"]);
     g.minutesPlayed += min;
     if (min > 0) g._minutesGames += 1;
-    g.goals += readNumDetail(details, ["goals", "52"]);
-    g.assists += readNumDetail(details, ["assists"]);
+    g.goals += pickPlayerMatchGoalsCount(details);
+    g.assists += pickPlayerMatchAssistsCount(details);
     g.yellowCards += readNumDetail(details, ["yellow_cards", "yellow_card"]);
     g.redCards += readNumDetail(details, ["red_cards", "red_card"]);
-    g.shotsTotal += readNumDetail(details, ["shots_total", "shots", "42"]);
+    g.shotsTotal += pickPlayerMatchShotsCount(details);
     g.shotsOnTarget += readNumDetail(details, ["shots_on_target"]);
     const pThis = readNumDetail(details, ["passes", "passes_total"]);
     g.passes += pThis;
@@ -1260,6 +1390,10 @@ function buildMatchStatsRows(latestRows, teamId, seasonCtx) {
         fixtureId: String(fixture?.id || ""),
         date: String(fixture?.starting_at || fixture?.startingAt || "").slice(0, 10) || "n/d",
         league: fixture?.league?.name || "Competizione",
+        leagueId:
+          fixture?.league?.id != null && String(fixture.league.id) !== ""
+            ? String(fixture.league.id)
+            : null,
         leagueMedia: pickMediaBundle(fixture?.league),
         opponent: isHome ? away?.name || "Away" : home?.name || "Home",
         opponentMedia: pickMediaBundle(opponentParticipant),
@@ -1273,9 +1407,9 @@ function buildMatchStatsRows(latestRows, teamId, seasonCtx) {
         result: `${score.home}-${score.away}`,
         stats: {
           minutes: Math.max(0, Math.round(pickStatDetail(details, ["minutes_played", "minutes"]) ?? 0)),
-          goals: Math.max(0, Math.round(pickStatDetail(details, ["goals"]) ?? 0)),
-          assists: Math.max(0, Math.round(pickStatDetail(details, ["assists"]) ?? 0)),
-          shots: Math.max(0, Math.round(pickStatDetail(details, ["shots_total", "shots"]) ?? 0)),
+          goals: pickPlayerMatchGoalsCount(details),
+          assists: pickPlayerMatchAssistsCount(details),
+          shots: pickPlayerMatchShotsCount(details),
           yellow: Math.max(0, Math.round(pickStatDetail(details, ["yellow_cards", "yellow_card"]) ?? 0)),
           red: Math.max(0, Math.round(pickStatDetail(details, ["red_cards", "red_card"]) ?? 0)),
           rating: (() => {

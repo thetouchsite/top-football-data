@@ -69,8 +69,8 @@ export default function PlayerDetailPanel({ fixtureId, player, matchMetrics = nu
   const [tab, setTab] = useState("overview");
   const [careerExpanded, setCareerExpanded] = useState(false);
   const [expandedHonorTeams, setExpandedHonorTeams] = useState({});
-  const [selectedLeague, setSelectedLeague] = useState("__all__");
-  const [selectedSeasonLeague, setSelectedSeasonLeague] = useState("__all__");
+  /** Unica selezione per overview stagione e tab partite, allineata a `byCompetition` + eventuali leghe solo da partite. */
+  const [selectedCompetition, setSelectedCompetition] = useState("__all__");
 
   useEffect(() => {
     let mounted = true;
@@ -81,8 +81,7 @@ export default function PlayerDetailPanel({ fixtureId, player, matchMetrics = nu
       .then((payload) => {
         if (!mounted) return;
         setData(payload);
-        setSelectedLeague("__all__");
-        setSelectedSeasonLeague("__all__");
+        setSelectedCompetition("__all__");
       })
       .catch((err) => {
         if (!mounted) return;
@@ -99,45 +98,101 @@ export default function PlayerDetailPanel({ fixtureId, player, matchMetrics = nu
   const profile = data?.profile || player || {};
   const currentSeason = data?.currentSeason;
   const legacySeasons = Array.isArray(data?.seasons) ? data.seasons : [];
+  const matchRows = Array.isArray(data?.matchStats) ? data.matchStats : [];
+  const competitionOptions = useMemo(() => {
+    const byComp = currentSeason?.byCompetition;
+    const list = [];
+    const seen = new Set();
+    if (Array.isArray(byComp)) {
+      for (const r of byComp) {
+        const label = String(r.competitionName || "").trim() || "Competizione";
+        const id = r.leagueId != null && String(r.leagueId) !== "" ? String(r.leagueId) : null;
+        if (id) seen.add(`id:${id}`);
+        seen.add(`n:${label.toLowerCase()}`);
+        list.push({
+          value: String(r.competitionValue),
+          label,
+          leagueId: id,
+        });
+      }
+    }
+    for (const m of matchRows) {
+      const label = String(m?.league || "").trim();
+      if (!label) continue;
+      const id = m?.leagueId != null && String(m.leagueId) !== "" ? String(m.leagueId) : null;
+      const key = id ? `id:${id}` : `n:${label.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      list.push({
+        value: `extra:${id || "n"}:${encodeURIComponent(label)}`,
+        label,
+        leagueId: id,
+      });
+    }
+    return list.sort((a, b) => a.label.localeCompare(b.label, "it"));
+  }, [currentSeason?.byCompetition, matchRows]);
   const activeSeasonStats = useMemo(() => {
     if (currentSeason) {
-      if (selectedSeasonLeague === "__all__") {
+      if (selectedCompetition === "__all__") {
         return (
           currentSeason.allCompetitions ||
           currentSeason.byCompetition?.[0] ||
           null
         );
       }
-      return (
-        currentSeason.byCompetition?.find(
-          (row) => String(row.competitionValue) === String(selectedSeasonLeague),
-        ) || null
+      const opt = competitionOptions.find((o) => o.value === selectedCompetition);
+      const fromValue = currentSeason.byCompetition?.find(
+        (row) => String(row.competitionValue) === String(selectedCompetition),
       );
+      if (fromValue) {
+        return fromValue;
+      }
+      if (opt?.leagueId) {
+        return (
+          currentSeason.byCompetition?.find(
+            (r) => String(r.leagueId || "") === String(opt.leagueId),
+          ) || null
+        );
+      }
+      if (opt?.label) {
+        const nl = String(opt.label).toLowerCase();
+        return (
+          currentSeason.byCompetition?.find(
+            (r) => String(r.competitionName || "").trim().toLowerCase() === nl,
+          ) || null
+        );
+      }
+      return null;
     }
     if (legacySeasons.length) {
       return legacySeasons[0] || null;
     }
     return null;
-  }, [currentSeason, legacySeasons, selectedSeasonLeague]);
-  const matchRows = Array.isArray(data?.matchStats) ? data.matchStats : [];
-  const leagueOptions = useMemo(() => {
-    const map = new Map();
-    matchRows.forEach((row) => {
-      const name = String(row?.league || "").trim();
-      if (!name) return;
-      if (!map.has(name)) {
-        map.set(name, {
-          name,
-          media: row?.leagueMedia || null,
-        });
-      }
-    });
-    return [...map.values()].sort((left, right) => left.name.localeCompare(right.name));
-  }, [matchRows]);
+  }, [currentSeason, legacySeasons, selectedCompetition, competitionOptions]);
   const filteredMatchRows = useMemo(() => {
-    if (selectedLeague === "__all__") return matchRows;
-    return matchRows.filter((row) => String(row?.league || "").trim() === selectedLeague);
-  }, [matchRows, selectedLeague]);
+    if (selectedCompetition === "__all__") return matchRows;
+    const opt = competitionOptions.find((o) => o.value === selectedCompetition);
+    if (!opt) {
+      return matchRows.filter(
+        (row) => String(row?.league || "").trim() === String(selectedCompetition),
+      );
+    }
+    const lname = String(opt.label).trim().toLowerCase();
+    if (opt.leagueId) {
+      return matchRows.filter((m) => {
+        if (m?.leagueId != null && String(m.leagueId) === String(opt.leagueId)) {
+          return true;
+        }
+        if (m?.leagueId == null) {
+          return String(m?.league || "").trim().toLowerCase() === lname;
+        }
+        return false;
+      });
+    }
+    return matchRows.filter(
+      (m) => String(m?.league || "").trim().toLowerCase() === lname,
+    );
+  }, [matchRows, selectedCompetition, competitionOptions]);
   const careerRows = Array.isArray(data?.career) ? data.career : [];
   const honorsByTeam = Array.isArray(data?.honorsByTeam) ? data.honorsByTeam : [];
   const teamRangeIndex = useMemo(() => {
@@ -359,23 +414,20 @@ export default function PlayerDetailPanel({ fixtureId, player, matchMetrics = nu
             <div className="mb-1 text-sm font-semibold text-foreground">Statistiche stagione</div>
             <div className="mb-3 text-[11px] text-muted-foreground">Stagione corrente</div>
             <div className="mb-3 w-full max-w-[260px]">
-              {currentSeason?.byCompetition?.length > 0 ? (
+              {competitionOptions.length > 0 ? (
                 <div className="flex items-center gap-2">
                   <Select
-                    value={selectedSeasonLeague}
-                    onValueChange={setSelectedSeasonLeague}
+                    value={selectedCompetition}
+                    onValueChange={setSelectedCompetition}
                   >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Tutte le competizioni" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__all__">Tutte le competizioni</SelectItem>
-                      {currentSeason.byCompetition.map((row) => (
-                        <SelectItem
-                          key={row.competitionValue}
-                          value={String(row.competitionValue)}
-                        >
-                          {row.competitionName}
+                      {competitionOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -580,23 +632,30 @@ export default function PlayerDetailPanel({ fixtureId, player, matchMetrics = nu
           <div className="mb-3 text-[11px] text-muted-foreground">Stagione corrente</div>
           <div className="mb-3 w-full max-w-[260px]">
             <div className="flex items-center gap-2">
-              <Select value={selectedLeague} onValueChange={setSelectedLeague}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Tutte le competizioni" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Tutte le competizioni</SelectItem>
-                  {leagueOptions.map((option) => (
-                    <SelectItem key={option.name} value={option.name}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {competitionOptions.length > 0 ? (
+                <Select value={selectedCompetition} onValueChange={setSelectedCompetition}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Tutte le competizioni" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Tutte le competizioni</SelectItem>
+                    {competitionOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               <span className="shrink-0 text-[11px] text-muted-foreground">
                 Tot: {filteredMatchRows.length}
               </span>
             </div>
+            {competitionOptions.length > 0 ? (
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Stesso filtro di &quot;Statistiche stagione&quot; nell&apos;overview.
+              </p>
+            ) : null}
           </div>
           {filteredMatchRows.length === 0 && (
             <div className="text-xs text-muted-foreground">Match stats non disponibili per questo giocatore.</div>

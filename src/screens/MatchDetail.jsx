@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation, Link } from "@/lib/router-compat";
 import { motion } from "framer-motion";
-import { ArrowLeft, Bell, ChevronDown, Clock, Star, TrendingUp, Crown } from "lucide-react";
+import { ArrowLeft, Bell, ChevronDown, Clock, Star, TrendingUp, Crown, ChevronRight } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GlassCard from "@/components/shared/GlassCard";
@@ -629,6 +629,11 @@ export default function MatchDetail() {
   const [fixtureMultibetAlerts, setFixtureMultibetAlerts] = useState([]);
   const [xgViewMode, setXgViewMode] = useState("team");
   const [xgPlayersDetailMode, setXgPlayersDetailMode] = useState("xg");
+  useEffect(() => {
+    if (xgPlayersDetailMode === "season") {
+      setXgPlayersDetailMode("xg");
+    }
+  }, [xgPlayersDetailMode]);
   const [xgPlayersApiPayload, setXgPlayersApiPayload] = useState(null);
   const [xgPlayersApiLoading, setXgPlayersApiLoading] = useState(false);
   const [xgPlayersApiError, setXgPlayersApiError] = useState("");
@@ -2767,17 +2772,6 @@ export default function MatchDetail() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => setXgPlayersDetailMode("season")}
-                              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
-                                xgPlayersDetailMode === "season"
-                                  ? "bg-primary/15 text-primary"
-                                  : "text-muted-foreground"
-                              }`}
-                            >
-                              Contesto partita
-                            </button>
-                            <button
-                              type="button"
                               onClick={() => setXgPlayersDetailMode("quote")}
                               className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
                                 xgPlayersDetailMode === "quote"
@@ -2790,22 +2784,16 @@ export default function MatchDetail() {
                           </div>
                           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                           {xgPlayerRows.map((row) => (
-                            <button
+                            <div
                               key={row.id || row.name}
-                              type="button"
-                              onClick={() => handleSelectXgPlayer(row)}
-                              className="rounded-lg border border-border/25 bg-secondary/25 p-2.5 text-left transition hover:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                              className="flex flex-col rounded-lg border border-border/25 bg-secondary/25 p-2.5 text-left"
                             >
                               <div className="mb-2 flex items-start justify-between gap-2">
                                 <div className="min-w-0">
                                   <div className="truncate text-xs font-semibold text-foreground">{row.name}</div>
                                   <div className="text-[11px] text-muted-foreground">#{row.number}</div>
                                   <div className="mt-1 text-[10px] font-medium text-muted-foreground">
-                                    {xgPlayersDetailMode === "xg"
-                                      ? "Analisi xG"
-                                      : xgPlayersDetailMode === "season"
-                                        ? "Volume partita (lineup)"
-                                        : "Quote giocatore"}
+                                    {xgPlayersDetailMode === "xg" ? "Analisi xG" : "Quote giocatore"}
                                   </div>
                                 </div>
                                 <div className="text-right">
@@ -2853,27 +2841,6 @@ export default function MatchDetail() {
                                     <span className="text-muted-foreground">Shooting perf. (indice API)</span>
                                     <span className="text-right text-foreground">{Number(row.shootingPerformance || 0).toFixed(2)}</span>
                                   </>
-                                ) : xgPlayersDetailMode === "season" ? (
-                                  <>
-                                    <span className="text-muted-foreground">Minuti (questa partita)</span>
-                                    <span className="text-right text-foreground">{row.seasonMinutes || 0}</span>
-                                    <span className="text-muted-foreground">Gol (questa partita)</span>
-                                    <span className="text-right text-foreground">{row.seasonGoals || 0}</span>
-                                    <span className="text-muted-foreground">Tiri (questa partita, lineup)</span>
-                                    <span className="text-right text-foreground">{row.seasonShots || 0}</span>
-                                    <span className="text-muted-foreground">Passaggi (questa partita)</span>
-                                    <span className="text-right text-foreground">{row.seasonPasses || 0}</span>
-                                    <span className="text-muted-foreground">Precisione passaggi (questa partita)</span>
-                                    <span className="text-right text-foreground">{Number(row.seasonPassAccuracyPct || 0).toFixed(1)}%</span>
-                                    <span className="text-muted-foreground">Tocchi (questa partita)</span>
-                                    <span className="text-right text-foreground">{row.seasonTouches || 0}</span>
-                                    <span className="text-muted-foreground">Duelli vinti % (questa partita)</span>
-                                    <span className="text-right text-foreground">{Number(row.seasonDuelsWonPct || 0).toFixed(1)}%</span>
-                                    <span className="text-muted-foreground">Intercetti</span>
-                                    <span className="text-right text-foreground">{row.seasonInterceptions || 0}</span>
-                                    <span className="text-muted-foreground">Tackles vinti</span>
-                                    <span className="text-right text-foreground">{row.seasonTacklesWon || 0}</span>
-                                  </>
                                 ) : (
                                   <>
                                     {(() => {
@@ -2913,7 +2880,18 @@ export default function MatchDetail() {
                                   </>
                                 )}
                               </div>
-                            </button>
+                              <p className="mb-1.5 mt-2 text-[10px] text-muted-foreground">
+                                Stagione, presenze e xG in contesto: apri la scheda completa.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectXgPlayer(row)}
+                                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-primary/35 bg-primary/10 px-2 py-2 text-[11px] font-semibold text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                              >
+                                Apri dettaglio giocatore
+                                <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              </button>
+                            </div>
                           ))}
                         </div>
                         </>
@@ -3361,17 +3339,6 @@ export default function MatchDetail() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setXgPlayersDetailMode("season")}
-                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
-                            xgPlayersDetailMode === "season"
-                              ? "bg-primary/15 text-primary"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          Contesto partita
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => setXgPlayersDetailMode("quote")}
                           className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
                             xgPlayersDetailMode === "quote"
@@ -3384,22 +3351,16 @@ export default function MatchDetail() {
                       </div>
                       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {xgPlayerRows.map((row) => (
-                        <button
+                        <div
                           key={row.id || row.name}
-                          type="button"
-                          onClick={() => handleSelectXgPlayer(row)}
-                          className="rounded-lg border border-border/25 bg-secondary/20 p-0 text-left transition hover:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                          className="flex flex-col overflow-hidden rounded-lg border border-border/25 bg-secondary/20 text-left"
                         >
                           <div className="flex items-start justify-between gap-2 border-b border-border/20 bg-secondary/30 px-3 py-2">
                             <div className="min-w-0">
                               <div className="truncate text-sm font-semibold text-foreground">{row.name}</div>
                               <div className="text-[11px] text-muted-foreground">#{row.number}</div>
                               <div className="mt-1 text-[10px] font-medium text-muted-foreground">
-                                {xgPlayersDetailMode === "xg"
-                                  ? "Analisi xG"
-                                  : xgPlayersDetailMode === "season"
-                                    ? "Volume partita (lineup)"
-                                    : "Quote giocatore"}
+                                {xgPlayersDetailMode === "xg" ? "Analisi xG" : "Quote giocatore"}
                               </div>
                               <div className="mt-1 inline-flex items-center gap-1 text-xs">
                                 <span className="text-muted-foreground">
@@ -3447,27 +3408,6 @@ export default function MatchDetail() {
                                 <span className="px-3 py-1 text-muted-foreground">Shooting perf. (indice API)</span>
                                 <span className="px-3 py-1 text-right text-foreground">{Number(row.shootingPerformance || 0).toFixed(2)}</span>
                               </>
-                            ) : xgPlayersDetailMode === "season" ? (
-                              <>
-                                <span className="px-3 py-1 text-muted-foreground">Minuti (questa partita)</span>
-                                <span className="px-3 py-1 text-right text-foreground">{row.seasonMinutes || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Gol (questa partita)</span>
-                                <span className="px-3 py-1 text-right text-foreground">{row.seasonGoals || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Tiri (questa partita, lineup)</span>
-                                <span className="px-3 py-1 text-right text-foreground">{row.seasonShots || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Passaggi (questa partita)</span>
-                                <span className="px-3 py-1 text-right text-foreground">{row.seasonPasses || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Precisione passaggi (questa partita)</span>
-                                <span className="px-3 py-1 text-right text-foreground">{Number(row.seasonPassAccuracyPct || 0).toFixed(1)}%</span>
-                                <span className="px-3 py-1 text-muted-foreground">Tocchi (questa partita)</span>
-                                <span className="px-3 py-1 text-right text-foreground">{row.seasonTouches || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Duelli vinti % (questa partita)</span>
-                                <span className="px-3 py-1 text-right text-foreground">{Number(row.seasonDuelsWonPct || 0).toFixed(1)}%</span>
-                                <span className="px-3 py-1 text-muted-foreground">Intercetti</span>
-                                <span className="px-3 py-1 text-right text-foreground">{row.seasonInterceptions || 0}</span>
-                                <span className="px-3 py-1 text-muted-foreground">Tackles vinti</span>
-                                <span className="px-3 py-1 text-right text-foreground">{row.seasonTacklesWon || 0}</span>
-                              </>
                             ) : (
                               <>
                                 {(() => {
@@ -3478,7 +3418,7 @@ export default function MatchDetail() {
                                   if (playerOddsLoading && !quoteRows.length) {
                                     return (
                                       <>
-                                        <span className="px-3 py-1 col-span-2 text-muted-foreground">
+                                        <span className="col-span-2 px-3 py-1 text-muted-foreground">
                                           Caricamento quote giocatore...
                                         </span>
                                       </>
@@ -3487,7 +3427,7 @@ export default function MatchDetail() {
                                   if (!quoteRows.length) {
                                     return (
                                       <>
-                                        <span className="px-3 py-1 col-span-2 text-muted-foreground">
+                                        <span className="col-span-2 px-3 py-1 text-muted-foreground">
                                           {playerOddsError || "Nessuna quota singola disponibile per questo giocatore."}
                                         </span>
                                       </>
@@ -3507,7 +3447,20 @@ export default function MatchDetail() {
                               </>
                             )}
                           </div>
-                        </button>
+                          <p className="mb-0 mt-0 border-t border-border/15 px-3 pb-0 pt-2 text-[10px] text-muted-foreground">
+                            Stagione, presenze e xG in contesto: apri la scheda completa.
+                          </p>
+                          <div className="px-3 pb-3 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectXgPlayer(row)}
+                              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-primary/35 bg-primary/10 px-2 py-2 text-[11px] font-semibold text-primary transition hover:bg-primary/15 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            >
+                              Apri dettaglio giocatore
+                              <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            </button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                     </>
