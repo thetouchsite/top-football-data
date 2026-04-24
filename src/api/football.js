@@ -1,4 +1,5 @@
 const scheduleWindowInflightRequests = new Map();
+let lastKnownSnapshotVersion = null;
 
 function normalizeScheduleWindowDays(days) {
   const parsedDays = Number.parseInt(String(days), 10);
@@ -51,7 +52,15 @@ export function getScheduleWindow(days = 7, options = {}) {
     headers: {
       "x-football-requester": requester,
     },
-  }).finally(() => {
+  })
+    .then((payload) => {
+      const snapshotVersion = String(payload?.snapshotVersion || "").trim();
+      if (snapshotVersion) {
+        lastKnownSnapshotVersion = snapshotVersion;
+      }
+      return payload;
+    })
+    .finally(() => {
     const inflightEntry = scheduleWindowInflightRequests.get(inflightKey);
     if (inflightEntry?.promise === requestPromise) {
       scheduleWindowInflightRequests.delete(inflightKey);
@@ -75,8 +84,17 @@ export function getScheduleWindow(days = 7, options = {}) {
   return requestPromise;
 }
 
-export function getFixture(fixtureId) {
-  return requestJson(`/api/football/fixtures/${encodeURIComponent(fixtureId)}`);
+export function getFixture(fixtureId, options = {}) {
+  const snapshotVersion = String(
+    options?.snapshotVersion || lastKnownSnapshotVersion || ""
+  ).trim();
+  const params = new URLSearchParams();
+  if (snapshotVersion) {
+    params.set("snapshotVersion", snapshotVersion);
+  }
+  const query = params.toString();
+  const path = `/api/football/fixtures/${encodeURIComponent(fixtureId)}${query ? `?${query}` : ""}`;
+  return requestJson(path);
 }
 
 export function getPlayerProps({ fixtureId, playerId, market }) {

@@ -6,6 +6,7 @@ import GlassCard from "../shared/GlassCard";
 import ConfidenceBar from "../shared/ConfidenceBar";
 import FootballMediaImage from "../shared/FootballMediaImage";
 import { useApp } from "@/lib/AppContext";
+import { buildMatchHrefFromMatch } from "@/lib/match-links";
 
 function ConfBar({ val, max = 100, color = "bg-primary" }) {
   return (
@@ -33,6 +34,7 @@ export default function MatchCard({ match, compact = false }) {
   const modelOdds = match.modelOdds || {};
   const modelOddsOu = match.modelOddsOu || {};
   const modelOddsGg = match.modelOddsGg || {};
+  const matchHref = buildMatchHrefFromMatch(match);
 
   return (
     <GlassCard glow={!!match.valueBet} className="group relative">
@@ -213,7 +215,7 @@ export default function MatchCard({ match, compact = false }) {
 
       {/* CTA */}
       <Link
-        to={`/match/${encodeURIComponent(match.id)}`}
+        to={matchHref}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary/10 border border-primary/20 text-primary font-semibold text-xs hover:bg-primary/20 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
       >
         ANALIZZA MATCH

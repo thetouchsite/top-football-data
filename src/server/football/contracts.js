@@ -1,5 +1,5 @@
 export const SCHEDULE_CACHE_TTL_MS = 60_000;
-export const FIXTURE_CACHE_TTL_MS = 300_000;
+export const FIXTURE_CACHE_TTL_MS = 60_000;
 
 export const FOOTBALL_API_PROVIDER_MAP = {
   dashboard: {

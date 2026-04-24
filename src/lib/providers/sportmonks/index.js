@@ -1221,16 +1221,46 @@ function getFormStrength(form = DEFAULT_FORM) {
 }
 
 function ensureProbabilitySum(probabilities) {
-  const normalized = {
-    home: Math.max(1, Math.round(safeNumber(probabilities.home))),
-    draw: Math.max(1, Math.round(safeNumber(probabilities.draw))),
-    away: Math.max(1, Math.round(safeNumber(probabilities.away))),
+  const clamped = {
+    home: Math.max(0, safeNumber(probabilities?.home, 0)),
+    draw: Math.max(0, safeNumber(probabilities?.draw, 0)),
+    away: Math.max(0, safeNumber(probabilities?.away, 0)),
   };
-  const total = normalized.home + normalized.draw + normalized.away;
-  const diff = 100 - total;
+  const total = clamped.home + clamped.draw + clamped.away;
 
-  normalized.draw += diff;
-  return normalized;
+  if (!Number.isFinite(total) || total <= 0) {
+    return { home: 34, draw: 33, away: 33 };
+  }
+
+  const scaled = {
+    home: (clamped.home / total) * 100,
+    draw: (clamped.draw / total) * 100,
+    away: (clamped.away / total) * 100,
+  };
+  const floored = {
+    home: Math.floor(scaled.home),
+    draw: Math.floor(scaled.draw),
+    away: Math.floor(scaled.away),
+  };
+  let remainder = 100 - (floored.home + floored.draw + floored.away);
+  const fractionalPriority = [
+    { key: "home", frac: scaled.home - floored.home },
+    { key: "draw", frac: scaled.draw - floored.draw },
+    { key: "away", frac: scaled.away - floored.away },
+  ].sort((left, right) => {
+    if (right.frac !== left.frac) {
+      return right.frac - left.frac;
+    }
+    return left.key.localeCompare(right.key);
+  });
+
+  for (let index = 0; remainder > 0; index += 1) {
+    const target = fractionalPriority[index % fractionalPriority.length];
+    floored[target.key] += 1;
+    remainder -= 1;
+  }
+
+  return floored;
 }
 
 function probabilityToOdds(probability) {
@@ -1532,7 +1562,9 @@ function buildConfidence({
     Math.min(
       100,
       roundTo(
-        modelStrength * 0.4 + valueQuality * 0.25 + dataCoverage * 0.2 + lineupReliability * 0.15,
+        // Keep confidence aligned across schedule cards and match detail:
+        // lineup availability differs by endpoint include-set and can otherwise skew score.
+        modelStrength * 0.5 + valueQuality * 0.3 + dataCoverage * 0.2,
         0
       )
     )
@@ -2350,13 +2382,55 @@ function extractPredictionBundle(predictions, homeParticipant, awayParticipant) 
     scores: [],
   };
 
-  asArray(predictions)
+  const normalizedPredictions = asArray(predictions)
     .map((entry) => normalizePredictionEntry(entry, homeParticipant, awayParticipant))
-    .filter(Boolean)
-    .forEach((entry) => {
-      if (!bundle.probabilities && entry.oneXTwo) {
-        bundle.probabilities = entry.oneXTwo;
-      }
+    .filter(Boolean);
+
+  const pickBestOneXTwoPrediction = (entries = []) => {
+    const candidates = entries
+      .filter((entry) => {
+        const oneXTwo = entry?.oneXTwo;
+        return (
+          oneXTwo &&
+          Number.isFinite(safeNumber(oneXTwo.home, Number.NaN)) &&
+          Number.isFinite(safeNumber(oneXTwo.draw, Number.NaN)) &&
+          Number.isFinite(safeNumber(oneXTwo.away, Number.NaN))
+        );
+      })
+      .map((entry) => {
+        const typeKey = normalizeLookupKey(entry?.typeKey || "");
+        const prefersExactMarket =
+          typeKey.includes("match_winner") ||
+          typeKey.includes("1x2") ||
+          typeKey.includes("three_way");
+        const hasConfidence = Number.isFinite(safeNumber(entry?.confidenceValue, Number.NaN));
+        const score =
+          (prefersExactMarket ? 100 : 0) +
+          (hasConfidence ? 10 : 0) +
+          (Number.isFinite(safeNumber(entry?.id, Number.NaN)) ? 1 : 0);
+        return {
+          entry,
+          score,
+          typeKey,
+          id: String(entry?.id || ""),
+        };
+      })
+      .sort((left, right) => {
+        if (right.score !== left.score) {
+          return right.score - left.score;
+        }
+        if (left.typeKey !== right.typeKey) {
+          return left.typeKey.localeCompare(right.typeKey);
+        }
+        return left.id.localeCompare(right.id);
+      });
+
+    return candidates[0]?.entry?.oneXTwo || null;
+  };
+
+  bundle.probabilities = pickBestOneXTwoPrediction(normalizedPredictions);
+
+  normalizedPredictions.forEach((entry) => {
 
       if (!bundle.scores.length && entry.scores.length) {
         bundle.scores = entry.scores;

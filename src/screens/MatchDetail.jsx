@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "@/lib/router-compat";
+import { useParams, useLocation, Link } from "@/lib/router-compat";
 import { motion } from "framer-motion";
 import { ArrowLeft, Bell, Clock, Star, TrendingUp, Crown } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -323,8 +323,14 @@ function buildFallbackPlayerProfile(player, teamName) {
 
 export default function MatchDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const routeId = decodeURIComponent(String(id || ""));
   const fixtureIdToLoad = String(routeId || "").trim() || null;
+  const snapshotVersionForRequest = useMemo(() => {
+    const params = new URLSearchParams(String(location?.search || ""));
+    const value = params.get("sv") || params.get("snapshotVersion");
+    return String(value || "").trim() || null;
+  }, [location?.search]);
   const {
     favorites,
     following,
@@ -370,7 +376,9 @@ export default function MatchDetail() {
       setFixtureBundle(null);
 
       try {
-        const payload = await getFixture(fixtureIdToLoad);
+        const payload = await getFixture(fixtureIdToLoad, {
+          snapshotVersion: snapshotVersionForRequest,
+        });
         if (isActive) {
           setFixtureBundle(payload);
           setApiMatch(payload.fixture);
@@ -392,7 +400,7 @@ export default function MatchDetail() {
     return () => {
       isActive = false;
     };
-  }, [fixtureIdToLoad]);
+  }, [fixtureIdToLoad, snapshotVersionForRequest]);
 
   useEffect(() => {
     if (!fixtureIdToLoad) {
@@ -420,7 +428,9 @@ export default function MatchDetail() {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const payload = await getFixture(fixtureIdToLoad);
+        const payload = await getFixture(fixtureIdToLoad, {
+          snapshotVersion: snapshotVersionForRequest,
+        });
         if (!cancelled) {
           setFixtureBundle(payload);
           setApiMatch(payload.fixture);
@@ -437,9 +447,25 @@ export default function MatchDetail() {
     };
   }, [
     fixtureIdToLoad,
+    snapshotVersionForRequest,
     fixtureBundle?.fixture?.kickoff_at,
     fixtureBundle?.fixture?.lineup_status,
   ]);
+
+  useEffect(() => {
+    if (!fixtureBundle?.fixture) {
+      return;
+    }
+    const loadedSnapshotVersion = String(fixtureBundle?.snapshotVersion || "").trim();
+    if (!loadedSnapshotVersion || snapshotVersionForRequest === loadedSnapshotVersion) {
+      return;
+    }
+    const currentSearch = new URLSearchParams(String(location?.search || ""));
+    currentSearch.set("sv", loadedSnapshotVersion);
+    const nextQuery = currentSearch.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+    window.history.replaceState(null, "", nextUrl);
+  }, [fixtureBundle?.snapshotVersion, snapshotVersionForRequest, location?.search]);
 
   useEffect(() => {
     if (!fixtureBundle?.fixture) {

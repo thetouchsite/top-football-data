@@ -25,6 +25,7 @@ import {
   sortMatchesByFeaturedPriority,
 } from "@/lib/football-filters";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
+import { buildMatchHref, buildMatchHrefFromMatch } from "@/lib/match-links";
 
 const QUICK_LEAGUES = [
   "Tutti",
@@ -324,7 +325,7 @@ export default function Dashboard() {
                 {topMatches.map((match) => (
                   <Link
                     key={match.id}
-                    to={`/match/${match.id}`}
+                    to={buildMatchHrefFromMatch(match)}
                     className="group block transition-colors hover:bg-secondary/30"
                   >
                     <div className="flex flex-col gap-2 p-3 md:flex-row md:items-center md:justify-between md:gap-3 md:p-4">
@@ -407,7 +408,7 @@ export default function Dashboard() {
                     return (
                       <Link
                         key={id}
-                        to={`/match/${id}`}
+                        to={buildMatchHrefFromMatch(match)}
                         className="glass max-w-full truncate rounded-lg px-3 py-2 text-xs text-foreground transition-all hover:border-primary/20"
                       >
                         {match.home} vs {match.away}
@@ -471,7 +472,7 @@ export default function Dashboard() {
                           alert.type === "multibet" && alert.alertKey
                             ? `/multi-bet?ref=${encodeURIComponent(alert.alertKey)}`
                             : single.fixtureId
-                              ? `/match/${single.fixtureId}`
+                              ? buildMatchHref(single.fixtureId, schedulePayload?.snapshotVersion)
                               : "/modelli-predittivi"
                         }
                         className="block rounded-lg border border-primary/10 bg-primary/5 p-2.5 transition-colors hover:border-primary/30"
@@ -493,7 +494,7 @@ export default function Dashboard() {
                   {valueBets.slice(0, 3).map((match) => (
                     <Link
                       key={match.id}
-                      to={`/match/${match.id}`}
+                      to={buildMatchHrefFromMatch(match)}
                       className="flex items-center justify-between p-2.5 rounded-lg bg-primary/5 border border-primary/10 hover:border-primary/30 transition-all group"
                     >
                       <div>

@@ -128,6 +128,7 @@ export async function GET(request) {
       provider: "sportmonks",
       source: "route_error",
       isFallback: true,
+      snapshotVersion: null,
       freshness: createProviderFreshness({
         updatedAt: null,
         ttlMs: 60_000,

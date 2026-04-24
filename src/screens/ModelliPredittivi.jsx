@@ -36,6 +36,7 @@ import {
   sortMatchesByCriterion,
 } from "@/lib/football-filters";
 import { getMatchValueCandidate, matchHasValueBetSignal } from "@/lib/match-value";
+import { buildMatchHrefFromMatch } from "@/lib/match-links";
 
 const STATUS_TABS = [
   { key: "today", label: "Oggi", statusBucket: "today", windowDays: 7 },
@@ -493,7 +494,7 @@ export default function ModelliPredittivi() {
                   topValueMatches.map(({ match, candidate }) => (
                     <Link
                       key={match.id}
-                      to={`/match/${encodeURIComponent(match.id)}`}
+                      to={buildMatchHrefFromMatch(match)}
                       className="block rounded-lg bg-secondary/25 p-2 text-xs transition-colors hover:bg-secondary/45"
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -546,7 +547,7 @@ export default function ModelliPredittivi() {
                   highConfidenceMatches.map((match) => (
                     <Link
                       key={`confidence-${match.id}`}
-                      to={`/match/${encodeURIComponent(match.id)}`}
+                      to={buildMatchHrefFromMatch(match)}
                       className="block rounded-lg bg-secondary/25 p-2 transition-colors hover:bg-secondary/45"
                     >
                       <div className="mb-1 flex items-center gap-2">

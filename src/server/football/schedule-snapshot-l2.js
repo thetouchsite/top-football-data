@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { SCHEDULE_SNAPSHOT_SCHEMA_VERSION } from "./schedule-window-constants";
 
 let redis;
+const CURRENT_SNAPSHOT_VERSION_KEY = "football:snapshot:current";
 
 export function isScheduleL2Enabled() {
   const u = String(process.env.UPSTASH_REDIS_REST_URL || "").trim();
@@ -67,6 +68,31 @@ export async function l2SetSnapshotDataKey(redisDataKey, envelope, ttlSec = L2_D
   const payload = JSON.stringify(envelope);
   const ex = Math.min(Math.max(Math.floor(ttlSec), 300), 14 * 24 * 60 * 60);
   await r.set(redisDataKey, payload, { ex });
+}
+
+export async function l2GetCurrentSnapshotVersion() {
+  const r = getRedis();
+  if (!r) {
+    return null;
+  }
+  const value = await r.get(CURRENT_SNAPSHOT_VERSION_KEY);
+  if (value == null) {
+    return null;
+  }
+  return String(value).trim() || null;
+}
+
+export async function l2SetCurrentSnapshotVersion(snapshotVersion, ttlSec = L2_DEFAULT_TTL_SEC) {
+  const r = getRedis();
+  if (!r) {
+    return;
+  }
+  const normalized = String(snapshotVersion || "").trim();
+  if (!normalized) {
+    return;
+  }
+  const ex = Math.min(Math.max(Math.floor(ttlSec), 300), 14 * 24 * 60 * 60);
+  await r.set(CURRENT_SNAPSHOT_VERSION_KEY, normalized, { ex });
 }
 
 const DEFAULT_REBUILD_LOCK_TTL_SEC = 90;

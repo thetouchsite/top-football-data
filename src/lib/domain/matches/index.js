@@ -45,6 +45,7 @@ export function createPrematchMatch(match, context = {}) {
       context.predictionProvider || match?.prediction_provider || "derived_internal_model",
     odds_provider: oddsContext.provider,
     generated_at: context.generatedAt || toIsoDate(context.updatedAt),
+    snapshotVersion: context.snapshotVersion || match?.snapshotVersion || null,
     model_version: context.modelVersion || match?.model_version || "sportmonks-first-v1",
     bestOdds: oddsContext.bestOdds,
     bestBookmaker: oddsContext.bestBookmaker,

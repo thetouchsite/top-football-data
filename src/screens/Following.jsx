@@ -11,6 +11,7 @@ import { useApp } from "@/lib/AppContext";
 import { getScheduleWindow } from "@/api/football";
 import { LEAGUES } from "@/lib/mockData";
 import { ACCOUNT_NOTIFICATION_OPTIONS } from "@/lib/account-config";
+import { buildMatchHrefFromMatch } from "@/lib/match-links";
 
 function buildFallbackMatch(id) {
   const empty = { imageUrl: null, thumbUrl: null };
@@ -255,7 +256,7 @@ export default function Following() {
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <Link to={`/match/${match.id}`}>
+                        <Link to={buildMatchHrefFromMatch(match)}>
                           <button className="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all">
                             <ChevronRight className="w-3.5 h-3.5" />
                           </button>

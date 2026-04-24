@@ -7,6 +7,7 @@ import GlassCard from "@/components/shared/GlassCard";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { buildMatchHref } from "@/lib/match-links";
 
 const RISK_COLORS = {
   basso: "text-primary border-primary/20 bg-primary/10",
@@ -135,7 +136,7 @@ export default function MultibetComboCard({ combo, isPremium, highlightKey }) {
                 <div className="min-w-0">
                   {sel.fixtureId && (
                     <Link
-                      to={`/match/${sel.fixtureId}`}
+                      to={buildMatchHref(sel.fixtureId, sel.snapshotVersion)}
                       className="block truncate text-xs font-semibold text-foreground hover:text-primary"
                     >
                       {sel.home} vs {sel.away}

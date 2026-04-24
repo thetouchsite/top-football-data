@@ -5,12 +5,13 @@ import { createPrematchMatch } from "@/lib/domain/matches";
 import { SPORTMONKS_PROVIDER_ID } from "@/lib/providers/sportmonks";
 import { FIXTURE_CACHE_TTL_MS, SCHEDULE_CACHE_TTL_MS } from "./contracts";
 
-function enrichPrematchMatches(matches = [], provider, source, updatedAt) {
+function enrichPrematchMatches(matches = [], provider, source, updatedAt, snapshotVersion = null) {
   return matches.map((match) =>
     createPrematchMatch(match, {
       provider,
       source,
       updatedAt,
+      snapshotVersion,
       ttlMs: SCHEDULE_CACHE_TTL_MS,
       predictionProvider: match?.prediction_provider || "derived_internal_model",
       oddsProvider: match?.odds_provider || "not_available_with_current_feed",
@@ -55,8 +56,16 @@ export function buildSchedulePayload({
   source,
   notice = "",
   updatedAt = null,
+  snapshotVersion = null,
 }) {
-  const enrichedMatches = enrichPrematchMatches(matches, provider, source, updatedAt);
+  const resolvedSnapshotVersion = snapshotVersion || (updatedAt ? String(updatedAt) : null);
+  const enrichedMatches = enrichPrematchMatches(
+    matches,
+    provider,
+    source,
+    updatedAt,
+    resolvedSnapshotVersion
+  );
 
   return {
     matches: enrichedMatches,
@@ -70,6 +79,7 @@ export function buildSchedulePayload({
       updatedAt,
       ttlMs: SCHEDULE_CACHE_TTL_MS,
     }),
+    snapshotVersion: resolvedSnapshotVersion,
     notice,
   };
 }
@@ -81,6 +91,7 @@ export function buildFixturePayload({
   source,
   updatedAt,
   notice = "",
+  snapshotVersion = null,
 }) {
   const fixture = createFixtureDetail(normalizedFixture, {
     provider,
@@ -100,6 +111,10 @@ export function buildFixturePayload({
       source,
       isFallback: provider !== SPORTMONKS_PROVIDER_ID || source === "provider_unavailable",
       freshness: fixture.freshness,
+      snapshotVersion:
+        snapshotVersion ||
+        normalizedFixture?.snapshotVersion ||
+        (updatedAt ? String(updatedAt) : null),
       rawFixture,
       notice,
     },
@@ -114,6 +129,7 @@ export function buildEmptyFixturePayload(fixtureId, notice) {
       provider: SPORTMONKS_PROVIDER_ID,
       source: "provider_unavailable",
       isFallback: true,
+      snapshotVersion: null,
       freshness: createProviderFreshness({
         updatedAt: null,
         ttlMs: FIXTURE_CACHE_TTL_MS,

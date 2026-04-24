@@ -16,6 +16,7 @@ import {
   mapTelemetrySource,
 } from "./runtime";
 import { buildEmptyFixturePayload, buildFixturePayload } from "./payloads";
+import { l2GetCurrentSnapshotVersion } from "./schedule-snapshot-l2";
 
 const FIXTURE_PREMATCH_TTL_MS = FIXTURE_CACHE_TTL_MS;
 const FIXTURE_LIVE_TTL_MS = 20_000;
@@ -67,9 +68,24 @@ export async function getFixturePayload(fixtureId, options = {}) {
   const normalizedFixtureId = decodeURIComponent(String(fixtureId || "").trim());
   const requestedView =
     options?.view === "core" ? "core" : options?.view === "enrichment" ? "enrichment" : "full";
+  const requestedSnapshotVersion = String(options?.snapshotVersion || "").trim() || null;
+  let currentSnapshotVersion = await l2GetCurrentSnapshotVersion();
+  if (!requestedSnapshotVersion && !currentSnapshotVersion) {
+    try {
+      const { getScheduleWindowPayload } = await import("./schedule");
+      const schedulePayload = await getScheduleWindowPayload();
+      currentSnapshotVersion =
+        String(schedulePayload?.snapshotVersion || "").trim() ||
+        (await l2GetCurrentSnapshotVersion());
+    } catch {
+      // Keep soft fallback below if bootstrap cannot run.
+    }
+  }
+  const activeSnapshotVersion =
+    requestedSnapshotVersion || currentSnapshotVersion || `boot:${Date.now()}`;
   const fixtureCacheStore = getFixtureCacheStore();
   const fixtureInflightStore = getFixtureInflightStore();
-  const cacheKey = `${normalizedFixtureId}:${requestedView}`;
+  const cacheKey = `${normalizedFixtureId}:${requestedView}:sv:${activeSnapshotVersion}`;
   const cachedEntry = fixtureCacheStore.get(cacheKey);
 
   if (!normalizedFixtureId) {
@@ -93,6 +109,7 @@ export async function getFixturePayload(fixtureId, options = {}) {
       provider: cachedEntry.provider,
       source: "sportmonks_cache",
       updatedAt: cachedEntry.updatedAt,
+      snapshotVersion: cachedEntry.snapshotVersion || activeSnapshotVersion,
     });
     logFootballServiceTelemetry({
       route: "/api/football/fixtures/[fixtureId]",
@@ -258,12 +275,14 @@ export async function getFixturePayload(fixtureId, options = {}) {
       const normalizedFixture = normalizeSportmonksFixture(enrichedFixture);
       const normalizeMs = Date.now() - startedAt;
       const updatedAt = Date.now();
+      const snapshotVersion = activeSnapshotVersion || String(updatedAt);
 
       fixtureCacheStore.set(cacheKey, {
         normalizedFixture,
         rawFixture: enrichedFixture,
         provider: SPORTMONKS_PROVIDER_ID,
         updatedAt,
+        snapshotVersion,
       });
 
       const payload = buildFixturePayload({
@@ -271,6 +290,7 @@ export async function getFixturePayload(fixtureId, options = {}) {
         rawFixture: enrichedFixture,
         source: "sportmonks_api",
         updatedAt,
+        snapshotVersion,
       });
       logFootballServiceTelemetry({
         route: "/api/football/fixtures/[fixtureId]",
@@ -317,6 +337,7 @@ export async function getFixturePayload(fixtureId, options = {}) {
           provider: staleEntry.provider,
           source: "sportmonks_cache",
           updatedAt: staleEntry.updatedAt,
+          snapshotVersion: staleEntry.snapshotVersion || activeSnapshotVersion,
           notice: isRateLimitError(error)
             ? "Rate limit Sportmonks raggiunto. Mostro l'ultima fixture disponibile dalla cache provider."
             : error.message || "Fixture provider non aggiornata. Mostro l'ultima versione in cache.",

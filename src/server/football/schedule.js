@@ -22,6 +22,7 @@ import {
   isScheduleL2Enabled,
   l2GetSnapshotDataKey,
   l2ReleaseLock,
+  l2SetCurrentSnapshotVersion,
   l2SetSnapshotDataKey,
   l2TryAcquireRebuildLock,
   l2TryAcquireSwrLock,
@@ -47,6 +48,13 @@ function getSwrLocalGuard() {
 
 function nowMs() {
   return Date.now();
+}
+
+function resolveSnapshotVersion(updatedAt, policyVersion, safeDays) {
+  if (!Number.isFinite(updatedAt)) {
+    return null;
+  }
+  return `${policyVersion}:${safeDays}:${String(updatedAt)}`;
 }
 
 /**
@@ -182,6 +190,9 @@ async function storeSuccessfulBuild(
   });
   l1.set(l1Key, { ...env, policyKey: l1Key });
   await l2SetSnapshotDataKey(dataKey, env);
+  if (env?.body?.snapshotVersion) {
+    await l2SetCurrentSnapshotVersion(env.body.snapshotVersion);
+  }
   if (isScheduleL2Enabled() && lockKey && lockToken) {
     await l2ReleaseLock(lockKey, lockToken);
   }
@@ -395,7 +406,11 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
 
     try {
       const built = await buildScheduleWindowFromProvider(safeDays);
-      const payload = { ...built.publicPayload };
+      const snapshotVersion = resolveSnapshotVersion(built.updatedAt, policyVersion, safeDays);
+      const payload = {
+        ...built.publicPayload,
+        snapshotVersion: snapshotVersion || built.publicPayload?.snapshotVersion || null,
+      };
       await storeSuccessfulBuild(
         l1,
         l1Key,
@@ -403,7 +418,7 @@ export async function getScheduleWindowPayload(days = SPORTMONKS_DEFAULT_SCHEDUL
         lockKey,
         lockToken,
         {
-          publicPayload: built.publicPayload,
+          publicPayload: payload,
           policyVersion,
           updatedAt: built.updatedAt,
           pagesFetched: built.pagesFetched,
@@ -543,6 +558,11 @@ export async function prewarmScheduleWindowSnapshot(ctx = {}) {
   }
   try {
     const built = await buildScheduleWindowFromProvider(safeDays, { prewarm: true, mode: ctx.mode });
+    const snapshotVersion = resolveSnapshotVersion(built.updatedAt, policyVersion, safeDays);
+    const payloadWithVersion = {
+      ...built.publicPayload,
+      snapshotVersion: snapshotVersion || built.publicPayload?.snapshotVersion || null,
+    };
     await storeSuccessfulBuild(
       l1,
       l1Key,
@@ -550,7 +570,7 @@ export async function prewarmScheduleWindowSnapshot(ctx = {}) {
       null,
       null,
       {
-        publicPayload: built.publicPayload,
+        publicPayload: payloadWithVersion,
         policyVersion,
         updatedAt: built.updatedAt,
         pagesFetched: built.pagesFetched,

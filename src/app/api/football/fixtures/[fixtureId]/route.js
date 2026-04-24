@@ -37,7 +37,8 @@ export async function GET(request, { params }) {
     const resolvedParams = await params;
     const fixtureId = resolvedParams?.fixtureId || null;
     const view = request.nextUrl.searchParams.get("view");
-    const result = await getFixturePayload(fixtureId, { view });
+    const snapshotVersion = request.nextUrl.searchParams.get("snapshotVersion");
+    const result = await getFixturePayload(fixtureId, { view, snapshotVersion });
     const payload = result?.body || {};
     const e2eMs = Date.now() - startedAt;
     const readMeta = getFixtureReadMeta(payload);
@@ -114,6 +115,7 @@ export async function GET(request, { params }) {
         provider: "sportmonks",
         source: "route_error",
         isFallback: true,
+        snapshotVersion: null,
         freshness: createProviderFreshness({
           updatedAt: null,
           ttlMs: 15_000,

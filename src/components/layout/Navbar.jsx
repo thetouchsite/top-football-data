@@ -11,6 +11,7 @@ import { useApp } from "@/lib/AppContext";
 import { getScheduleWindow } from "@/api/football";
 import NotificationsPanel from "./NotificationsPanel";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
+import { buildMatchHrefFromMatch } from "@/lib/match-links";
 
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/dashboard", icon: BarChart3 },
@@ -183,7 +184,11 @@ export default function Navbar() {
                         <button
                           type="button"
                           key={m.id}
-                          onClick={() => { navigate(`/match/${m.id}`); setSearchOpen(false); setQuery(""); }}
+                          onClick={() => {
+                            navigate(buildMatchHrefFromMatch(m));
+                            setSearchOpen(false);
+                            setQuery("");
+                          }}
                           className="w-full text-left px-4 py-2.5 hover:bg-secondary/40 transition-colors"
                         >
                           <div className="flex min-w-0 items-center gap-2">
