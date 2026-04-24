@@ -34,6 +34,8 @@ import PlayerCard from "@/components/stats/PlayerCard";
 import PlayerDetailPanel from "@/components/players/PlayerDetailPanel";
 import TopXgPlayers from "@/components/stats/TopXgPlayers";
 import OddsComparison from "@/components/match/OddsComparison";
+import { MatchStatusBadge } from "@/components/match/MatchScheduleMeta";
+import { getMatchListPhase } from "@/lib/football-match-list-meta";
 import PressurePreviewChart from "@/components/match/PressurePreviewChart";
 import { useApp } from "@/lib/AppContext";
 import {
@@ -1879,23 +1881,39 @@ export default function MatchDetail() {
                   </span>
                 </div>
                 <div className="shrink-0 px-1 text-center sm:px-4">
-                  <div className="font-orbitron text-2xl font-black text-muted-foreground">
+                  <div
+                    className={`font-orbitron text-2xl font-black tabular-nums ${
+                      match.currentScore ? "text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
                     {match.currentScore
                       ? `${match.currentScore.home}-${match.currentScore.away}`
                       : "VS"}
                   </div>
-                  <div className="mt-1 flex items-center justify-center gap-1.5">
-                    <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      {match.date} - {match.time}
-                    </span>
+                  <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5">
+                    {(() => {
+                      const phase = getMatchListPhase(match?.state?.shortName);
+                      if (phase === "live" || phase === "finished" || phase === "irregular") {
+                        return (
+                          <>
+                            <MatchStatusBadge match={match} />
+                            <span className="text-[10px] text-muted-foreground">
+                              {match.date} · {match.time}
+                            </span>
+                          </>
+                        );
+                      }
+                      return (
+                        <>
+                          <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">
+                            {match.date} - {match.time}
+                          </span>
+                        </>
+                      );
+                    })()}
                   </div>
-                  <span className="line-clamp-2 text-xs font-semibold text-accent">
-                    {match.league}
-                    {match.state?.shortName
-                      ? ` - ${match.state.shortName}`
-                      : ""}
-                  </span>
+                  <span className="line-clamp-2 text-xs font-semibold text-accent">{match.league}</span>
                 </div>
                 <div className="min-w-0 max-w-[38%] text-center sm:max-w-none">
                   <div className="mx-auto mb-1 flex justify-center">

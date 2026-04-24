@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
-    "typecheck": "tsc -p ./jsconfig.json --noEmit"
+    "typecheck": "tsc -p ./jsconfig.json --noEmit",
+    "test:cache": "node ./scripts/verify-football-cache.mjs"
   },
   "dependencies": {
     "@better-auth/mongo-adapter": "^1.6.3",

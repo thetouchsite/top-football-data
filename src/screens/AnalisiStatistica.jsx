@@ -14,6 +14,8 @@ import FormationPitch from "@/components/stats/FormationPitch";
 import PlayerCard from "@/components/stats/PlayerCard";
 import GlassCard from "@/components/shared/GlassCard";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
+import { MatchListSubtitle, MatchStatusBadge } from "@/components/match/MatchScheduleMeta";
+import { getMatchListPhase } from "@/lib/football-match-list-meta";
 import { useApp } from "@/lib/AppContext";
 import { getFixture, getScheduleWindow } from "@/api/football";
 import { sortMatchesByFeaturedPriority } from "@/lib/football-filters";
@@ -224,8 +226,15 @@ export default function AnalisiStatistica() {
                     />
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate font-semibold">{match.home} vs {match.away}</div>
-                    <div className="truncate text-[11px] opacity-80">{match.league} · {match.time}</div>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      {getMatchListPhase(match?.state?.shortName) === "live" && (
+                        <MatchStatusBadge match={match} className="shrink-0" />
+                      )}
+                      <div className="truncate font-semibold">
+                        {match.home} vs {match.away}
+                      </div>
+                    </div>
+                    <MatchListSubtitle match={match} className="text-muted-foreground" />
                   </div>
                 </button>
               );

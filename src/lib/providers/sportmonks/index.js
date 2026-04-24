@@ -408,6 +408,31 @@ function parseDate(value) {
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 }
 
+/**
+ * Istante assoluto del calcio d'inizio. Preferisce sempre `starting_at_timestamp` (Unix, secondi o ms)
+ * quando presente: è l'unico campo non ambiguo. La stringa `starting_at` senza offset, in ambienti Node/UTC,
+ * può essere interpretata come orario locale del server (UTC) e poi mostrata in Europe/Rome con +1/+2h di errore.
+ * @param {Record<string, unknown> | null | undefined} fixture
+ * @returns {Date | null}
+ */
+function resolveFixtureStartInstant(fixture) {
+  if (!fixture || typeof fixture !== "object") {
+    return null;
+  }
+  const rawTs = fixture.starting_at_timestamp;
+  if (rawTs != null && rawTs !== "") {
+    const n = Number(rawTs);
+    if (Number.isFinite(n) && n > 0) {
+      const ms = n > 1_000_000_000_000 ? n : n * 1000;
+      const d = new Date(ms);
+      if (!Number.isNaN(d.getTime())) {
+        return d;
+      }
+    }
+  }
+  return parseDate(fixture.starting_at || fixture.startingAt);
+}
+
 function buildDateKey(date) {
   return new Intl.DateTimeFormat("sv-SE", {
     timeZone: ROME_TIMEZONE,
@@ -418,7 +443,10 @@ function buildDateKey(date) {
 }
 
 function formatDisplayDate(startingAt) {
-  const parsedDate = parseDate(startingAt);
+  const parsedDate =
+    startingAt instanceof Date && !Number.isNaN(startingAt.getTime())
+      ? startingAt
+      : parseDate(startingAt);
 
   if (!parsedDate) {
     return "--";
@@ -446,15 +474,15 @@ function formatDisplayDate(startingAt) {
   });
 }
 
-function formatKickoff(startingAt) {
-  const parsedDate = parseDate(startingAt);
+function formatKickoffFromFixture(fixture) {
+  const parsedDate = resolveFixtureStartInstant(fixture);
 
   if (!parsedDate) {
     return { date: "--", time: "--:--" };
   }
 
   return {
-    date: formatDisplayDate(startingAt),
+    date: formatDisplayDate(parsedDate),
     time: parsedDate.toLocaleTimeString("it-IT", {
       timeZone: ROME_TIMEZONE,
       hour: "2-digit",
@@ -464,8 +492,8 @@ function formatKickoff(startingAt) {
   };
 }
 
-function getRelativeStatus(startingAt) {
-  const parsedDate = parseDate(startingAt);
+function getRelativeStatusForFixture(fixture) {
+  const parsedDate = resolveFixtureStartInstant(fixture) || parseDate(fixture?.starting_at || fixture?.startingAt);
 
   if (!parsedDate) {
     return "upcoming";
@@ -3403,7 +3431,7 @@ function buildCompetitionIds(fixture, homeParticipant, awayParticipant) {
 function normalizeCoreSportmonksFixture(fixture = {}) {
   const participants = asArray(fixture?.participants);
   const { home: homeParticipant, away: awayParticipant } = getParticipantsByLocation(participants);
-  const kickoff = formatKickoff(fixture?.starting_at || fixture?.startingAt || fixture?.starting_at_timestamp);
+  const kickoff = formatKickoffFromFixture(fixture);
   const stateInfo = getStateInfo(fixture);
   const predictionBundle = extractPredictionBundle(
     fixture?.predictions,
@@ -3681,10 +3709,10 @@ function normalizeScheduleLikeFixture(fixture = {}) {
     time: core.kickoff.time,
     /** ISO 8601 per filtri data/tab (Europe/Rome coerente col provider). */
     kickoff_at: (() => {
-      const p = parseDate(fixture?.starting_at || fixture?.startingAt || fixture?.starting_at_timestamp);
+      const p = resolveFixtureStartInstant(fixture);
       return p ? p.toISOString() : null;
     })(),
-    status: getRelativeStatus(fixture?.starting_at || fixture?.startingAt),
+    status: getRelativeStatusForFixture(fixture),
     state: core.stateInfo,
     coverage: core.coverage,
     prob: core.probabilities,
@@ -3784,6 +3812,7 @@ export function normalizeSportmonksScheduleMatch(fixture = {}) {
     home_media: normalizedFixture.home_media,
     away_media: normalizedFixture.away_media,
     league_media: normalizedFixture.league_media,
+    currentScore: normalizedFixture.currentScore ?? null,
     apiLoaded: true,
   };
 }
@@ -4052,8 +4081,8 @@ export async function fetchSportmonksRecentFixturesForParticipant(
         )
       )
       .sort((left, right) => {
-        const leftTs = parseDate(left?.starting_at || left?.startingAt)?.getTime() || 0;
-        const rightTs = parseDate(right?.starting_at || right?.startingAt)?.getTime() || 0;
+        const leftTs = resolveFixtureStartInstant(left)?.getTime() || 0;
+        const rightTs = resolveFixtureStartInstant(right)?.getTime() || 0;
         return rightTs - leftTs;
       })
       .slice(0, limit);

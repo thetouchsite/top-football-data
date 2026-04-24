@@ -7,6 +7,8 @@ import ConfidenceBar from "../shared/ConfidenceBar";
 import FootballMediaImage from "../shared/FootballMediaImage";
 import { useApp } from "@/lib/AppContext";
 import { buildMatchHrefFromMatch } from "@/lib/match-links";
+import { getMatchListPhase } from "@/lib/football-match-list-meta";
+import { MatchCenterScoreOrVs, MatchStatusBadge } from "@/components/match/MatchScheduleMeta";
 
 function ConfBar({ val, max = 100, color = "bg-primary" }) {
   return (
@@ -35,6 +37,8 @@ export default function MatchCard({ match, compact = false }) {
   const modelOddsOu = match.modelOddsOu || {};
   const modelOddsGg = match.modelOddsGg || {};
   const matchHref = buildMatchHrefFromMatch(match);
+  const listPhase = getMatchListPhase(match?.state?.shortName);
+  const showOggiTag = match.status === "today" && listPhase !== "live";
 
   return (
     <GlassCard glow={!!match.valueBet} className="group relative">
@@ -60,10 +64,33 @@ export default function MatchCard({ match, compact = false }) {
         />
         <span className="text-xs font-semibold text-accent">{match.league}</span>
         <span className="text-muted-foreground/40">·</span>
-        <Clock className="w-3 h-3 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">{match.date} - {match.time}</span>
-        {match.status === "today" && (
-          <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold ml-auto">OGGI</span>
+        {listPhase === "live" || listPhase === "finished" ? (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <MatchStatusBadge match={match} />
+            <span className="text-[10px] text-muted-foreground/90">
+              {match.date} · {match.time}
+            </span>
+          </div>
+        ) : listPhase === "irregular" ? (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <MatchStatusBadge match={match} />
+            <Clock className="w-3 h-3 shrink-0 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              {match.date} - {match.time}
+            </span>
+          </div>
+        ) : (
+          <>
+            <Clock className="w-3 h-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              {match.date} - {match.time}
+            </span>
+          </>
+        )}
+        {showOggiTag && (
+          <span className="text-xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold ml-auto">
+            OGGI
+          </span>
         )}
       </div>
 
@@ -79,7 +106,7 @@ export default function MatchCard({ match, compact = false }) {
           <span className="font-semibold text-foreground text-sm">{match.home}</span>
         </div>
         <div className="text-center px-3">
-          <div className="font-orbitron text-xs text-muted-foreground font-bold">VS</div>
+          <MatchCenterScoreOrVs match={match} scoreClassName="text-base" vsClassName="text-xs" />
           <div className="text-xs text-muted-foreground mt-0.5">xG {match.xg.home} - {match.xg.away}</div>
         </div>
         <div className="flex items-center gap-3 flex-1 justify-end">

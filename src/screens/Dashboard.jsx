@@ -26,6 +26,8 @@ import {
 } from "@/lib/football-filters";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
 import { buildMatchHref, buildMatchHrefFromMatch } from "@/lib/match-links";
+import { MatchStatusBadge } from "@/components/match/MatchScheduleMeta";
+import { formatCurrentScoreLine, getMatchListPhase } from "@/lib/football-match-list-meta";
 
 const QUICK_LEAGUES = [
   "Tutti",
@@ -341,7 +343,26 @@ export default function Dashboard() {
                           <span className="block max-w-full truncate text-[11px] font-medium text-foreground/90">
                             {match.league}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">{match.time}</span>
+                          {(() => {
+                            const phase = getMatchListPhase(match?.state?.shortName);
+                            const scoreLine = formatCurrentScoreLine(match?.currentScore);
+                            if (scoreLine && (phase === "live" || phase === "finished")) {
+                              return (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <MatchStatusBadge match={match} />
+                                  <span className="text-[12px] font-mono font-bold tabular-nums text-foreground">
+                                    {scoreLine}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            if (phase === "live" || phase === "irregular") {
+                              return <MatchStatusBadge match={match} className="mt-0.5" />;
+                            }
+                            return (
+                              <span className="text-[11px] text-muted-foreground">{match.time}</span>
+                            );
+                          })()}
                         </div>
                         <div className="flex min-w-0 flex-1 items-center gap-2">
                           <FootballMediaImage
