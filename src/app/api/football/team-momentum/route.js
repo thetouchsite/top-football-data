@@ -6,6 +6,8 @@ import {
 import { getFixturePayload } from "@/server/football/service";
 
 export const runtime = "nodejs";
+const TEAM_MOMENTUM_CACHE_TTL_MS = 3 * 60_000;
+const teamMomentumCache = new Map();
 
 function toNumber(value, fallback = Number.NaN) {
   const parsed = Number(value);
@@ -152,11 +154,21 @@ function buildTeamMomentum(teamId, teamName, fixtures = []) {
 export async function GET(request) {
   try {
     const fixtureId = request.nextUrl.searchParams.get("fixtureId");
+    const snapshotVersion = request.nextUrl.searchParams.get("snapshotVersion");
     if (!fixtureId) {
       return NextResponse.json({ error: "fixtureId obbligatorio." }, { status: 400 });
     }
+    const cacheKey = `fx:${String(fixtureId)}:sv:${String(snapshotVersion || "").trim() || "-"}`;
+    const now = Date.now();
+    const cached = teamMomentumCache.get(cacheKey);
+    if (cached && now - cached.storedAt <= TEAM_MOMENTUM_CACHE_TTL_MS) {
+      return NextResponse.json(cached.payload);
+    }
 
-    const result = await getFixturePayload(fixtureId, { view: "enrichment" });
+    const result = await getFixturePayload(fixtureId, {
+      view: "enrichment",
+      snapshotVersion,
+    });
     const payload = result?.body || {};
     const fixture = payload?.fixture || null;
     const rawFixture = payload?.rawFixture || null;
@@ -187,13 +199,17 @@ export async function GET(request) {
       }),
     ]);
 
-    return NextResponse.json({
+    const responsePayload = {
       fixtureId: String(fixtureId),
+      snapshotVersion:
+        String(result?.body?.snapshotVersion || snapshotVersion || "").trim() || null,
       available: homeFixtures.length > 0 || awayFixtures.length > 0,
       pressurePreview: fixture?.pressure_preview || null,
       home: buildTeamMomentum(homeId, fixture?.home, homeFixtures),
       away: buildTeamMomentum(awayId, fixture?.away, awayFixtures),
-    });
+    };
+    teamMomentumCache.set(cacheKey, { storedAt: now, payload: responsePayload });
+    return NextResponse.json(responsePayload);
   } catch (error) {
     return NextResponse.json(
       { error: error?.message || "Impossibile recuperare il team momentum." },

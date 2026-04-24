@@ -1,7 +1,7 @@
 TOP FOOTBALL DATA
 STATO SVILUPPO OPERATIVO
 
-Data aggiornamento: 2026-04-24
+Data aggiornamento: 2026-04-24 (AGGIORNATO)
 Stato documento: allineato al codice reale del repository e ai backend attivi (Next.js + worker Telegram Railway)
 
 Aggiornamento chiusure (stessa data):
@@ -54,6 +54,13 @@ DONE
 - `ensureProbabilitySum()` robusto (no negativi, somma 100 sempre).
 - TTL fixture/feed e policy SWR riallineati.
 - Confidence allineata tra superfici (rimosso fattore lineup dalla confidenza principale).
+- Allineamento snapshot/cache esteso anche alle nuove API match-detail:
+  - `/api/football/player-xg`
+  - `/api/football/player-odds`
+  - `/api/football/team-momentum`
+  con `snapshotVersion` propagato da client a server e chiavi cache versionate su `sv`.
+- Coalescing/cache client allineato per Team Momentum con key `fixtureId+snapshotVersion`.
+- Cache server + dedup inflight aggiunti su `player-xg` e `player-odds` (TTL breve, key `fixtureId+sv`) per evitare richieste duplicate e drift durante refresh rapidi.
 
 PARZIALE
 - Comparatore quote player-aware per mercati giocatore.
@@ -155,6 +162,24 @@ DONE
   - safe
   - value
 
+E. MatchDetail - xG Giocatori / Quote / Coerenza cache
+
+DONE
+- Tab `Analisi xG > xG Giocatori` rifatta con 3 viste:
+  - Analisi xG
+  - Contesto stagione
+  - Quote
+- Apertura `PlayerDetailPanel` da card giocatore (anche in xG Giocatori).
+- Nuovo endpoint `GET /api/football/player-xg` operativo.
+- Nuovo endpoint `GET /api/football/player-odds` operativo.
+- Filtro quote irrigidito per mostrare mercati player-specific e ridurre noise da mercati team/match.
+- Snapshot alignment esteso alle API nuove (`player-xg`, `player-odds`, `team-momentum`).
+- Cache key versionate con `snapshotVersion` e dedup inflight su nuove API.
+
+PARZIALE
+- Coverage quote giocatore dipendente dal feed reale bookmaker per fixture.
+- Mapping quote->player non sempre completo su tutte le competizioni (dipende da naming/codifica provider).
+
 PARZIALE
 - Click tracking proprietario interno non ancora fatto.
 - Route redirect /r/... non ancora fatta.
@@ -176,6 +201,8 @@ Next.js - API app
 - GET /api/health
 - GET /api/football/player-props
 - GET /api/football/team-momentum
+- GET /api/football/player-xg
+- GET /api/football/player-odds
 
 Worker Telegram Railway
 - GET /health
@@ -231,6 +258,9 @@ P1
 - Big Match automatico giornaliero.
 - Rifinitura comparatore con badge "Top Value" e "+X% valore".
 - Validazione finale di coverage Sportmonks su leghe/mercati prioritari.
+- Rifinitura UX tab Quote giocatori:
+  - filtri per categoria mercato (Gol/Tiri/Cartellini/Altro)
+  - ordinamento migliore quote e riduzione righe rumorose.
 
 P2
 - Comparatore player props realmente context-aware su mercati bookmaker dedicati.

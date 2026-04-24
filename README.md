@@ -92,6 +92,9 @@ Per il collegamento completo, Railway deve usare gli stessi `MONGODB_URI` e `MON
 - `POST /api/leads`: salva lead dal form landing.
 - `GET /api/football/fixtures/[fixtureId]`: dettaglio match (query `view=core` per soli dati core, default per arricchimenti). Sportmonks Football API v3.
 - `GET /api/football/schedules/window?days=7`: calendario pre-match condiviso (dashboard, modelli); `days` al massimo **7**.
+- `GET /api/football/player-xg`: metriche xG giocatori per fixture (analisi + contesto stagione).
+- `GET /api/football/player-odds`: quote giocatore per fixture (mercati player-specific, filtro anti-mercati team/match).
+- `GET /api/football/team-momentum`: trend forma squadra da storico recente (cache e prefetch attivi).
 - `GET /api/alerts`: alert value/multibet salvati dal backend Python.
 - `GET /api/performance`: riepilogo storico ROI dagli alert chiusi.
 - `POST /api/billing/checkout`: crea Stripe Checkout.
@@ -111,6 +114,12 @@ Allineamento prodotto 2026-04-24:
 - `/multi-bet` mostra sia multibet sia single (tab dedicata).
 - Le modalita multibet supportate sono solo `algorithmic`, `safe`, `value`.
 - La logica `gold` e stata rimossa lato backend generator e lato frontend mapping/UI.
+- MatchDetail `Analisi xG > xG Giocatori` aggiornato con 3 viste:
+  - `Analisi xG`
+  - `Contesto stagione`
+  - `Quote`
+- Le card giocatore in `xG Giocatori` aprono il `PlayerDetailPanel` (Sheet globale).
+- Coerenza snapshot estesa alle nuove API (`player-xg`, `player-odds`, `team-momentum`) con cache key versionate su `snapshotVersion`.
 
 ## Provider Strategy
 
@@ -183,6 +192,7 @@ Worker:
 - Feed calcio: Sportmonks, nessun fallback Sportradar.
 - Layer football (endpoint, allowlist, prossime mosse): [docs/football-api-layer.md](docs/football-api-layer.md).
 - Coerenza feed/detail migliorata con snapshot versioning e policy cache allineata.
+- Coerenza cross-tab MatchDetail migliorata: fixture + xG + quote + momentum allineati allo stesso snapshot.
 - Telegram test: validato con bot e canale di test.
 - MongoDB condiviso: supportato dal worker Python e letto dal sito Next.
 - Performance storiche: collection e API pronte; il settlement dipende dalla disponibilita dei risultati finali Sportmonks.

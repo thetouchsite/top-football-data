@@ -136,9 +136,15 @@ export const SPORTMONKS_INCLUDE_POLICY = {
     "lineups",
     "lineups.player",
     "lineups.details.type",
+    "lineups.xGlineup.type",
+    "lineups.xglineup.type",
     "lineups.expected",
     "lineups.expected.type",
     "events.type",
+    "events.period",
+    "events.player",
+    "xGFixture.type",
+    "xgfixture.type",
     "formations",
     "coaches",
     "referees",
@@ -260,9 +266,15 @@ const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDE_ATTEMPTS = [
     "lineups",
     "lineups.player",
     "lineups.details.type",
+    "lineups.xGlineup.type",
+    "lineups.xglineup.type",
     "lineups.expected",
     "lineups.expected.type",
     "events.type",
+    "events.period",
+    "events.player",
+    "xGFixture.type",
+    "xgfixture.type",
     "formations",
     "coaches",
     "referees",
@@ -271,7 +283,13 @@ const SPORTMONKS_FIXTURE_ENRICHMENT_INCLUDE_ATTEMPTS = [
     "lineups",
     "lineups.player",
     "lineups.details.type",
+    "lineups.xGlineup.type",
+    "lineups.xglineup.type",
     "events.type",
+    "events.period",
+    "events.player",
+    "xGFixture.type",
+    "xgfixture.type",
     "formations",
     "coaches",
     "referees",
@@ -937,9 +955,23 @@ function getIncludesFromProviderError(message) {
 function buildAllowedIncludesForScope(include, scope, pathname) {
   const staticDenylist = SPORTMONKS_INCLUDE_DENYLIST_BY_SCOPE[scope] || new Set();
   const runtimeDenylist = getSportmonksRuntimeIncludeDenylist(scope, pathname);
-  return asArray(include).filter(
+  const filtered = asArray(include).filter(
     (entry) => !staticDenylist.has(entry) && !runtimeDenylist.has(entry)
   );
+  // Keep xG-critical includes enabled for MatchDetail enrichment:
+  // some provider errors may temporarily put them in runtime denylist.
+  const mustKeep = [
+    "xGFixture.type",
+    "xgfixture.type",
+    "lineups.xGlineup.type",
+    "lineups.xglineup.type",
+  ];
+  mustKeep.forEach((entry) => {
+    if (asArray(include).includes(entry) && !filtered.includes(entry)) {
+      filtered.push(entry);
+    }
+  });
+  return filtered;
 }
 
 async function requestSportmonksWithIncludeFallback(pathname, attempts, options = {}) {
@@ -4159,6 +4191,43 @@ export async function fetchSportmonksTeamSquad(teamId, telemetry = {}) {
   );
 
   return asArray(response?.data);
+}
+
+export async function fetchSportmonksPlayerById(playerId, options = {}) {
+  const id = String(playerId || "").trim();
+  if (!id) return null;
+
+  const seasonId = String(options?.seasonId || "").trim();
+  const fixtureId = String(options?.fixtureId || "").trim();
+  const include = [
+    "latest.xGlineup.type",
+    "statistics.details.type",
+    "statistics.season.league",
+    "statistics.position",
+    "latest.fixture.participants",
+    "latest.fixture.scores",
+    "nationality",
+    "latest.fixture.events",
+    "latest.fixture.league",
+    "teams.team",
+  ];
+  // Keep full seasonal detail set so we can populate season context
+  // (goals/minutes/shots/rating), not only xG metric 5304.
+  const filters = seasonId ? [`playerstatisticSeasons:${seasonId}`].join(";") : undefined;
+
+  const payload = await requestSportmonksJson(`players/${encodeURIComponent(id)}`, {
+    include,
+    filters,
+    telemetry: {
+      route: options?.telemetry?.route || "/api/football/player-xg",
+      requestPurpose: options?.telemetry?.requestPurpose || "player_xg_profile",
+      days: null,
+      fixtureId: fixtureId || null,
+      dtoTarget: options?.telemetry?.dtoTarget || "PlayerXGDTO",
+      dtoVersion: options?.telemetry?.dtoVersion || "v1",
+    },
+  });
+  return payload?.data || null;
 }
 
 export function getSportmonksProviderReadiness() {

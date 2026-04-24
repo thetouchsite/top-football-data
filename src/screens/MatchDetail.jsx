@@ -12,23 +12,37 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import ValueBetBadge from "@/components/shared/ValueBetBadge";
 import ConfidenceBar from "@/components/shared/ConfidenceBar";
 import FootballMediaImage from "@/components/shared/FootballMediaImage";
 import PremiumLock from "@/components/shared/PremiumLock";
 import FormationPitch from "@/components/stats/FormationPitch";
 import PlayerCard from "@/components/stats/PlayerCard";
+import PlayerDetailPanel from "@/components/players/PlayerDetailPanel";
 import TopXgPlayers from "@/components/stats/TopXgPlayers";
 import OddsComparison from "@/components/match/OddsComparison";
 import PressurePreviewChart from "@/components/match/PressurePreviewChart";
 import { useApp } from "@/lib/AppContext";
-import { getFixture, getPlayerProps, getTeamMomentum } from "@/api/football";
+import {
+  getFixture,
+  getPlayerOddsByFixture,
+  getPlayerProps,
+  getPlayerXgByFixture,
+  getTeamMomentum,
+} from "@/api/football";
 import { getAlerts } from "@/api/alerts";
 import { getOddsDecimalForValueBet } from "@/lib/value-bet-display";
 
 const EMPTY_ARRAY = [];
 const FORMATIONS_DEEP_TABS = {
   lineups: "lineups",
+  xgAnalysis: "xg-analysis",
   playerStats: "player-stats",
   teamMomentum: "team-momentum",
 };
@@ -36,6 +50,97 @@ const PLAYER_PROP_MARKETS = [
   { key: "anytime_goalscorer", label: "Marcatori" },
   { key: "shots_on_target", label: "Tiri in porta" },
   { key: "player_to_be_booked", label: "Disciplinari" },
+];
+
+function normalizeStatKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .trim();
+}
+
+function statValueFromData(entry) {
+  const raw = entry?.data?.value ?? entry?.value;
+  const asNumber = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  if (raw == null) return 0;
+  if (typeof raw === "number" || typeof raw === "string") {
+    return asNumber(raw) ?? 0;
+  }
+  if (typeof raw === "object") {
+    const candidates = [raw.total, raw.value, raw.goals, raw.average, raw.avg];
+    for (const candidate of candidates) {
+      const parsed = asNumber(candidate);
+      if (parsed != null) return parsed;
+    }
+    for (const value of Object.values(raw)) {
+      const parsed = asNumber(value);
+      if (parsed != null) return parsed;
+    }
+  }
+  return 0;
+}
+
+function seasonRatingToneClass(value) {
+  const rating = Number(value || 0);
+  if (rating >= 7) return "bg-emerald-500/25 text-emerald-300";
+  if (rating >= 6) return "bg-amber-400/25 text-amber-300";
+  return "bg-rose-500/25 text-rose-300";
+}
+
+function normalizePersonNameKey(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function quoteRowMatchesPlayerName(quotePlayerName, playerName) {
+  const quote = normalizePersonNameKey(quotePlayerName);
+  const player = normalizePersonNameKey(playerName);
+  if (!quote || !player) return false;
+  if (quote === player) return true;
+  if (quote.includes(player) || player.includes(quote)) return true;
+  const qt = quote.split(" ").filter((t) => t.length > 1);
+  const pt = player.split(" ").filter((t) => t.length > 1);
+  const overlap = pt.filter((t) => qt.includes(t)).length;
+  return overlap >= 2 || (overlap >= 1 && Math.min(quote.length, player.length) >= 5);
+}
+
+function resolvePlayerQuoteRows(playerOddsPayload, row) {
+  const quoteData =
+    playerOddsPayload?.byPlayer?.[String(row.id)] ||
+    playerOddsPayload?.byPlayerName?.[normalizePersonNameKey(row.name)] ||
+    null;
+  const fallbackRowsAll = Array.isArray(playerOddsPayload?.rowsAll)
+    ? playerOddsPayload.rowsAll.filter((item) =>
+        quoteRowMatchesPlayerName(item?.playerName, row.name),
+      )
+    : [];
+  return Array.isArray(quoteData?.rows)
+    ? quoteData.rows.slice(0, 8)
+    : fallbackRowsAll.slice(0, 8);
+}
+
+const XG_METRIC_PRIORITY = [
+  "expected_goals",
+  "expected_goals_on_target",
+  "expected_points",
+  "expected_goals_penalties",
+  "expected_goals_free_kicks",
+  "expected_goals_corners",
+  "expected_goals_non_penalty_goals",
+  "expected_goals_set_play",
+  "expected_goals_open_play",
+  "expected_goals_difference",
+  "shooting_performance",
+  "expected_goals_against",
+  "expected_goals_prevented",
 ];
 
 function createUnknownMatchFallback(fixtureId) {
@@ -321,6 +426,21 @@ function buildFallbackPlayerProfile(player, teamName) {
   };
 }
 
+function normalizeEntityId(value) {
+  return String(value ?? "").trim();
+}
+
+function buildBenchPlayers(lineupPlayers = [], squadPlayers = []) {
+  const starterIds = new Set(
+    (Array.isArray(lineupPlayers) ? lineupPlayers : [])
+      .map((p) => normalizeEntityId(p?.id))
+      .filter(Boolean),
+  );
+  return (Array.isArray(squadPlayers) ? squadPlayers : []).filter(
+    (player) => !starterIds.has(normalizeEntityId(player?.id)),
+  );
+}
+
 export default function MatchDetail() {
   const { id } = useParams();
   const location = useLocation();
@@ -351,6 +471,7 @@ export default function MatchDetail() {
   const [formationsDeepTab, setFormationsDeepTab] = useState(
     FORMATIONS_DEEP_TABS.lineups,
   );
+  const [isPlayerSheetOpen, setIsPlayerSheetOpen] = useState(false);
   const [selectedPlayerMarket, setSelectedPlayerMarket] =
     useState("anytime_goalscorer");
   const [playerPropsPayload, setPlayerPropsPayload] = useState(null);
@@ -360,6 +481,14 @@ export default function MatchDetail() {
   const [teamMomentumLoading, setTeamMomentumLoading] = useState(false);
   const [teamMomentumError, setTeamMomentumError] = useState("");
   const [fixtureMultibetAlerts, setFixtureMultibetAlerts] = useState([]);
+  const [xgViewMode, setXgViewMode] = useState("team");
+  const [xgPlayersDetailMode, setXgPlayersDetailMode] = useState("xg");
+  const [xgPlayersApiPayload, setXgPlayersApiPayload] = useState(null);
+  const [xgPlayersApiLoading, setXgPlayersApiLoading] = useState(false);
+  const [xgPlayersApiError, setXgPlayersApiError] = useState("");
+  const [playerOddsPayload, setPlayerOddsPayload] = useState(null);
+  const [playerOddsLoading, setPlayerOddsLoading] = useState(false);
+  const [playerOddsError, setPlayerOddsError] = useState("");
 
   useEffect(() => {
     if (!fixtureIdToLoad) {
@@ -689,6 +818,14 @@ export default function MatchDetail() {
   const selectedPlayerPool = selectedLineupPlayers.length
     ? selectedLineupPlayers
     : selectedSquad;
+  const homeBench = useMemo(
+    () => buildBenchPlayers(homeLineup?.players, homeSquad),
+    [homeLineup?.players, homeSquad],
+  );
+  const awayBench = useMemo(
+    () => buildBenchPlayers(awayLineup?.players, awaySquad),
+    [awayLineup?.players, awaySquad],
+  );
   const hasRealPlayerStats = useMemo(
     () =>
       availablePlayers.some(
@@ -703,6 +840,7 @@ export default function MatchDetail() {
     () =>
       [
         { key: FORMATIONS_DEEP_TABS.lineups, label: "Probabili Formazioni" },
+        { key: FORMATIONS_DEEP_TABS.xgAnalysis, label: "Analisi XG" },
         hasRealPlayerStats
           ? { key: FORMATIONS_DEEP_TABS.playerStats, label: "Player Stats" }
           : null,
@@ -728,6 +866,489 @@ export default function MatchDetail() {
       ) || null,
     [standingsRows, match.away],
   );
+  const xgTeamRows = useMemo(() => {
+    const raw = fixtureBundle?.rawFixture || {};
+    const baseXgRows =
+      (Array.isArray(raw?.xgfixture) && raw.xgfixture) ||
+      (Array.isArray(raw?.xGFixture) && raw.xGFixture) ||
+      (Array.isArray(raw?.xgFixture) && raw.xgFixture) ||
+      [];
+    const fallbackStats = Array.isArray(raw?.statistics) ? raw.statistics : [];
+    const xgLikeFromStats = [];
+    fallbackStats.forEach((entry) => {
+      const key = normalizeStatKey(
+        entry?.type?.developer_name ||
+          entry?.type?.code ||
+          entry?.type?.name ||
+          entry?.type_id,
+      );
+      const isXgLike =
+        key.startsWith("expected_") ||
+        key.includes("xg") ||
+        key.includes("xgot") ||
+        key.includes("xpts") ||
+        key === "shooting_performance";
+      if (isXgLike) {
+        xgLikeFromStats.push(entry);
+      }
+      const detailsRows = Array.isArray(entry?.details) ? entry.details : [];
+      detailsRows.forEach((detail) => {
+        const dKey = normalizeStatKey(
+          detail?.type?.developer_name ||
+            detail?.type?.code ||
+            detail?.type?.name ||
+            detail?.type_id,
+        );
+        const detailIsXgLike =
+          dKey.startsWith("expected_") ||
+          dKey.includes("xg") ||
+          dKey.includes("xgot") ||
+          dKey.includes("xpts") ||
+          dKey === "shooting_performance";
+        if (!detailIsXgLike) return;
+        xgLikeFromStats.push({
+          ...detail,
+          participant_id:
+            detail?.participant_id ||
+            entry?.participant_id ||
+            entry?.team_id ||
+            detail?.team_id,
+          location: detail?.location || entry?.location,
+        });
+      });
+    });
+    const teamRows = [...baseXgRows, ...xgLikeFromStats];
+    const homeId = String(match?.provider_ids?.sportmonks_home_participant_id || "");
+    const awayId = String(match?.provider_ids?.sportmonks_away_participant_id || "");
+    const grouped = new Map();
+    teamRows.forEach((entry) => {
+      const key =
+        normalizeStatKey(
+          entry?.type?.developer_name ||
+            entry?.type?.code ||
+            entry?.type?.name ||
+            entry?.type_id,
+        ) || String(entry?.type_id || "metric");
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          label: entry?.type?.name || entry?.type?.code || key,
+          home: 0,
+          away: 0,
+        });
+      }
+      const bucket = grouped.get(key);
+      const participantId = String(entry?.participant_id || "");
+      const location = String(entry?.location || "").toLowerCase();
+      const value = statValueFromData(entry);
+      if (participantId && participantId === homeId) {
+        bucket.home = value;
+      } else if (participantId && participantId === awayId) {
+        bucket.away = value;
+      } else if (location === "home") {
+        bucket.home = value;
+      } else if (location === "away") {
+        bucket.away = value;
+      }
+    });
+    const out = [...grouped.values()].sort((left, right) => {
+      const leftKey = normalizeStatKey(left.key);
+      const rightKey = normalizeStatKey(right.key);
+      const leftIdx = XG_METRIC_PRIORITY.findIndex((item) => leftKey.includes(item));
+      const rightIdx = XG_METRIC_PRIORITY.findIndex((item) => rightKey.includes(item));
+      const l = leftIdx === -1 ? 999 : leftIdx;
+      const r = rightIdx === -1 ? 999 : rightIdx;
+      if (l !== r) return l - r;
+      return String(left.label || "").localeCompare(String(right.label || ""));
+    });
+    if (out.length === 0) {
+      const homeXg = Number(match?.xg?.home || 0);
+      const awayXg = Number(match?.xg?.away || 0);
+      if (homeXg > 0 || awayXg > 0) {
+        out.push({
+          key: "expected_goals_fallback",
+          label: "Expected Goals (xG)",
+          home: homeXg,
+          away: awayXg,
+        });
+      }
+    }
+    return out;
+  }, [
+    fixtureBundle?.rawFixture,
+    match?.xg?.home,
+    match?.xg?.away,
+    match?.provider_ids?.sportmonks_home_participant_id,
+    match?.provider_ids?.sportmonks_away_participant_id,
+  ]);
+  const xgPlayerRows = useMemo(() => {
+    const raw = fixtureBundle?.rawFixture || {};
+    const lineupRows = Array.isArray(raw?.lineups) ? raw.lineups : [];
+    const mappedFromLineups = lineupRows
+      .map((entry) => {
+        const player = entry?.player || {};
+        const xgRows =
+          (Array.isArray(entry?.xglineup) && entry.xglineup) ||
+          (Array.isArray(entry?.xGlineup) && entry.xGlineup) ||
+          (Array.isArray(entry?.xgLineup) && entry.xgLineup) ||
+          [];
+        const detailsRows = Array.isArray(entry?.details) ? entry.details : [];
+        const readByKey = (rows, aliases) => {
+          const normalizedAliases = aliases.map((alias) => normalizeStatKey(alias));
+          const matches = rows.filter((row) => {
+            const key = normalizeStatKey(
+              row?.type?.developer_name ||
+                row?.type?.code ||
+                row?.type?.name ||
+                row?.type_id,
+            );
+            return normalizedAliases.some((alias) => key === alias);
+          });
+          if (!matches.length) return 0;
+          return matches
+            .map((row) => statValueFromData(row))
+            .reduce((max, value) => (value > max ? value : max), 0);
+        };
+        const metricRows = [...xgRows, ...detailsRows];
+        const xg = readByKey(metricRows, ["expected_goals", "5304"]);
+        const xgot = readByKey(metricRows, [
+          "expected_goals_on_target",
+          "5305",
+        ]);
+        const xgOpenPlay = readByKey(metricRows, ["expected_goals_open_play"]);
+        const xgSetPiece = readByKey(metricRows, ["expected_goals_set_play"]);
+        const xgCorners = readByKey(metricRows, ["expected_goals_corners"]);
+        const expectedPoints = readByKey(metricRows, ["expected_points"]);
+        const xgNonPenalty = readByKey(metricRows, [
+          "expected_non_penalty_goals",
+          "expected_goals_non_penalty_goals",
+        ]);
+        const shootingPerformance = readByKey(metricRows, ["shooting_performance"]);
+        const rating = readByKey(metricRows, ["rating", "118"]);
+        const minutes = readByKey(metricRows, ["minutes_played", "minutes", "119"]);
+        const goals = readByKey(metricRows, ["goals", "52"]);
+        const shots = readByKey(metricRows, ["shots_total", "shots", "42"]);
+        const passes = readByKey(metricRows, ["passes"]);
+        const passAccuracyPct = readByKey(metricRows, ["accurate_passes_percentage"]);
+        const touches = readByKey(metricRows, ["touches"]);
+        const duelsWonPct = readByKey(metricRows, ["duels_won_percentage"]);
+        const interceptions = readByKey(metricRows, ["interceptions"]);
+        const tacklesWon = readByKey(metricRows, ["tackles_won"]);
+        const eshots = readByKey(metricRows, ["expected_shots", "expected_shots_total"]);
+        return {
+          id: String(entry?.player_id || player?.id || entry?.id || ""),
+          name:
+            player?.display_name ||
+            player?.common_name ||
+            player?.name ||
+            entry?.player_name ||
+            "Giocatore",
+          number: entry?.jersey_number || player?.jersey_number || player?.number || "--",
+          media: player?.image_path
+            ? { imageUrl: player.image_path, thumbUrl: player.image_path }
+            : null,
+          seasonRating: rating > 0 ? rating : null,
+          seasonMinutes: minutes || 0,
+          seasonGoals: goals || 0,
+          xg: xg || 0,
+          xgot: xgot || 0,
+          xgOpenPlay: xgOpenPlay || 0,
+          xgSetPiece: xgSetPiece || 0,
+          xgCorners: xgCorners || 0,
+          expectedPoints: expectedPoints || 0,
+          xgNonPenalty: xgNonPenalty || 0,
+          shootingPerformance: shootingPerformance || 0,
+          eshots: eshots || 0,
+          seasonShots: shots || 0,
+          seasonPasses: passes || 0,
+          seasonPassAccuracyPct: passAccuracyPct || 0,
+          seasonTouches: touches || 0,
+          seasonDuelsWonPct: duelsWonPct || 0,
+          seasonInterceptions: interceptions || 0,
+          seasonTacklesWon: tacklesWon || 0,
+          hasDirectXgData:
+            xgRows.length > 0 ||
+            detailsRows.some((row) => {
+              const key = normalizeStatKey(
+                row?.type?.developer_name ||
+                  row?.type?.code ||
+                  row?.type?.name ||
+                  row?.type_id,
+              );
+              return (
+                key === "expected_goals" ||
+                key === "expected_goals_on_target" ||
+                key === "minutes_played" ||
+                key === "shots_total" ||
+                key === "goals" ||
+                key === "rating"
+              );
+            }),
+        };
+      })
+      .filter((row) => row.name);
+    const filtered = mappedFromLineups.filter(
+      (row) =>
+        row.hasDirectXgData &&
+        (row.xg > 0 ||
+          row.xgot > 0 ||
+          row.eshots > 0 ||
+          row.xgOpenPlay > 0 ||
+          row.xgSetPiece > 0 ||
+          row.xgCorners > 0 ||
+          row.xgNonPenalty > 0),
+    );
+    const apiRows = Array.isArray(xgPlayersApiPayload?.rows)
+      ? xgPlayersApiPayload.rows
+      : [];
+    const mergedById = new Map();
+    [...apiRows, ...filtered].forEach((row) => {
+      const id = String(row?.id || "").trim();
+      if (!id) return;
+      const existing = mergedById.get(id);
+      if (!existing) {
+        mergedById.set(id, row);
+        return;
+      }
+      mergedById.set(id, {
+        ...existing,
+        ...row,
+        xg: Math.max(Number(existing.xg || 0), Number(row.xg || 0)),
+        xgot: Math.max(Number(existing.xgot || 0), Number(row.xgot || 0)),
+        xgOpenPlay: Math.max(
+          Number(existing.xgOpenPlay || 0),
+          Number(row.xgOpenPlay || 0),
+        ),
+        xgSetPiece: Math.max(
+          Number(existing.xgSetPiece || 0),
+          Number(row.xgSetPiece || 0),
+        ),
+        xgCorners: Math.max(
+          Number(existing.xgCorners || 0),
+          Number(row.xgCorners || 0),
+        ),
+        expectedPoints: Math.max(
+          Number(existing.expectedPoints || 0),
+          Number(row.expectedPoints || 0),
+        ),
+        xgNonPenalty: Math.max(
+          Number(existing.xgNonPenalty || 0),
+          Number(row.xgNonPenalty || 0),
+        ),
+        shootingPerformance: Math.max(
+          Number(existing.shootingPerformance || 0),
+          Number(row.shootingPerformance || 0),
+        ),
+        eshots: Math.max(Number(existing.eshots || 0), Number(row.eshots || 0)),
+        seasonShots: Math.max(
+          Number(existing.seasonShots || 0),
+          Number(row.seasonShots || 0),
+        ),
+        seasonPasses: Math.max(
+          Number(existing.seasonPasses || 0),
+          Number(row.seasonPasses || 0),
+        ),
+        seasonPassAccuracyPct: Math.max(
+          Number(existing.seasonPassAccuracyPct || 0),
+          Number(row.seasonPassAccuracyPct || 0),
+        ),
+        seasonTouches: Math.max(
+          Number(existing.seasonTouches || 0),
+          Number(row.seasonTouches || 0),
+        ),
+        seasonDuelsWonPct: Math.max(
+          Number(existing.seasonDuelsWonPct || 0),
+          Number(row.seasonDuelsWonPct || 0),
+        ),
+        seasonInterceptions: Math.max(
+          Number(existing.seasonInterceptions || 0),
+          Number(row.seasonInterceptions || 0),
+        ),
+        seasonTacklesWon: Math.max(
+          Number(existing.seasonTacklesWon || 0),
+          Number(row.seasonTacklesWon || 0),
+        ),
+        seasonGoals: Math.max(
+          Number(existing.seasonGoals || 0),
+          Number(row.seasonGoals || 0),
+        ),
+        seasonMinutes: Math.max(
+          Number(existing.seasonMinutes || 0),
+          Number(row.seasonMinutes || 0),
+        ),
+        seasonRating:
+          Number(existing.seasonRating || 0) >= Number(row.seasonRating || 0)
+            ? existing.seasonRating
+            : row.seasonRating,
+      });
+    });
+    const mergedRows = [...mergedById.values()];
+    return mergedRows
+      .sort(
+        (a, b) =>
+          b.xg - a.xg ||
+          b.xgot - a.xgot ||
+          b.xgOpenPlay - a.xgOpenPlay ||
+          b.xgSetPiece - a.xgSetPiece ||
+          b.xgCorners - a.xgCorners ||
+          b.eshots - a.eshots,
+      )
+      .slice(0, 12);
+  }, [fixtureBundle?.rawFixture, xgPlayersApiPayload?.rows]);
+  const xgCoverageLevel = useMemo(() => {
+    if (!xgTeamRows.length) return "none";
+    const hasAdvanced = xgTeamRows.some((row) => {
+      const key = normalizeStatKey(row?.key || row?.label || "");
+      return (
+        key.includes("expected_goals_on_target") ||
+        key.includes("expected_points") ||
+        key.includes("expected_goals_set_play") ||
+        key.includes("expected_goals_open_play") ||
+        key.includes("expected_goals_against") ||
+        key.includes("shooting_performance") ||
+        key.includes("expected_goals_prevented")
+      );
+    });
+    return hasAdvanced ? "advanced" : "basic";
+  }, [xgTeamRows]);
+
+  useEffect(() => {
+    setXgPlayersApiPayload(null);
+    setXgPlayersApiLoading(false);
+    setXgPlayersApiError("");
+    setPlayerOddsPayload(null);
+    setPlayerOddsLoading(false);
+    setPlayerOddsError("");
+    setTeamMomentumPayload(null);
+    setTeamMomentumLoading(false);
+    setTeamMomentumError("");
+  }, [match.id, snapshotVersionForRequest]);
+
+  useEffect(() => {
+    const isInXgContext =
+      activeMainTab === "analisi-xg" ||
+      (activeMainTab === "formazioni" &&
+        formationsDeepTab === FORMATIONS_DEEP_TABS.xgAnalysis);
+    if (
+      !isInXgContext ||
+      xgViewMode !== "players" ||
+      !match.id ||
+      (xgPlayersApiPayload?.fixtureId === String(match.id) &&
+        String(xgPlayersApiPayload?.snapshotVersion || "") ===
+          String(snapshotVersionForRequest || ""))
+    ) {
+      return;
+    }
+
+    let active = true;
+    setXgPlayersApiLoading(true);
+    setXgPlayersApiError("");
+
+    getPlayerXgByFixture(match.id, {
+      snapshotVersion: snapshotVersionForRequest,
+    })
+      .then((payload) => {
+        if (active) {
+          setXgPlayersApiPayload(payload);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setXgPlayersApiPayload(null);
+          setXgPlayersApiError(
+            error.message || "Dati xG giocatori non disponibili.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setXgPlayersApiLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    activeMainTab,
+    formationsDeepTab,
+    xgViewMode,
+    match.id,
+    xgPlayersApiPayload?.fixtureId,
+    xgPlayersApiPayload?.snapshotVersion,
+    snapshotVersionForRequest,
+  ]);
+
+  useEffect(() => {
+    const isInXgPlayersContext =
+      (activeMainTab === "analisi-xg" ||
+        (activeMainTab === "formazioni" &&
+          formationsDeepTab === FORMATIONS_DEEP_TABS.xgAnalysis)) &&
+      xgViewMode === "players" &&
+      xgPlayersDetailMode === "quote";
+    if (
+      !isInXgPlayersContext ||
+      !match.id ||
+      (playerOddsPayload?.fixtureId === String(match.id) &&
+        String(playerOddsPayload?.snapshotVersion || "") ===
+          String(snapshotVersionForRequest || ""))
+    ) {
+      return;
+    }
+
+    let active = true;
+    setPlayerOddsLoading(true);
+    setPlayerOddsError("");
+    getPlayerOddsByFixture(match.id, {
+      snapshotVersion: snapshotVersionForRequest,
+    })
+      .then((payload) => {
+        if (active) setPlayerOddsPayload(payload);
+      })
+      .catch((error) => {
+        if (active) {
+          setPlayerOddsPayload(null);
+          setPlayerOddsError(error.message || "Quote giocatori non disponibili.");
+        }
+      })
+      .finally(() => {
+        if (active) setPlayerOddsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    activeMainTab,
+    formationsDeepTab,
+    xgViewMode,
+    xgPlayersDetailMode,
+    match.id,
+    playerOddsPayload?.fixtureId,
+    playerOddsPayload?.snapshotVersion,
+    snapshotVersionForRequest,
+  ]);
+
+  const handleSelectLineupPlayer = (player, teamName) => {
+    const nextPlayer =
+      availablePlayers.find(
+        (candidate) =>
+          candidate.id === player?.id || candidate.name === player?.name,
+      ) || buildFallbackPlayerProfile(player, teamName);
+    setSelectedPlayer(nextPlayer);
+    setIsPlayerSheetOpen(true);
+  };
+
+  const handleSelectXgPlayer = (row) => {
+    if (!row) return;
+    const matched =
+      availablePlayers.find(
+        (candidate) =>
+          String(candidate?.id || "") === String(row?.id || "") ||
+          normalizePersonNameKey(candidate?.name) === normalizePersonNameKey(row?.name),
+      ) || null;
+    handleSelectLineupPlayer(matched || row, matched?.team || selectedLineupTeam);
+  };
 
   useEffect(() => {
     const firstLineupPlayer = selectedLineupPlayers[0];
@@ -790,6 +1411,8 @@ export default function MatchDetail() {
       fixtureId: match.id,
       playerId: selectedPlayer.id,
       market: selectedPlayerMarket,
+    }, {
+      snapshotVersion: snapshotVersionForRequest,
     })
       .then((payload) => {
         if (active) {
@@ -817,13 +1440,47 @@ export default function MatchDetail() {
     match.id,
     selectedPlayer?.id,
     selectedPlayerMarket,
+    snapshotVersionForRequest,
   ]);
 
   useEffect(() => {
     if (
-      activeMainTab !== "formazioni" ||
-      formationsDeepTab !== FORMATIONS_DEEP_TABS.teamMomentum ||
-      teamMomentumPayload?.fixtureId === String(match.id)
+      !match.id ||
+      (teamMomentumPayload?.fixtureId === String(match.id) &&
+        String(teamMomentumPayload?.snapshotVersion || "") ===
+          String(snapshotVersionForRequest || ""))
+    ) {
+      return;
+    }
+
+    let active = true;
+    getTeamMomentum(match.id, {
+      snapshotVersion: snapshotVersionForRequest,
+    })
+      .then((payload) => {
+        if (active) {
+          setTeamMomentumPayload(payload);
+        }
+      })
+      .catch(() => {
+        // warmup best-effort
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    match.id,
+    teamMomentumPayload?.fixtureId,
+    teamMomentumPayload?.snapshotVersion,
+    snapshotVersionForRequest,
+  ]);
+
+  useEffect(() => {
+    if (
+      activeMainTab !== "team-momentum" ||
+      (teamMomentumPayload?.fixtureId === String(match.id) &&
+        String(teamMomentumPayload?.snapshotVersion || "") ===
+          String(snapshotVersionForRequest || ""))
     ) {
       return;
     }
@@ -832,7 +1489,9 @@ export default function MatchDetail() {
     setTeamMomentumLoading(true);
     setTeamMomentumError("");
 
-    getTeamMomentum(match.id)
+    getTeamMomentum(match.id, {
+      snapshotVersion: snapshotVersionForRequest,
+    })
       .then((payload) => {
         if (active) {
           setTeamMomentumPayload(payload);
@@ -857,9 +1516,10 @@ export default function MatchDetail() {
     };
   }, [
     activeMainTab,
-    formationsDeepTab,
     match.id,
     teamMomentumPayload?.fixtureId,
+    teamMomentumPayload?.snapshotVersion,
+    snapshotVersionForRequest,
   ]);
 
   useEffect(() => {
@@ -1056,7 +1716,7 @@ export default function MatchDetail() {
           <div className="min-w-0 lg:col-span-2">
             <Tabs value={activeMainTab} onValueChange={setActiveMainTab}>
               <TabsList className="mb-5 flex h-auto min-h-10 w-full flex-wrap justify-start gap-1 p-1 glass">
-                {["panoramica", "formazioni", "contesto", "h2h"].map((tab) => (
+                {["panoramica", "formazioni", "analisi-xg", "team-momentum", "contesto", "h2h"].map((tab) => (
                   <TabsTrigger
                     key={tab}
                     value={tab}
@@ -1064,6 +1724,10 @@ export default function MatchDetail() {
                   >
                     {tab === "h2h"
                       ? "Testa a Testa"
+                      : tab === "analisi-xg"
+                        ? "Analisi XG"
+                        : tab === "team-momentum"
+                          ? "Team Momentum"
                       : tab === "contesto"
                         ? "Contesto"
                         : tab}
@@ -1405,60 +2069,127 @@ export default function MatchDetail() {
 
               <TabsContent value="formazioni">
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/40 bg-secondary/10 p-1">
-                    {[
-                      { side: "home", team: match.home, lineup: homeLineup },
-                      { side: "away", team: match.away, lineup: awayLineup },
-                    ].map((option) => {
-                      const isActive = selectedLineupSide === option.side;
-                      const playersCount = Array.isArray(option.lineup?.players)
-                        ? option.lineup.players.length
-                        : 0;
+                  {formationsDeepTab === FORMATIONS_DEEP_TABS.lineups && (
+                    <GlassCard className="border-border/40">
+                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]">
+                      {[
+                        { side: "home", team: match.home, lineup: homeLineup, media: match.home_media, align: "left" },
+                        { side: "away", team: match.away, lineup: awayLineup, media: match.away_media, align: "right" },
+                      ].map((option, idx) => {
+                        const isActive = selectedLineupSide === option.side;
+                        const playersCount = Array.isArray(option.lineup?.players)
+                          ? option.lineup.players.length
+                          : 0;
+                        if (idx === 1) {
+                          return (
+                            <React.Fragment key={option.side}>
+                              <div className="flex items-center justify-center rounded-xl border border-border/30 bg-secondary/20 px-3 py-3 text-center">
+                                <span className="font-orbitron text-sm font-black text-muted-foreground">
+                                  Lineups
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedLineupSide(option.side)}
+                                className={`min-w-0 rounded-xl border px-3 py-3 text-right transition-all ${
+                                  isActive
+                                    ? "border-primary/30 bg-primary/12"
+                                    : "border-border/30 bg-secondary/20 hover:bg-secondary/35"
+                                }`}
+                                title={`Mostra formazione ${option.team}`}
+                              >
+                                <div className="flex items-center justify-end gap-2">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-bold text-foreground">{option.team}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Modulo {option.lineup?.formation || "--"}
+                                    </div>
+                                  </div>
+                                  <FootballMediaImage
+                                    media={option.media}
+                                    fallbackLabel={option.team}
+                                    alt={option.team}
+                                    size="sm"
+                                  />
+                                </div>
+                                <div className="mt-1 text-[11px] text-muted-foreground">
+                                  {playersCount} giocatori
+                                </div>
+                              </button>
+                            </React.Fragment>
+                          );
+                        }
+                        return (
+                          <button
+                            key={option.side}
+                            type="button"
+                            onClick={() => setSelectedLineupSide(option.side)}
+                            className={`min-w-0 rounded-xl border px-3 py-3 text-left transition-all ${
+                              isActive
+                                ? "border-primary/30 bg-primary/12"
+                                : "border-border/30 bg-secondary/20 hover:bg-secondary/35"
+                            }`}
+                            title={`Mostra formazione ${option.team}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <FootballMediaImage
+                                media={option.media}
+                                fallbackLabel={option.team}
+                                alt={option.team}
+                                size="sm"
+                              />
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-bold text-foreground">{option.team}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  Modulo {option.lineup?.formation || "--"}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-1 text-[11px] text-muted-foreground">
+                              {playersCount} giocatori
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                      return (
-                        <button
-                          key={option.side}
-                          type="button"
-                          onClick={() => setSelectedLineupSide(option.side)}
-                          className={`min-w-0 rounded-lg px-3 py-2 text-left transition-all ${
-                            isActive
-                              ? "border border-primary/25 bg-primary/10 text-primary"
-                              : "border border-transparent text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
-                          }`}
-                          title={`Mostra formazione ${option.team}`}
+                    <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+                      {[
+                        { team: match.home, coach: homeCoaches[0] || null },
+                        { team: match.away, coach: awayCoaches[0] || null },
+                      ].map((entry) => (
+                        <div
+                          key={entry.team}
+                          className="rounded-md border border-border/25 bg-secondary/15 px-2 py-1.5"
                         >
-                          <div className="truncate text-xs font-bold">
-                            {option.team}
+                          <div className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Manager {entry.team}
                           </div>
-                          <div className="mt-0.5 text-[11px] opacity-80">
-                            {option.lineup?.formation || "--"} - {playersCount}{" "}
-                            giocatori
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <FootballMediaImage
+                              media={entry.coach?.media}
+                              fallbackLabel={entry.coach?.name || "Coach"}
+                              alt={entry.coach?.name || "Coach"}
+                              size="xs"
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-semibold leading-tight text-foreground">
+                                {entry.coach?.name || "Non disponibile"}
+                              </div>
+                              <div className="text-[10px] leading-tight text-muted-foreground">Allenatore</div>
+                            </div>
                           </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                        </div>
+                      ))}
+                    </div>
+                    </GlassCard>
+                  )}
 
-                  <div className="flex flex-wrap gap-2 rounded-xl border border-border/40 bg-secondary/10 p-1">
-                    {visibleFormationsTabs.map((tab) => (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => setFormationsDeepTab(tab.key)}
-                        className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
-                          formationsDeepTab === tab.key
-                            ? "border border-primary/25 bg-primary/10 text-primary"
-                            : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
+                  
 
                   {formationsDeepTab === FORMATIONS_DEEP_TABS.lineups && (
                     <>
-                      <div className="grid md:grid-cols-2 gap-4">
+                      <div className="grid gap-4">
                         <div className="space-y-4">
                           <FormationPitch
                             homeLineup={selectedLineup}
@@ -1468,19 +2199,12 @@ export default function MatchDetail() {
                                 ? match.home
                                 : match.away
                             }
-                            onPlayerClick={(player) => {
-                              const nextPlayer =
-                                availablePlayers.find(
-                                  (candidate) =>
-                                    candidate.id === player.id ||
-                                    candidate.name === player.name,
-                                ) ||
-                                buildFallbackPlayerProfile(
-                                  player,
-                                  selectedLineupTeam,
-                                );
-                              setSelectedPlayer(nextPlayer);
-                            }}
+                            onPlayerClick={(player) =>
+                              handleSelectLineupPlayer(
+                                player,
+                                selectedLineupTeam,
+                              )
+                            }
                           />
                           {!selectedLineupPlayers.length && (
                             <GlassCard>
@@ -1513,18 +2237,9 @@ export default function MatchDetail() {
                                             key={player.id || player.name}
                                             type="button"
                                             onClick={() =>
-                                              setSelectedPlayer(
-                                                availablePlayers.find(
-                                                  (candidate) =>
-                                                    candidate.id ===
-                                                      player.id ||
-                                                    candidate.name ===
-                                                      player.name,
-                                                ) ||
-                                                  buildFallbackPlayerProfile(
-                                                    player,
-                                                    selectedLineupTeam,
-                                                  ),
+                                              handleSelectLineupPlayer(
+                                                player,
+                                                selectedLineupTeam,
                                               )
                                             }
                                             className="flex w-full items-center justify-between rounded-lg bg-secondary/30 p-2 text-left text-xs transition-colors hover:bg-secondary/50"
@@ -1546,15 +2261,84 @@ export default function MatchDetail() {
                               </Accordion>
                             )}
                         </div>
-                        <PlayerCard
-                          player={selectedPlayer}
-                          expanded
-                          oddsAvailable={
-                            match.odds_provider !==
-                            "not_available_with_current_feed"
-                          }
-                        />
                       </div>
+
+                      {(homeBench.length > 0 || awayBench.length > 0) && (
+                        <GlassCard className="border-border/40">
+                          <h3 className="mb-3 text-sm font-semibold text-foreground">
+                            Sostituzioni / Panchina
+                          </h3>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2 rounded-xl border border-border/30 bg-secondary/20 p-3">
+                              <div className="text-xs font-semibold text-primary">
+                                {match.home}
+                              </div>
+                              {(homeBench.length ? homeBench : homeSquad)
+                                .slice(0, 14)
+                                .map((player) => (
+                                  <button
+                                    key={`bench-home-${player.id || player.name}`}
+                                    type="button"
+                                    onClick={() =>
+                                      handleSelectLineupPlayer(
+                                        player,
+                                        match.home,
+                                      )
+                                    }
+                                    className="flex w-full items-center justify-between gap-2 rounded-lg bg-secondary/35 px-2.5 py-2 text-left text-xs transition-colors hover:bg-secondary/50"
+                                  >
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <FootballMediaImage
+                                        media={player.media}
+                                        fallbackLabel={player.name}
+                                        alt={player.name}
+                                        size="xs"
+                                      />
+                                      <span className="truncate text-foreground">{player.name}</span>
+                                    </div>
+                                    <span className="shrink-0 text-muted-foreground">
+                                      #{player.number || "--"}
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+
+                            <div className="space-y-2 rounded-xl border border-border/30 bg-secondary/20 p-3">
+                              <div className="text-xs font-semibold text-primary">
+                                {match.away}
+                              </div>
+                              {(awayBench.length ? awayBench : awaySquad)
+                                .slice(0, 14)
+                                .map((player) => (
+                                  <button
+                                    key={`bench-away-${player.id || player.name}`}
+                                    type="button"
+                                    onClick={() =>
+                                      handleSelectLineupPlayer(
+                                        player,
+                                        match.away,
+                                      )
+                                    }
+                                    className="flex w-full items-center justify-between gap-2 rounded-lg bg-secondary/35 px-2.5 py-2 text-left text-xs transition-colors hover:bg-secondary/50"
+                                  >
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <FootballMediaImage
+                                        media={player.media}
+                                        fallbackLabel={player.name}
+                                        alt={player.name}
+                                        size="xs"
+                                      />
+                                      <span className="truncate text-foreground">{player.name}</span>
+                                    </div>
+                                    <span className="shrink-0 text-muted-foreground">
+                                      #{player.number || "--"}
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                        </GlassCard>
+                      )}
 
                       <div className="space-y-4">
                         {Array.isArray(match.lineup_penalty?.penalties) &&
@@ -1614,95 +2398,261 @@ export default function MatchDetail() {
                             </GlassCard>
                           )}
 
-                        <GlassCard>
-                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <h3 className="font-semibold text-sm text-foreground">
-                              Impact Player Analysis
-                            </h3>
-                            <span className="rounded-full border border-border/40 bg-secondary/40 px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-                              {match.lineup_status || "lineup"} feed
-                            </span>
-                          </div>
-                          {match.scorers.length > 0 ? (
-                            <div className="space-y-2">
-                              {match.scorers.map((scorer, index) =>
-                                (() => {
-                                  const hasRealXg = hasRealMetricSource(
-                                    scorer.propsSource?.xg,
-                                  );
-                                  const hasRealShots = hasRealMetricSource(
-                                    scorer.propsSource?.shots,
-                                  );
-
-                                  return (
-                                    <button
-                                      key={`${scorer.name}-${index}`}
-                                      type="button"
-                                      onClick={() => {
-                                        const nextPlayer =
-                                          availablePlayers.find(
-                                            (candidate) =>
-                                              candidate.id === scorer.id ||
-                                              candidate.name === scorer.name,
-                                          ) ||
-                                          buildFallbackPlayerProfile(
-                                            scorer,
-                                            scorer.team || selectedLineupTeam,
-                                          );
-                                        setSelectedPlayer(nextPlayer);
-                                      }}
-                                      className="flex w-full min-w-0 flex-col gap-2 rounded-lg bg-secondary/30 p-3 text-left transition-colors hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
-                                    >
-                                      <div className="min-w-0">
-                                        <span className="block truncate text-sm font-semibold text-foreground">
-                                          {scorer.name}
-                                        </span>
-                                        <span className="block truncate text-[11px] text-muted-foreground">
-                                          {scorer.team || "Team n/d"}
-                                        </span>
-                                      </div>
-                                      <div className="flex min-w-0 flex-shrink-0 flex-wrap items-center gap-3 sm:gap-4">
-                                        <span className="text-xs text-muted-foreground">
-                                          xG{" "}
-                                          <span className="font-bold text-primary">
-                                            {hasRealXg ? scorer.xg : "n/d"}
-                                          </span>
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                          Tiri{" "}
-                                          <span className="font-bold text-foreground">
-                                            {hasRealShots
-                                              ? scorer.shots
-                                              : "n/d"}
-                                          </span>
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                          Quota{" "}
-                                          <span className="font-bold text-foreground">
-                                            {scorer.odds}
-                                          </span>
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                          Prob.{" "}
-                                          <span className="font-bold text-primary">
-                                            {scorer.prob}%
-                                          </span>
-                                        </span>
-                                      </div>
-                                    </button>
-                                  );
-                                })(),
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              Nessun impact player disponibile dal feed
-                              corrente.
-                            </p>
-                          )}
-                        </GlassCard>
                       </div>
                     </>
+                  )}
+
+                  {formationsDeepTab === FORMATIONS_DEEP_TABS.xgAnalysis && (
+                    <GlassCard>
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-foreground">
+                          Analisi xG
+                        </h3>
+                        <span className="rounded-full border border-border/40 bg-secondary/40 px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                          modello previsto (non live tick-by-tick)
+                        </span>
+                      </div>
+                      <div className="mb-3 flex gap-1 rounded-lg border border-border/30 bg-secondary/20 p-1 w-fit">
+                        <button
+                          type="button"
+                          onClick={() => setXgViewMode("team")}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                            xgViewMode === "team"
+                              ? "bg-primary/15 text-primary"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          xG Squadra
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setXgViewMode("players")}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                            xgViewMode === "players"
+                              ? "bg-primary/15 text-primary"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          xG Giocatori
+                        </button>
+                      </div>
+                      {xgViewMode === "team" ? (
+                        xgTeamRows.length > 0 ? (
+                          <div className="space-y-2">
+                            {xgTeamRows.map((row) => {
+                              const total =
+                                Math.max(0.001, Number(row.home || 0) + Number(row.away || 0));
+                              const homePct = Math.max(
+                                0,
+                                Math.min(100, (Number(row.home || 0) / total) * 100),
+                              );
+                              const awayPct = Math.max(
+                                0,
+                                Math.min(100, (Number(row.away || 0) / total) * 100),
+                              );
+                              return (
+                                <div key={row.key} className="space-y-1">
+                                  <div className="grid grid-cols-[52px_minmax(0,1fr)_52px] items-center gap-2 text-[11px]">
+                                    <span className="font-semibold text-primary">
+                                      {Number(row.home || 0).toFixed(2)}
+                                    </span>
+                                    <span className="truncate text-center text-muted-foreground">
+                                      {row.label}
+                                    </span>
+                                    <span className="text-right font-semibold text-foreground">
+                                      {Number(row.away || 0).toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary/40">
+                                    <div className="flex h-full w-full">
+                                      <div className="h-full bg-primary/80" style={{ width: `${homePct}%` }} />
+                                      <div className="h-full bg-foreground/50" style={{ width: `${awayPct}%` }} />
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Dati xG squadra non disponibili nel feed corrente.
+                          </p>
+                        )
+                      ) : xgPlayerRows.length > 0 ? (
+                        <>
+                          <div className="mb-2 flex gap-1 rounded-lg border border-border/30 bg-secondary/20 p-1 w-fit">
+                            <button
+                              type="button"
+                              onClick={() => setXgPlayersDetailMode("xg")}
+                              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                                xgPlayersDetailMode === "xg"
+                                  ? "bg-primary/15 text-primary"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              Analisi xG
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setXgPlayersDetailMode("season")}
+                              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                                xgPlayersDetailMode === "season"
+                                  ? "bg-primary/15 text-primary"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              Contesto stagione
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setXgPlayersDetailMode("quote")}
+                              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                                xgPlayersDetailMode === "quote"
+                                  ? "bg-primary/15 text-primary"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              Quote
+                            </button>
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                          {xgPlayerRows.map((row) => (
+                            <button
+                              key={row.id || row.name}
+                              type="button"
+                              onClick={() => handleSelectXgPlayer(row)}
+                              className="rounded-lg border border-border/25 bg-secondary/25 p-2.5 text-left transition hover:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            >
+                              <div className="mb-2 flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-xs font-semibold text-foreground">{row.name}</div>
+                                  <div className="text-[11px] text-muted-foreground">#{row.number}</div>
+                                  <div className="mt-1 text-[10px] font-medium text-muted-foreground">
+                                    {xgPlayersDetailMode === "xg"
+                                      ? "Analisi xG"
+                                      : xgPlayersDetailMode === "season"
+                                        ? "Contesto stagionale"
+                                        : "Quote giocatore"}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {xgPlayersDetailMode === "quote"
+                                      ? "Quote disponibili"
+                                      : "Rating stagione"}
+                                  </div>
+                                  <div
+                                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${seasonRatingToneClass(row.seasonRating)}`}
+                                  >
+                                    {xgPlayersDetailMode === "quote"
+                                      ? `${resolvePlayerQuoteRows(playerOddsPayload, row).length}`
+                                      : row.seasonRating
+                                        ? row.seasonRating.toFixed(2)
+                                        : "n/d"}
+                                  </div>
+                                </div>
+                                <FootballMediaImage
+                                  media={row.media}
+                                  fallbackLabel={row.name}
+                                  alt={row.name}
+                                  size="md"
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                                {xgPlayersDetailMode === "xg" ? (
+                                  <>
+                                    <span className="text-muted-foreground">xG (atteso)</span>
+                                    <span className="text-right text-foreground">{row.xg.toFixed(2)}</span>
+                                    <span className="text-muted-foreground">xGOT (atteso)</span>
+                                    <span className="text-right text-foreground">{row.xgot.toFixed(2)}</span>
+                                    <span className="text-muted-foreground">xG Open Play</span>
+                                    <span className="text-right text-foreground">{Number(row.xgOpenPlay || 0).toFixed(2)}</span>
+                                    <span className="text-muted-foreground">xG Set Piece</span>
+                                    <span className="text-right text-foreground">{Number(row.xgSetPiece || 0).toFixed(2)}</span>
+                                    <span className="text-muted-foreground">xG Corner</span>
+                                    <span className="text-right text-foreground">{Number(row.xgCorners || 0).toFixed(2)}</span>
+                                    <span className="text-muted-foreground">xG Non-Rigore</span>
+                                    <span className="text-right text-foreground">{Number(row.xgNonPenalty || 0).toFixed(2)}</span>
+                                    <span className="text-muted-foreground">Expected Points</span>
+                                    <span className="text-right text-foreground">{Number(row.expectedPoints || 0).toFixed(2)}</span>
+                                    <span className="text-muted-foreground">eShots (atteso)</span>
+                                    <span className="text-right text-foreground">{Number(row.eshots || 0).toFixed(2)}</span>
+                                    <span className="text-muted-foreground">Shooting Performance</span>
+                                    <span className="text-right text-foreground">{Number(row.shootingPerformance || 0).toFixed(2)}</span>
+                                  </>
+                                ) : xgPlayersDetailMode === "season" ? (
+                                  <>
+                                    <span className="text-muted-foreground">Minuti stagione</span>
+                                    <span className="text-right text-foreground">{row.seasonMinutes || 0}</span>
+                                    <span className="text-muted-foreground">Gol stagione</span>
+                                    <span className="text-right text-foreground">{row.seasonGoals || 0}</span>
+                                    <span className="text-muted-foreground">Tiri stagione</span>
+                                    <span className="text-right text-foreground">{row.seasonShots || 0}</span>
+                                    <span className="text-muted-foreground">Passaggi stagione</span>
+                                    <span className="text-right text-foreground">{row.seasonPasses || 0}</span>
+                                    <span className="text-muted-foreground">Precisione passaggi</span>
+                                    <span className="text-right text-foreground">{Number(row.seasonPassAccuracyPct || 0).toFixed(1)}%</span>
+                                    <span className="text-muted-foreground">Tocchi stagione</span>
+                                    <span className="text-right text-foreground">{row.seasonTouches || 0}</span>
+                                    <span className="text-muted-foreground">Duelli vinti %</span>
+                                    <span className="text-right text-foreground">{Number(row.seasonDuelsWonPct || 0).toFixed(1)}%</span>
+                                    <span className="text-muted-foreground">Intercetti</span>
+                                    <span className="text-right text-foreground">{row.seasonInterceptions || 0}</span>
+                                    <span className="text-muted-foreground">Tackles vinti</span>
+                                    <span className="text-right text-foreground">{row.seasonTacklesWon || 0}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    {(() => {
+                                      const quoteRows = resolvePlayerQuoteRows(
+                                        playerOddsPayload,
+                                        row,
+                                      );
+                                      if (playerOddsLoading && !quoteRows.length) {
+                                        return (
+                                          <>
+                                            <span className="col-span-2 text-muted-foreground">
+                                              Caricamento quote giocatore...
+                                            </span>
+                                          </>
+                                        );
+                                      }
+                                      if (!quoteRows.length) {
+                                        return (
+                                          <>
+                                            <span className="col-span-2 text-muted-foreground">
+                                              {playerOddsError || "Nessuna quota singola disponibile per questo giocatore."}
+                                            </span>
+                                          </>
+                                        );
+                                      }
+                                      return quoteRows.map((q, idx) => (
+                                        <React.Fragment key={`${q.marketKey}-${q.bookmaker}-${idx}`}>
+                                          <span className="text-muted-foreground">
+                                            {q.selection
+                                              ? `${q.marketLabel} (${q.selection}) - ${q.bookmaker}`
+                                              : `${q.marketLabel} - ${q.bookmaker}`}
+                                          </span>
+                                          <span className="text-right text-foreground">{Number(q.odd || 0).toFixed(2)}</span>
+                                        </React.Fragment>
+                                      ));
+                                    })()}
+                                  </>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          {xgPlayersApiLoading
+                            ? "Caricamento dati xG giocatori..."
+                            : xgPlayersApiError ||
+                              "Dati xG giocatori non disponibili nel feed corrente."}
+                        </p>
+                      )}
+                    </GlassCard>
                   )}
 
                   {formationsDeepTab === FORMATIONS_DEEP_TABS.playerStats &&
@@ -2028,6 +2978,341 @@ export default function MatchDetail() {
                 </div>
               </TabsContent>
 
+              <TabsContent value="analisi-xg" className="space-y-4">
+                <GlassCard>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Analisi xG
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-border/40 bg-secondary/40 px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                        modello previsto (non live tick-by-tick)
+                      </span>
+                      <span
+                        className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${
+                          xgCoverageLevel === "advanced"
+                            ? "border-primary/30 bg-primary/10 text-primary"
+                            : "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                        }`}
+                      >
+                        Copertura xG: {xgCoverageLevel === "advanced" ? "Advanced" : "Basic"}
+                      </span>
+                    </div>
+                  </div>
+                  {xgCoverageLevel === "basic" && (
+                    <div className="mb-3 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[11px] text-amber-200">
+                      Metriche xG avanzate non disponibili nel piano/feed corrente per questa partita.
+                    </div>
+                  )}
+                  <div className="mb-3 flex gap-1 rounded-lg border border-border/30 bg-secondary/20 p-1 w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setXgViewMode("team")}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                        xgViewMode === "team"
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      xG Squadra
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setXgViewMode("players")}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                        xgViewMode === "players"
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      xG Giocatori
+                    </button>
+                  </div>
+                  {xgViewMode === "team" ? (
+                    xgTeamRows.length > 0 ? (
+                      <div className="space-y-2">
+                        {xgTeamRows.map((row) => {
+                          const total = Math.max(
+                            0.001,
+                            Number(row.home || 0) + Number(row.away || 0),
+                          );
+                          const homePct = Math.max(
+                            0,
+                            Math.min(100, (Number(row.home || 0) / total) * 100),
+                          );
+                          const awayPct = Math.max(
+                            0,
+                            Math.min(100, (Number(row.away || 0) / total) * 100),
+                          );
+                          return (
+                            <div key={row.key} className="space-y-1">
+                              <div className="grid grid-cols-[52px_minmax(0,1fr)_52px] items-center gap-2 text-[11px]">
+                                <span className="font-semibold text-primary">
+                                  {Number(row.home || 0).toFixed(2)}
+                                </span>
+                                <span className="truncate text-center text-muted-foreground">
+                                  {row.label}
+                                </span>
+                                <span className="text-right font-semibold text-foreground">
+                                  {Number(row.away || 0).toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="h-1.5 overflow-hidden rounded-full bg-secondary/40">
+                                <div className="flex h-full w-full">
+                                  <div className="h-full bg-primary/80" style={{ width: `${homePct}%` }} />
+                                  <div className="h-full bg-foreground/50" style={{ width: `${awayPct}%` }} />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Dati xG squadra non disponibili nel feed corrente.
+                      </p>
+                    )
+                  ) : xgPlayerRows.length > 0 ? (
+                    <>
+                      <div className="mb-2 flex gap-1 rounded-lg border border-border/30 bg-secondary/20 p-1 w-fit">
+                        <button
+                          type="button"
+                          onClick={() => setXgPlayersDetailMode("xg")}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                            xgPlayersDetailMode === "xg"
+                              ? "bg-primary/15 text-primary"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          Analisi xG
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setXgPlayersDetailMode("season")}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                            xgPlayersDetailMode === "season"
+                              ? "bg-primary/15 text-primary"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          Contesto stagione
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setXgPlayersDetailMode("quote")}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                            xgPlayersDetailMode === "quote"
+                              ? "bg-primary/15 text-primary"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          Quote
+                        </button>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {xgPlayerRows.map((row) => (
+                        <button
+                          key={row.id || row.name}
+                          type="button"
+                          onClick={() => handleSelectXgPlayer(row)}
+                          className="rounded-lg border border-border/25 bg-secondary/20 p-0 text-left transition hover:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        >
+                          <div className="flex items-start justify-between gap-2 border-b border-border/20 bg-secondary/30 px-3 py-2">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-foreground">{row.name}</div>
+                              <div className="text-[11px] text-muted-foreground">#{row.number}</div>
+                              <div className="mt-1 text-[10px] font-medium text-muted-foreground">
+                                {xgPlayersDetailMode === "xg"
+                                  ? "Analisi xG"
+                                  : xgPlayersDetailMode === "season"
+                                    ? "Contesto stagionale"
+                                    : "Quote giocatore"}
+                              </div>
+                              <div className="mt-1 inline-flex items-center gap-1 text-xs">
+                                <span className="text-muted-foreground">
+                                  {xgPlayersDetailMode === "quote"
+                                    ? "Quote disponibili:"
+                                    : "Rating stagione:"}
+                                </span>
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${seasonRatingToneClass(row.seasonRating)}`}
+                                >
+                                  {xgPlayersDetailMode === "quote"
+                                      ? `${resolvePlayerQuoteRows(playerOddsPayload, row).length}`
+                                    : row.seasonRating
+                                      ? row.seasonRating.toFixed(2)
+                                      : "n/d"}
+                                </span>
+                              </div>
+                            </div>
+                            <FootballMediaImage
+                              media={row.media}
+                              fallbackLabel={row.name}
+                              alt={row.name}
+                              size="md"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                            {xgPlayersDetailMode === "xg" ? (
+                              <>
+                                <span className="px-3 py-1 font-semibold text-muted-foreground">xG (atteso)</span>
+                                <span className="px-3 py-1 text-right font-semibold text-foreground">{row.xg.toFixed(2)}</span>
+                                <span className="px-3 py-1 font-semibold text-muted-foreground">xGOT (atteso)</span>
+                                <span className="px-3 py-1 text-right font-semibold text-foreground">{row.xgot.toFixed(2)}</span>
+                                <span className="px-3 py-1 text-muted-foreground">xG Open Play</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.xgOpenPlay || 0).toFixed(2)}</span>
+                                <span className="px-3 py-1 text-muted-foreground">xG Set Piece</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.xgSetPiece || 0).toFixed(2)}</span>
+                                <span className="px-3 py-1 text-muted-foreground">xG Corner</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.xgCorners || 0).toFixed(2)}</span>
+                                <span className="px-3 py-1 text-muted-foreground">xG Non-Rigore</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.xgNonPenalty || 0).toFixed(2)}</span>
+                                <span className="px-3 py-1 text-muted-foreground">Expected Points</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.expectedPoints || 0).toFixed(2)}</span>
+                                <span className="px-3 py-1 text-muted-foreground">eShots (atteso)</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.eshots || 0).toFixed(2)}</span>
+                                <span className="px-3 py-1 text-muted-foreground">Shooting Performance</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.shootingPerformance || 0).toFixed(2)}</span>
+                              </>
+                            ) : xgPlayersDetailMode === "season" ? (
+                              <>
+                                <span className="px-3 py-1 text-muted-foreground">Minuti stagione</span>
+                                <span className="px-3 py-1 text-right text-foreground">{row.seasonMinutes || 0}</span>
+                                <span className="px-3 py-1 text-muted-foreground">Gol stagione</span>
+                                <span className="px-3 py-1 text-right text-foreground">{row.seasonGoals || 0}</span>
+                                <span className="px-3 py-1 text-muted-foreground">Tiri stagione</span>
+                                <span className="px-3 py-1 text-right text-foreground">{row.seasonShots || 0}</span>
+                                <span className="px-3 py-1 text-muted-foreground">Passaggi stagione</span>
+                                <span className="px-3 py-1 text-right text-foreground">{row.seasonPasses || 0}</span>
+                                <span className="px-3 py-1 text-muted-foreground">Precisione passaggi</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.seasonPassAccuracyPct || 0).toFixed(1)}%</span>
+                                <span className="px-3 py-1 text-muted-foreground">Tocchi stagione</span>
+                                <span className="px-3 py-1 text-right text-foreground">{row.seasonTouches || 0}</span>
+                                <span className="px-3 py-1 text-muted-foreground">Duelli vinti %</span>
+                                <span className="px-3 py-1 text-right text-foreground">{Number(row.seasonDuelsWonPct || 0).toFixed(1)}%</span>
+                                <span className="px-3 py-1 text-muted-foreground">Intercetti</span>
+                                <span className="px-3 py-1 text-right text-foreground">{row.seasonInterceptions || 0}</span>
+                                <span className="px-3 py-1 text-muted-foreground">Tackles vinti</span>
+                                <span className="px-3 py-1 text-right text-foreground">{row.seasonTacklesWon || 0}</span>
+                              </>
+                            ) : (
+                              <>
+                                {(() => {
+                                  const quoteRows = resolvePlayerQuoteRows(
+                                    playerOddsPayload,
+                                    row,
+                                  );
+                                  if (playerOddsLoading && !quoteRows.length) {
+                                    return (
+                                      <>
+                                        <span className="px-3 py-1 col-span-2 text-muted-foreground">
+                                          Caricamento quote giocatore...
+                                        </span>
+                                      </>
+                                    );
+                                  }
+                                  if (!quoteRows.length) {
+                                    return (
+                                      <>
+                                        <span className="px-3 py-1 col-span-2 text-muted-foreground">
+                                          {playerOddsError || "Nessuna quota singola disponibile per questo giocatore."}
+                                        </span>
+                                      </>
+                                    );
+                                  }
+                                  return quoteRows.map((q, idx) => (
+                                    <React.Fragment key={`${q.marketKey}-${q.bookmaker}-${idx}`}>
+                                      <span className="px-3 py-1 text-muted-foreground">
+                                        {q.selection
+                                          ? `${q.marketLabel} (${q.selection}) - ${q.bookmaker}`
+                                          : `${q.marketLabel} - ${q.bookmaker}`}
+                                      </span>
+                                      <span className="px-3 py-1 text-right text-foreground">{Number(q.odd || 0).toFixed(2)}</span>
+                                    </React.Fragment>
+                                  ));
+                                })()}
+                              </>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {xgPlayersApiLoading
+                        ? "Caricamento dati xG giocatori..."
+                        : xgPlayersApiError ||
+                          "Dati xG giocatori non disponibili nel feed corrente."}
+                    </p>
+                  )}
+                </GlassCard>
+              </TabsContent>
+
+              <TabsContent value="team-momentum" className="space-y-4">
+                <div className="space-y-4">
+                  {teamMomentumLoading && (
+                    <GlassCard>
+                      <p className="text-xs text-muted-foreground">
+                        Caricamento Team Momentum...
+                      </p>
+                    </GlassCard>
+                  )}
+                  {!teamMomentumLoading && teamMomentumError && (
+                    <GlassCard>
+                      <p className="text-xs text-destructive">
+                        {teamMomentumError}
+                      </p>
+                    </GlassCard>
+                  )}
+                  {!teamMomentumLoading && !teamMomentumError && (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {[teamMomentumPayload?.home, teamMomentumPayload?.away]
+                          .filter(Boolean)
+                          .map((team) => (
+                            <GlassCard key={team.teamId || team.team}>
+                              <div className="mb-3 flex items-center justify-between gap-2">
+                                <h3 className="text-sm font-semibold text-foreground">
+                                  {team.team}
+                                </h3>
+                                <span className="rounded-full border border-border/40 bg-secondary/40 px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                                  {team.marketView}
+                                </span>
+                              </div>
+                              {team.available ? (
+                                <>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div className="rounded-lg bg-secondary/30 p-3"><div className="text-[11px] text-muted-foreground">xPts</div><div className="text-lg font-bold text-primary">{team.xPts}</div></div>
+                                    <div className="rounded-lg bg-secondary/30 p-3"><div className="text-[11px] text-muted-foreground">Punti reali</div><div className="text-lg font-bold text-foreground">{team.actualPoints}</div></div>
+                                    <div className="rounded-lg bg-secondary/30 p-3"><div className="text-[11px] text-muted-foreground">Delta</div><div className={`text-lg font-bold ${team.delta >= 0 ? "text-primary" : "text-amber-300"}`}>{team.delta >= 0 ? "+" : ""}{team.delta}</div></div>
+                                  </div>
+                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                    <div className="rounded-lg bg-secondary/30 p-3 text-xs"><div className="text-muted-foreground">Segna di più</div><div className="mt-1 font-semibold text-foreground">{team.strongestScoringWindow}</div></div>
+                                    <div className="rounded-lg bg-secondary/30 p-3 text-xs"><div className="text-muted-foreground">Subisce di più</div><div className="mt-1 font-semibold text-foreground">{team.highestConcedingWindow}</div></div>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="rounded-lg bg-secondary/30 px-3 py-4 text-xs text-muted-foreground">
+                                  Storico squadra non disponibile nel feed corrente per questa lega/team.
+                                </div>
+                              )}
+                            </GlassCard>
+                          ))}
+                      </div>
+                      {(teamMomentumPayload?.pressurePreview || match.pressure_preview) && (
+                        <GlassCard>
+                          <PressurePreviewChart
+                            preview={teamMomentumPayload?.pressurePreview || match.pressure_preview}
+                            supportInsight={pressureSupport}
+                          />
+                        </GlassCard>
+                      )}
+                    </>
+                  )}
+                </div>
+              </TabsContent>
+
               <TabsContent value="contesto" className="space-y-3">
                 <Accordion
                   type="multiple"
@@ -2258,6 +3543,28 @@ export default function MatchDetail() {
             </GlassCard>
           </div>
         </div>
+
+        <Sheet
+          open={isPlayerSheetOpen && Boolean(selectedPlayer)}
+          onOpenChange={setIsPlayerSheetOpen}
+        >
+          <SheetContent
+            side="right"
+            className="w-full overflow-y-auto border-l border-border/40 bg-background p-0 sm:max-w-xl"
+          >
+            <div className="p-4">
+              <SheetHeader className="mb-3">
+                <SheetTitle className="text-base">
+                  Dettaglio giocatore
+                </SheetTitle>
+              </SheetHeader>
+              <PlayerDetailPanel
+                fixtureId={match.id || fixtureId}
+                player={selectedPlayer}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   );

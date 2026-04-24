@@ -6,6 +6,15 @@ Allineamento piattaforma (ultimo update):
 - Multi-Bet lato sito ora include anche gli alert `single` (tab dedicata).
 - Logica Gold rimossa completamente dal backend di generazione alert.
 - Modi multibet attivi e persistiti: `algorithmic`, `safe`, `value`.
+- MatchDetail lato sito ha ora allineamento snapshot/cache esteso anche a:
+  - `player-xg`
+  - `player-odds`
+  - `team-momentum`
+  per ridurre disallineamenti temporali tra tab.
+- Nuove viste `xG Giocatori` sul sito:
+  - Analisi xG
+  - Contesto stagione
+  - Quote giocatore (solo mercati player-specific).
 
 Il bot Telegram e collegato alla piattaforma tramite un backend dedicato su Railway ed e operativo in produzione.
 
