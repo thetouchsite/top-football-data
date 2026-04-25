@@ -22,12 +22,19 @@ import {
 
 const COMBO_TABS = [
   {
+    key: "all",
+    label: "Tutte",
+    kicker: "Full feed",
+    icon: Crown,
+    description: "Elenco completo multibet disponibili dal worker (algorithmic + safe + value).",
+  },
+  {
     key: "algorithmic",
     label: "Algoritmico",
     kicker: "Generator",
     icon: Cpu,
     description:
-      "Palinsesto top (Serie A, PL, UCL, ecc.): tutte le multiple del motore con convergenza tra probabilita modello e quota.",
+      "Solo multiple modus algorithmic: convergenza tra probabilita modello e quota bookmaker.",
   },
   {
     key: "single",
@@ -187,7 +194,7 @@ export default function MultiBet() {
             <div className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Modalita di selezione
             </div>
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
               {COMBO_TABS.map((tab) => (
                 <div key={tab.key} className="rounded-lg border border-border/25 bg-background/20 p-3">
                   <div className="mb-1.5 flex items-center gap-2.5">
@@ -213,7 +220,7 @@ export default function MultiBet() {
         )}
 
         {loadState === "ready" && (
-          <Tabs defaultValue="algorithmic">
+          <Tabs defaultValue="all">
             <TabsList className="glass mb-4 flex h-auto min-h-10 w-full flex-wrap justify-start gap-1 py-1">
               {COMBO_TABS.map((tab) => (
                 <TabsTrigger
@@ -267,12 +274,12 @@ export default function MultiBet() {
                               </>
                             ) : isSingleTab ? (
                               <>Nessun alert single disponibile in questo momento.</>
-                            ) : tab.key === "algorithmic" ? (
-                              <>Nessuna multipla disponibile in elenco completo.</>
+                            ) : tab.key === "all" ? (
+                              <>Nessuna multipla disponibile nell&apos;elenco completo.</>
                             ) : (
                               <>
                                 Nessuna multipla soddisfa <strong className="text-foreground">{tab.label}</strong> in
-                                questo momento. Apri <strong className="text-foreground">Algoritmico</strong> per
+                                questo momento. Apri <strong className="text-foreground">Tutte</strong> per
                                 l&apos;elenco completo ({combos.length}).
                               </>
                             )}
@@ -303,7 +310,7 @@ export default function MultiBet() {
                             Smart Multi-Bet
                           </h3>
                           <p className="mb-6 max-w-sm text-sm text-muted-foreground">
-                            Comparatore quote, link affiliato e le tre modalita (Algoritmico, Safe, Value) sono
+                            Comparatore quote, link affiliato e modalita (Tutte, Algoritmico, Safe, Value) sono
                             riservate agli <span className="font-semibold text-foreground">abbonati</span>.
                           </p>
                           <a href="/premium">

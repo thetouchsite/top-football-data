@@ -245,12 +245,15 @@ export function mapSingleAlertToPick(alert) {
 }
 
 /**
- * @param {"algorithmic"|"safe"|"value"} modeKey
+ * @param {"all"|"algorithmic"|"safe"|"value"} modeKey
  */
 export function filterCombosByMode(combos, modeKey) {
   const list = combos || [];
-  if (modeKey === "algorithmic") {
+  if (modeKey === "all") {
     return list;
+  }
+  if (modeKey === "algorithmic") {
+    return list.filter((c) => c?.modeFilters?.algorithmic || c?.tabFilters?.algoritmiche);
   }
   if (modeKey === "safe") {
     return list.filter((c) => c?.modeFilters?.safe || c?.tabFilters?.safe);
